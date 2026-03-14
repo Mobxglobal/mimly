@@ -167,11 +167,10 @@ async function renderTemplate(templateId, slotTexts, outputFileName) {
 }
 
 renderTemplate(
-  2,
+  3,
   {
-    slot_1_text: "AI TOOLS",
-    slot_2_text: "MARKETERS",
-    slot_3_text: "CONTENT PLAN"
+    slot_1_text: "LAUNCH NEW FEATURE",
+    slot_2_text: "FIX OLD BUGS"
   },
-  "output-boyfriend.png"
+  "output-two-buttons.png"
 );
