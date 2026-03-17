@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { Menu, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -18,7 +18,13 @@ interface HeroNavProps {
 
 export function HeroNav({ onFixedChange }: HeroNavProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [closing, setClosing] = useState(false);
   const [isFixed, setIsFixed] = useState(false);
+
+  const closeMenu = useCallback(() => {
+    if (!mobileOpen) return;
+    setClosing(true);
+  }, [mobileOpen]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -33,6 +39,38 @@ export function HeroNav({ onFixedChange }: HeroNavProps) {
     window.addEventListener("scroll", handleScroll, { passive: true });
     return () => window.removeEventListener("scroll", handleScroll);
   }, [onFixedChange]);
+
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    if (mobileOpen && !closing) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [mobileOpen, closing]);
+
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") closeMenu();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [mobileOpen, closeMenu]);
+
+  const handleMenuTransitionEnd = useCallback(
+    (e: React.TransitionEvent) => {
+      if (e.target !== e.currentTarget) return;
+      if (closing) {
+        setMobileOpen(false);
+        setClosing(false);
+      }
+    },
+    [closing]
+  );
 
   return (
     <header
@@ -92,51 +130,92 @@ export function HeroNav({ onFixedChange }: HeroNavProps) {
         {/* Mobile menu button */}
         <button
           type="button"
-          onClick={() => setMobileOpen(!mobileOpen)}
-          className="flex h-9 w-9 items-center justify-center rounded-full text-stone-600 hover:bg-white/80 sm:hidden"
+          onClick={() => (mobileOpen ? closeMenu() : setMobileOpen(true))}
+          className={cn(
+            "flex h-9 w-9 items-center justify-center rounded-full text-stone-600 transition-colors duration-200 sm:hidden",
+            "hover:bg-stone-200/60 active:bg-stone-200/80"
+          )}
           aria-expanded={mobileOpen}
           aria-label={mobileOpen ? "Close menu" : "Open menu"}
         >
-          {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+          <span className="relative flex h-5 w-5 items-center justify-center">
+            <Menu
+              className={cn(
+                "h-5 w-5 transition-all duration-200",
+                mobileOpen && "rotate-90 opacity-0 absolute"
+              )}
+              aria-hidden
+            />
+            <X
+              className={cn(
+                "h-5 w-5 transition-all duration-200",
+                !mobileOpen && "rotate-90 opacity-0 absolute"
+              )}
+              aria-hidden
+            />
+          </span>
         </button>
       </nav>
 
-      {/* Mobile dropdown */}
-      {mobileOpen && (
-        <div
-          className={cn(
-            "absolute left-0 right-0 top-full z-30 mt-2 rounded-2xl border border-white/60 bg-white/95 p-4 shadow-xl backdrop-blur-md sm:hidden"
-          )}
-        >
-          <div className="flex flex-col gap-1">
-            {NAV_LINKS.map((item) => (
-              <Link
-                key={item.href}
-                href={item.href}
-                onClick={() => setMobileOpen(false)}
-                className="rounded-lg px-4 py-3 text-sm font-medium text-stone-700 hover:bg-stone-100"
-              >
-                {item.label}
-              </Link>
-            ))}
-            <div className="mt-2 flex gap-2 border-t border-stone-200 pt-3">
+      {/* Mobile menu overlay + panel */}
+      {(mobileOpen || closing) && (
+        <>
+          <div
+            role="button"
+            tabIndex={-1}
+            onClick={closeMenu}
+            className={cn(
+              "fixed inset-0 z-20 bg-stone-900/20 backdrop-blur-[2px] sm:hidden",
+              "transition-[opacity,visibility] duration-200 ease-out",
+              closing ? "opacity-0 visibility-hidden" : "opacity-100"
+            )}
+            aria-hidden
+          />
+          <div
+            className={cn(
+              "hero-mobile-menu absolute left-0 right-0 top-full z-30 mt-2 origin-top sm:hidden",
+              "rounded-2xl border border-stone-200/60 bg-amber-50/85 p-3 shadow-xl shadow-stone-900/10 backdrop-blur-sm",
+              "transition-[transform,opacity] duration-200 ease-out",
+              closing
+                ? "scale-[0.98] opacity-0 -translate-y-1"
+                : "scale-100 opacity-100 translate-y-0"
+            )}
+            data-opening={!closing}
+            onTransitionEnd={handleMenuTransitionEnd}
+          >
+            <div className="flex flex-col gap-1">
+              {NAV_LINKS.map((item, i) => (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  onClick={closeMenu}
+                  className="hero-mobile-link rounded-full px-4 py-2.5 text-sm font-medium text-stone-700 hover:bg-stone-100 active:bg-stone-200/80 transition-colors duration-150"
+                  style={{
+                    animationDelay: closing ? "0ms" : `${60 + i * 45}ms`,
+                  }}
+                >
+                  {item.label}
+                </Link>
+              ))}
+            </div>
+            <div className="mt-3 flex gap-2 border-t border-stone-200/80 pt-3">
               <Link
                 href="/login"
-                onClick={() => setMobileOpen(false)}
-                className="flex-1 rounded-full border border-stone-200 py-2.5 text-center text-sm font-medium text-stone-700"
+                onClick={closeMenu}
+                className="flex-1 rounded-full border border-stone-200 py-2.5 text-center text-sm font-medium text-stone-700 hover:bg-stone-100 transition-colors"
               >
                 Log in
               </Link>
               <Link
                 href="/onboarding/manual"
-                onClick={() => setMobileOpen(false)}
+                onClick={closeMenu}
                 className="cta-funky flex-1 rounded-full bg-stone-900 py-2.5 text-center text-sm font-medium !text-white shadow-sm hover:bg-stone-800 transition-colors font-display"
               >
                 Get started
               </Link>
             </div>
           </div>
-        </div>
+        </>
       )}
     </header>
   );
