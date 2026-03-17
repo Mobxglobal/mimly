@@ -25,7 +25,7 @@ export default function SettingsPage() {
 
   return (
     <DashboardShell>
-      <div className="mx-auto max-w-2xl">
+      <div className="mx-auto w-full max-w-6xl">
         <h1 className="text-xl font-semibold tracking-tight text-white md:text-2xl">
           Settings
         </h1>

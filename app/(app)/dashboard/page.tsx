@@ -6,9 +6,9 @@ import { DashboardShell } from "@/components/dashboard/dashboard-shell";
 export default function DashboardPage() {
   return (
     <DashboardShell>
-      <div className="mx-auto w-full max-w-2xl">
+      <div className="mx-auto w-full max-w-6xl">
         {/* Hero */}
-        <div className="text-center">
+        <div>
           <h1 className="text-2xl font-semibold tracking-tight text-white sm:text-3xl">
             What are you going to create today?
           </h1>
@@ -18,7 +18,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Primary actions */}
-        <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:justify-center sm:gap-4">
+        <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:gap-4">
           <Link
             href="/dashboard/create"
             className="flex items-center justify-center gap-2 rounded-xl bg-indigo-500 px-6 py-3.5 text-sm font-medium text-white shadow-[0_10px_30px_rgba(99,102,241,0.35)] transition-colors hover:bg-indigo-400"
