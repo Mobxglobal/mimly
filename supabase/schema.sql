@@ -61,13 +61,30 @@ create policy "Allow update onboarding draft"
   on public.onboarding_drafts for update
   with check (true);
 
-create policy "Users can read and delete own draft by email"
+-- RLS note:
+-- `auth.jwt() ->> 'email'` isn't guaranteed to be present in the JWT claim,
+-- so match drafts by the authenticated user's id via `auth.users`.
+create policy "Users can read own draft by uid email"
   on public.onboarding_drafts for select
-  using ((auth.jwt() ->> 'email') = email);
+  using (
+    exists (
+      select 1
+      from auth.users u
+      where u.id = auth.uid()
+        and lower(u.email) = lower(onboarding_drafts.email)
+    )
+  );
 
-create policy "Users can delete own draft by email"
+create policy "Users can delete own draft by uid email"
   on public.onboarding_drafts for delete
-  using ((auth.jwt() ->> 'email') = email);
+  using (
+    exists (
+      select 1
+      from auth.users u
+      where u.id = auth.uid()
+        and lower(u.email) = lower(onboarding_drafts.email)
+    )
+  );
 
 -- Generated memes: users can read/insert their own rows
 create policy "Users can read own memes"

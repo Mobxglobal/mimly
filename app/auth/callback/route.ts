@@ -144,6 +144,26 @@ export async function GET(request: Request) {
         }
       }
 
+      if (!draft) {
+        // If we couldn't load the saved onboarding draft (often due to RLS/policy issues),
+        // send the user back to manual onboarding so they can re-save.
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+        if (user?.email) {
+          const params = new URLSearchParams();
+          params.set("review", "1");
+          params.set(
+            "issues",
+            "We couldn't load your saved onboarding details. Please confirm and save again."
+          );
+          params.set("email", user.email);
+          return NextResponse.redirect(
+            new URL(`/onboarding/manual?${params.toString()}`, request.url)
+          );
+        }
+      }
+
       if (draft) {
         const cleaned = await cleanWithOpenAI(draft);
         if (cleaned.needs_clarification) {
