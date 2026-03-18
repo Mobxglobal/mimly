@@ -118,18 +118,29 @@ export async function GET(request: Request) {
     const supabase = await createClient();
     const { error } = await supabase.auth.exchangeCodeForSession(code);
     if (!error) {
+      // Re-create client after code exchange so subsequent queries
+      // use the updated auth cookies/tokens.
+      const supabaseAfter = await createClient();
+
       let draft: DraftProfile | null = draftB64 ? decodeDraft(draftB64) : null;
+      let draftLoadError: string | null = null;
 
       if (!draft) {
         const {
           data: { user },
-        } = await supabase.auth.getUser();
+        } = await supabaseAfter.auth.getUser();
         if (user?.email) {
-          const { data: row } = await supabase
+          const { data: row, error: rowError } = await supabaseAfter
+            .schema("public")
             .from("onboarding_drafts")
             .select("draft")
             .eq("email", user.email.toLowerCase())
             .single();
+
+          if (rowError) {
+            draftLoadError = rowError.message || rowError.code || "unknown";
+            console.error("[auth/callback] onboarding_drafts select failed", rowError);
+          }
           if (row?.draft && typeof row.draft === "object") {
             const d = row.draft as Record<string, unknown>;
             draft = {
@@ -139,7 +150,31 @@ export async function GET(request: Request) {
               audience: String(d.audience ?? "").trim(),
               country: String(d.country ?? "").trim(),
             };
-            await supabase.from("onboarding_drafts").delete().eq("email", user.email.toLowerCase());
+            await supabaseAfter
+              .schema("public")
+              .from("onboarding_drafts")
+              .delete()
+              .eq("email", user.email.toLowerCase());
+          } else if (typeof row?.draft === "string") {
+            // Some Supabase setups return jsonb values as strings.
+            // Your table view shows draft stored like: "{\"email\": ... }"
+            try {
+              const parsed = JSON.parse(row.draft) as Record<string, unknown>;
+              draft = {
+                email: String(parsed.email ?? user.email ?? "").trim(),
+                brand_name: String(parsed.brand_name ?? "").trim(),
+                what_you_do: String(parsed.what_you_do ?? "").trim(),
+                audience: String(parsed.audience ?? "").trim(),
+                country: String(parsed.country ?? "").trim(),
+              };
+              await supabaseAfter
+                .schema("public")
+                .from("onboarding_drafts")
+                .delete()
+                .eq("email", user.email.toLowerCase());
+            } catch {
+              // Fall through to fallback redirect below.
+            }
           }
         }
       }
@@ -149,13 +184,15 @@ export async function GET(request: Request) {
         // send the user back to manual onboarding so they can re-save.
         const {
           data: { user },
-        } = await supabase.auth.getUser();
+        } = await supabaseAfter.auth.getUser();
         if (user?.email) {
           const params = new URLSearchParams();
           params.set("review", "1");
           params.set(
             "issues",
-            "We couldn't load your saved onboarding details. Please confirm and save again."
+            draftLoadError
+              ? `Draft load failed: ${draftLoadError}`
+              : "We couldn't load your saved onboarding details. Please confirm and save again."
           );
           params.set("email", user.email);
           return NextResponse.redirect(
@@ -182,21 +219,35 @@ export async function GET(request: Request) {
 
         const {
           data: { user },
-        } = await supabase.auth.getUser();
+        } = await supabaseAfter.auth.getUser();
         if (user) {
-          await supabase.from("profiles").upsert(
-            {
-              id: user.id,
-              email: cleaned.clean.email || null,
-              brand_name: cleaned.clean.brand_name || null,
-              what_you_do: cleaned.clean.what_you_do || null,
-              audience: cleaned.clean.audience || null,
-              country: cleaned.clean.country || null,
-              onboarding_completed_at: new Date().toISOString(),
-              updated_at: new Date().toISOString(),
-            },
-            { onConflict: "id" }
-          );
+          const { error: upsertError } = await supabaseAfter
+            .schema("public")
+            .from("profiles")
+            .upsert(
+              {
+                id: user.id,
+                email: cleaned.clean.email || null,
+                brand_name: cleaned.clean.brand_name || null,
+                what_you_do: cleaned.clean.what_you_do || null,
+                audience: cleaned.clean.audience || null,
+                country: cleaned.clean.country || null,
+                onboarding_completed_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+              },
+              { onConflict: "id" }
+            );
+
+          if (upsertError) {
+            console.error("[auth/callback] profiles upsert failed", upsertError);
+            const params = new URLSearchParams();
+            params.set("review", "1");
+            params.set("issues", `profiles upsert failed: ${upsertError.message}`);
+            params.set("email", cleaned.clean.email || user.email || "");
+            return NextResponse.redirect(
+              new URL(`/onboarding/manual?${params.toString()}`, request.url)
+            );
+          }
         }
       }
 

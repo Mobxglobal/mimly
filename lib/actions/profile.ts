@@ -22,11 +22,15 @@ export async function getProfile(): Promise<Profile | null> {
   if (!user) return null;
 
   const { data, error } = await supabase
+    .schema("public")
     .from("profiles")
     .select("*")
     .eq("id", user.id)
     .single();
 
+  if (error) {
+    console.error("[settings] getProfile failed", error);
+  }
   if (error || !data) return null;
   return data as Profile;
 }
@@ -60,9 +64,15 @@ export async function upsertProfile(input: UpsertProfileInput): Promise<{ error:
       : {}),
   };
 
-  const { error } = await supabase.from("profiles").upsert(row, {
+  const { error } = await supabase
+    .schema("public")
+    .from("profiles")
+    .upsert(row, {
     onConflict: "id",
   });
 
+  if (error) {
+    console.error("[settings] upsertProfile failed", error);
+  }
   return { error: error?.message ?? null };
 }
