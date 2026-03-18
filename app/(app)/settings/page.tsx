@@ -1,27 +1,57 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { DashboardShell } from "@/components/dashboard/dashboard-shell";
-
-/** Default values – in a real app these would come from auth/session or API after onboarding */
-const DEFAULT_VALUES = {
-  email: "alex@acmefitness.com",
-  brandName: "Acme Fitness",
-  description: "Online fitness coaching",
-  audience: "Busy professionals",
-  country: "United States",
-};
+import { getProfile, upsertProfile } from "@/lib/actions/profile";
 
 export default function SettingsPage() {
-  const [email, setEmail] = useState(DEFAULT_VALUES.email);
-  const [brandName, setBrandName] = useState(DEFAULT_VALUES.brandName);
-  const [description, setDescription] = useState(DEFAULT_VALUES.description);
-  const [audience, setAudience] = useState(DEFAULT_VALUES.audience);
-  const [country, setCountry] = useState(DEFAULT_VALUES.country);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [email, setEmail] = useState("");
+  const [brandName, setBrandName] = useState("");
+  const [whatYouDo, setWhatYouDo] = useState("");
+  const [audience, setAudience] = useState("");
+  const [country, setCountry] = useState("");
+
+  useEffect(() => {
+    getProfile().then((profile) => {
+      if (profile) {
+        setEmail(profile.email ?? "");
+        setBrandName(profile.brand_name ?? "");
+        setWhatYouDo(profile.what_you_do ?? "");
+        setAudience(profile.audience ?? "");
+        setCountry(profile.country ?? "");
+      }
+      setLoading(false);
+    });
+  }, []);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    await upsertProfile({
+      email,
+      brand_name: brandName,
+      what_you_do: whatYouDo,
+      audience,
+      country,
+    });
+    setSaving(false);
+  }
 
   const inputClass =
     "mt-1 w-full rounded-xl border border-white/10 bg-white/[0.03] px-3.5 py-2.5 text-sm text-stone-100 placeholder:text-stone-500 focus:border-indigo-400/50 focus:bg-white/[0.05] focus:outline-none focus:ring-1 focus:ring-indigo-400/40";
   const labelClass = "block text-sm font-medium text-stone-300";
+
+  if (loading) {
+    return (
+      <DashboardShell>
+        <div className="mx-auto w-full max-w-6xl">
+          <p className="text-stone-400">Loading…</p>
+        </div>
+      </DashboardShell>
+    );
+  }
 
   return (
     <DashboardShell>
@@ -33,14 +63,9 @@ export default function SettingsPage() {
           Manage your account and brand details from onboarding.
         </p>
 
-        <form
-          className="mt-6 space-y-6"
-          onSubmit={(e) => e.preventDefault()}
-        >
+        <form className="mt-6 space-y-6" onSubmit={handleSubmit}>
           <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-5 shadow-[0_12px_32px_rgba(0,0,0,0.18)] backdrop-blur-xl sm:p-6">
-            <h2 className="text-base font-semibold text-white">
-              Account
-            </h2>
+            <h2 className="text-base font-semibold text-white">Account</h2>
             <p className="mt-1 text-sm text-stone-400">
               Email used for your account.
             </p>
@@ -60,9 +85,7 @@ export default function SettingsPage() {
           </div>
 
           <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-5 shadow-[0_12px_32px_rgba(0,0,0,0.18)] backdrop-blur-xl sm:p-6">
-            <h2 className="text-base font-semibold text-white">
-              Brand
-            </h2>
+            <h2 className="text-base font-semibold text-white">Brand</h2>
             <p className="mt-1 text-sm text-stone-400">
               Details from onboarding used to tailor your memes.
             </p>
@@ -77,21 +100,19 @@ export default function SettingsPage() {
                   value={brandName}
                   onChange={(e) => setBrandName(e.target.value)}
                   className={inputClass}
-                  required
                 />
               </div>
               <div>
-                <label htmlFor="settings-desc" className={labelClass}>
+                <label htmlFor="settings-what-you-do" className={labelClass}>
                   What you do
                 </label>
                 <input
-                  id="settings-desc"
+                  id="settings-what-you-do"
                   type="text"
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
+                  value={whatYouDo}
+                  onChange={(e) => setWhatYouDo(e.target.value)}
                   className={inputClass}
                   placeholder="e.g. Online fitness coaching"
-                  required
                 />
               </div>
               <div>
@@ -105,7 +126,6 @@ export default function SettingsPage() {
                   onChange={(e) => setAudience(e.target.value)}
                   className={inputClass}
                   placeholder="e.g. Busy professionals"
-                  required
                 />
               </div>
               <div>
@@ -119,7 +139,6 @@ export default function SettingsPage() {
                   onChange={(e) => setCountry(e.target.value)}
                   className={inputClass}
                   placeholder="e.g. United States"
-                  required
                 />
               </div>
             </div>
@@ -128,9 +147,10 @@ export default function SettingsPage() {
           <div className="flex justify-end pt-1">
             <button
               type="submit"
-              className="cta-funky rounded-xl bg-indigo-500 px-4 py-2.5 text-sm font-medium text-white shadow-[0_10px_30px_rgba(99,102,241,0.35)] hover:bg-indigo-400 transition-colors font-display"
+              disabled={saving}
+              className="cta-funky rounded-xl bg-indigo-500 px-4 py-2.5 text-sm font-medium text-white shadow-[0_10px_30px_rgba(99,102,241,0.35)] hover:bg-indigo-400 transition-colors font-display disabled:opacity-60"
             >
-              Save changes
+              {saving ? "Saving…" : "Save changes"}
             </button>
           </div>
         </form>

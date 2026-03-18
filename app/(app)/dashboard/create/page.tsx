@@ -98,7 +98,11 @@ export default function CreatePage() {
               </button>
               <button
                 type="button"
-                onClick={() => router.push("/dashboard/generating")}
+                onClick={() => {
+                  const params = new URLSearchParams();
+                  if (promotion.trim()) params.set("promotion", promotion.trim());
+                  router.push(`/dashboard/generating${params.toString() ? `?${params.toString()}` : ""}`);
+                }}
                 className="cta-funky rounded-xl bg-indigo-500 px-4 py-2.5 text-sm font-medium text-white shadow-[0_10px_30px_rgba(99,102,241,0.35)] hover:bg-indigo-400"
               >
                 Continue

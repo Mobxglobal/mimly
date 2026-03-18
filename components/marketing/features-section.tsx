@@ -1,77 +1,102 @@
+import Image from "next/image";
 import { FramedSection } from "./framed-section";
 
 const STEPS = [
   {
     number: "1",
-    title: "Know your brand",
+    title: "Understand your brand",
     description:
-      "We learn what your business does so every meme starts with real context.",
+      "Mimly learns what you sell, who you want to reach, and what matters most to your business.",
+    image: "/understand.png",
+    rotation: "lg:-rotate-[4deg]",
+    desktopOffset: "lg:translate-y-10",
   },
   {
     number: "2",
-    title: "Watch the world",
+    title: "Spot the right meme angle",
     description:
-      "Our system tracks trends, global events, and key dates to keep memes timely.",
+      "We connect your brand context with trends, culture, and timely opportunities to find the strongest concept.",
+    image: "/context.png",
+    rotation: "lg:rotate-0",
+    desktopOffset: "lg:-translate-y-2",
   },
   {
     number: "3",
-    title: "Find the angle",
+    title: "Generate ready-to-post memes",
     description:
-      "AI turns brand context and cultural moments into clever meme ideas.",
-  },
-  {
-    number: "4",
-    title: "Build the meme",
-    description:
-      "The right format and copy combine to generate the finished meme.",
-  },
-  {
-    number: "5",
-    title: "Ready to post",
-    description:
-      "Memes and caption suggestions, ready for social.",
+      "You get finished memes and captions designed to be shared, downloaded, and published quickly.",
+    image: "/post.png",
+    rotation: "lg:rotate-[4deg]",
+    desktopOffset: "lg:translate-y-8",
   },
 ] as const;
+
+function StepCard({
+  step,
+}: {
+  step: (typeof STEPS)[number];
+}) {
+  return (
+    <article className="rounded-[1.6rem] border border-white/10 bg-white/[0.04] p-3 shadow-[0_16px_40px_rgba(0,0,0,0.22)] backdrop-blur-xl">
+      <div className="relative overflow-hidden rounded-[1.2rem]">
+        <Image
+          src={step.image}
+          alt={step.title}
+          width={1800}
+          height={1200}
+          className="h-auto w-full object-cover"
+          priority={step.number === "1"}
+        />
+      </div>
+      <div className="px-1 pt-4 pb-2">
+        <div className="flex items-center gap-2">
+          <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-orange-500 text-[11px] font-semibold text-white">
+            {step.number}
+          </span>
+          <h3 className="text-base font-semibold text-white">{step.title}</h3>
+        </div>
+        <p className="mt-2 text-sm leading-relaxed text-stone-400">
+          {step.description}
+        </p>
+      </div>
+    </article>
+  );
+}
 
 export function FeaturesSection() {
   return (
     <FramedSection
-      variant="default"
-      backgroundVariant="features"
+      variant="footer"
+      backgroundVariant="footer"
       id="features-heading"
       aria-labelledby="features-heading"
       className="w-full"
     >
-      <h2
-        id="features-heading"
-        className="text-center text-2xl font-bold text-stone-900 md:text-3xl"
-      >
-        Behind the memes
-      </h2>
-      <p className="marketing-copy mx-auto mt-2 max-w-xl text-center">
-        How our system turns brand context and
-        <br />
-        cultural moments into social-ready memes.
-      </p>
-      {/* Timeline layout – stacked on all devices */}
-      <div className="mx-auto mt-10 max-w-3xl sm:mt-12">
-        <div className="space-y-6">
+      <div className="mx-auto max-w-3xl text-center">
+        <span className="inline-flex rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[11px] font-medium uppercase tracking-[0.18em] text-stone-300">
+          The process
+        </span>
+        <h2
+          id="features-heading"
+          className="mt-5 text-3xl font-bold tracking-tight text-white md:text-5xl"
+        >
+          Behind the memes
+        </h2>
+        <p className="mx-auto mt-4 max-w-2xl text-sm leading-relaxed text-stone-400 md:text-base">
+          Mimly turns brand context into social-ready memes in three clear
+          steps, from understanding your business to producing content you can
+          post right away.
+        </p>
+      </div>
+
+      <div className="mx-auto mt-10 max-w-6xl sm:mt-12">
+        <div className="grid gap-5 lg:grid-cols-3 lg:items-start">
           {STEPS.map((step) => (
-            <div key={step.number} className="flex gap-4">
-              <div className="flex flex-col items-center">
-                <span className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-stone-300 bg-white text-xs font-semibold text-stone-900">
-                  {step.number}
-                </span>
-                <div className="mt-1 h-full w-px bg-stone-200" />
-              </div>
-              <div className="flex-1">
-                <h3 className="text-sm font-semibold text-stone-900">
-                  {step.title}
-                </h3>
-                <p className="mt-1.5 text-sm leading-relaxed text-stone-600">
-                  {step.description}
-                </p>
-              </div>
+            <div
+              key={step.number}
+              className={`${step.rotation} ${step.desktopOffset} transition-transform duration-300`}
+            >
+              <StepCard step={step} />
             </div>
           ))}
         </div>

@@ -1,24 +1,69 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { OnboardingShell } from "@/components/onboarding/onboarding-shell";
 import { COUNTRY_OPTIONS } from "@/lib/countries";
+import { createClient } from "@/lib/supabase/client";
 
 export default function OnboardingManualPage() {
-  const router = useRouter();
+  const searchParams = useSearchParams();
+  const [sending, setSending] = useState(false);
+  const [status, setStatus] = useState<"idle" | "success" | "error">("idle");
+  const [errorMessage, setErrorMessage] = useState("");
   const [email, setEmail] = useState("");
   const [brandName, setBrandName] = useState("");
-  const [whatYouSell, setWhatYouSell] = useState("");
+  const [whatYouDo, setWhatYouDo] = useState("");
   const [audience, setAudience] = useState("");
   const [country, setCountry] = useState("");
+  const [reviewMessage, setReviewMessage] = useState<string | null>(null);
 
-  function handleSubmit(e: React.FormEvent) {
+  useEffect(() => {
+    if (searchParams.get("review") !== "1") return;
+
+    setReviewMessage(searchParams.get("issues") || "Please clarify a couple details.");
+    setEmail(searchParams.get("email") ?? "");
+    setBrandName(searchParams.get("brand_name") ?? "");
+    setWhatYouDo(searchParams.get("what_you_do") ?? "");
+    setAudience(searchParams.get("audience") ?? "");
+    setCountry(searchParams.get("country") ?? "");
+  }, [searchParams]);
+
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    router.push("/onboarding/complete");
+    setErrorMessage("");
+    setStatus("idle");
+    setSending(true);
+
+    const draft = {
+      email: email.trim(),
+      brand_name: brandName.trim(),
+      what_you_do: whatYouDo.trim(),
+      audience: audience.trim(),
+      country: country.trim(),
+    };
+
+    const draftB64 = btoa(unescape(encodeURIComponent(JSON.stringify(draft))));
+    const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(
+      "/onboarding/complete"
+    )}&draft=${encodeURIComponent(draftB64)}`;
+
+    const { error } = await createClient().auth.signInWithOtp({
+      email: draft.email,
+      options: { emailRedirectTo: redirectTo },
+    });
+
+    setSending(false);
+    if (error) {
+      setStatus("error");
+      setErrorMessage(error.message);
+      return;
+    }
+    setStatus("success");
   }
 
-  const inputClass = "mt-1 w-full rounded-xl border border-stone-200 bg-white/90 px-4 py-2.5 text-stone-900 placeholder:text-stone-400 focus:border-stone-400 focus:outline-none focus:ring-1 focus:ring-stone-400";
+  const inputClass =
+    "mt-1 w-full rounded-xl border border-stone-200 bg-white/90 px-4 py-2.5 text-stone-900 placeholder:text-stone-400 focus:border-stone-400 focus:outline-none focus:ring-1 focus:ring-stone-400";
   const labelClass = "block text-sm font-medium text-stone-700";
 
   return (
@@ -29,45 +74,78 @@ export default function OnboardingManualPage() {
       <p className="marketing-copy mt-2">
         Tell us about your brand so we can tailor your memes.
       </p>
+      {reviewMessage && (
+        <div className="mt-6 rounded-2xl border border-amber-200/80 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          <p className="font-medium">Quick clarification</p>
+          <p className="mt-1 text-amber-800/90">{reviewMessage}</p>
+        </div>
+      )}
+      {status === "success" && (
+        <div className="mt-6 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+          Check your email for the magic link. Click it to save and continue.
+        </div>
+      )}
+      {status === "error" && (
+        <div className="mt-6 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
+          {errorMessage}
+        </div>
+      )}
+      <div className="rounded-2xl border border-amber-200/80 bg-amber-50/70 px-4 py-3 mt-4">
+        <div className="flex items-center gap-2">
+          <span className="rounded-full bg-amber-200/80 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-amber-900">
+            Important
+          </span>
+          <p className="text-xs font-medium text-stone-800 sm:text-[13px]">
+            These answers shape your content.
+          </p>
+        </div>
+        <p className="mt-2 text-sm leading-relaxed text-stone-600">
+          The more specific you are here, the better Mimly can tailor content
+          ideas, tone, and captions to your business.
+        </p>
+      </div>
       <form onSubmit={handleSubmit} className="mt-6 flex flex-col gap-4">
         <div>
           <label htmlFor="manual-email" className={labelClass}>
             Email address <span className="text-amber-700">*</span>
           </label>
-          <input id="manual-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} className={inputClass} placeholder="you@company.com" required />
+          <input
+            id="manual-email"
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className={inputClass}
+            placeholder="you@company.com"
+            required
+            disabled={sending}
+          />
         </div>
         <div>
           <label htmlFor="manual-brand" className={labelClass}>
             Brand name <span className="text-stone-400">(optional)</span>
           </label>
-          <input id="manual-brand" type="text" value={brandName} onChange={(e) => setBrandName(e.target.value)} className={inputClass} />
-        </div>
-        <div className="rounded-2xl border border-amber-200/80 bg-amber-50/70 px-4 py-3">
-          <div className="flex items-center gap-2">
-            <span className="rounded-full bg-amber-200/80 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-amber-900">
-              Important
-            </span>
-            <p className="text-xs font-medium text-stone-800 sm:text-[13px]">
-              These answers shape your memes.
-            </p>
-          </div>
-          <p className="mt-2 text-sm leading-relaxed text-stone-600">
-            The more specific you are here, the better Mimly can tailor meme
-            ideas, tone, and captions to your business.
-          </p>
+          <input
+            id="manual-brand"
+            type="text"
+            value={brandName}
+            onChange={(e) => setBrandName(e.target.value)}
+            className={inputClass}
+            disabled={sending}
+          />
         </div>
         <div>
-          <label htmlFor="manual-sell" className={labelClass}>
+          <label htmlFor="manual-what-you-do" className={labelClass}>
             What do you sell? <span className="text-amber-700">*</span>
           </label>
           <input
-            id="manual-sell"
+            id="manual-what-you-do"
             type="text"
-            value={whatYouSell}
-            onChange={(e) => setWhatYouSell(e.target.value)}
+            value={whatYouDo}
+            onChange={(e) => setWhatYouDo(e.target.value)}
             className={inputClass + " border-amber-200/80 focus:border-amber-400 focus:ring-amber-300"}
             placeholder="e.g. 1:1 online fitness coaching for busy professionals"
             required
+            disabled={sending}
           />
           <p className="mt-2 text-xs leading-relaxed text-stone-500">
             Be specific about your product or service, not just the industry.
@@ -85,10 +163,11 @@ export default function OnboardingManualPage() {
             className={inputClass + " border-amber-200/80 focus:border-amber-400 focus:ring-amber-300"}
             placeholder="e.g. Working parents trying to get fit with limited time"
             required
+            disabled={sending}
           />
           <p className="mt-2 text-xs leading-relaxed text-stone-500">
             Describe the exact people you want to reach rather than saying
-            “everyone”.
+            &quot;everyone&quot;.
           </p>
         </div>
         <div>
@@ -101,6 +180,7 @@ export default function OnboardingManualPage() {
             onChange={(e) => setCountry(e.target.value)}
             className={inputClass + " cursor-pointer pr-8"}
             required
+            disabled={sending}
           >
             <option value="">Select country</option>
             <optgroup label="United Kingdom & United States">
@@ -108,14 +188,22 @@ export default function OnboardingManualPage() {
               <option value="United States">United States</option>
             </optgroup>
             <optgroup label="All countries">
-              {COUNTRY_OPTIONS.filter((c) => c !== "United Kingdom" && c !== "United States").map((name) => (
-                <option key={name} value={name}>{name}</option>
+              {COUNTRY_OPTIONS.filter(
+                (c) => c !== "United Kingdom" && c !== "United States"
+              ).map((name) => (
+                <option key={name} value={name}>
+                  {name}
+                </option>
               ))}
             </optgroup>
           </select>
         </div>
-        <button type="submit" className="cta-funky mt-2 w-full rounded-full bg-stone-900 px-5 py-2.5 text-sm font-medium !text-white shadow-sm hover:bg-stone-800 transition-colors font-display">
-          Create my meme engine
+        <button
+          type="submit"
+          disabled={sending}
+          className="cta-funky mt-2 w-full rounded-full bg-stone-900 px-5 py-2.5 text-sm font-medium !text-white shadow-sm hover:bg-stone-800 transition-colors font-display disabled:opacity-60"
+        >
+          {sending ? "Sending…" : "Save & continue"}
         </button>
       </form>
     </OnboardingShell>

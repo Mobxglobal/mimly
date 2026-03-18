@@ -9,6 +9,10 @@ const FOOTER_LINKS = {
     { label: "FAQ", href: "/#faq-heading" },
   ],
   company: [
+    { label: "About", href: "/about" },
+    { label: "Contact", href: "/contact" },
+  ],
+  account: [
     { label: "Log in", href: "/login" },
     { label: "Sign up", href: "/signup" },
   ],
@@ -57,7 +61,7 @@ export function FooterSection() {
           </div>
           <div>
             <h3 className="text-xs font-semibold uppercase tracking-[0.16em] text-stone-200">
-              Account
+              Company
             </h3>
             <ul className="mt-3 flex flex-col gap-2">
               {FOOTER_LINKS.company.map((link) => (
@@ -72,11 +76,39 @@ export function FooterSection() {
               ))}
             </ul>
           </div>
+          <div>
+            <h3 className="text-xs font-semibold uppercase tracking-[0.16em] text-stone-200">
+              Account
+            </h3>
+            <ul className="mt-3 flex flex-col gap-2">
+              {FOOTER_LINKS.account.map((link) => (
+                <li key={link.href}>
+                  <Link
+                    href={link.href}
+                    className="text-sm text-stone-300 hover:text-white transition-colors"
+                  >
+                    {link.label}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
         </div>
       </div>
-      <div className="mt-16 border-t border-stone-700/60 pt-8">
+      <div className="mt-16 flex flex-col gap-3 border-t border-stone-700/60 pt-8 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-left text-xs text-stone-500">
           © {new Date().getFullYear()} Mimly. All rights reserved.
+        </p>
+        <p className="text-left text-xs text-stone-500 sm:text-right">
+          Built with ☕️ by{" "}
+          <a
+            href="https://x.com/alexattinger"
+            target="_blank"
+            rel="noreferrer"
+            className="text-stone-300 transition-colors hover:text-white"
+          >
+            Alex
+          </a>
         </p>
       </div>
     </FramedSection>

@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { DashboardShell } from "@/components/dashboard/dashboard-shell";
+import { generateMockMemes } from "@/lib/actions/memes";
 
 const STEPS = [
   "Reading your brand context",
@@ -13,14 +14,27 @@ const STEPS = [
 
 export default function GeneratingPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const [error, setError] = useState<string | null>(null);
+  const promotion = searchParams.get("promotion");
 
   useEffect(() => {
-    const timeout = setTimeout(() => {
-      router.replace("/dashboard/memes");
-    }, 2800);
+    let cancelled = false;
 
-    return () => clearTimeout(timeout);
-  }, [router]);
+    (async () => {
+      const { error: err } = await generateMockMemes(promotion ?? undefined);
+      if (cancelled) return;
+      if (err) {
+        setError(err);
+        return;
+      }
+      router.replace("/dashboard/memes");
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [router, promotion]);
 
   return (
     <DashboardShell>
@@ -39,6 +53,10 @@ export default function GeneratingPage() {
             Mimly is combining your brand context with current meme formats to
             generate a set of ready-to-post ideas.
           </p>
+
+          {error && (
+            <p className="mt-4 text-sm text-rose-400">{error}</p>
+          )}
 
           <div className="mt-6 h-2 overflow-hidden rounded-full bg-white/5">
             <div className="h-full w-2/3 animate-pulse rounded-full bg-gradient-to-r from-indigo-500 via-sky-400 to-emerald-400" />
