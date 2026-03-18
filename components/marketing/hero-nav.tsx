@@ -4,7 +4,9 @@ import Link from "next/link";
 import Image from "next/image";
 import { useEffect, useState, useCallback } from "react";
 import { Menu, X } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
+import { createClient } from "@/lib/supabase/client";
 
 const NAV_LINKS = [
   { href: "/#features-heading", label: "Product" },
@@ -17,14 +19,37 @@ interface HeroNavProps {
 }
 
 export function HeroNav({ onFixedChange }: HeroNavProps) {
+  const router = useRouter();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [closing, setClosing] = useState(false);
   const [isFixed, setIsFixed] = useState(false);
+  const [hasSession, setHasSession] = useState(false);
+
+  async function handleLogOut() {
+    const supabase = createClient();
+    await supabase.auth.signOut();
+    closeMenu();
+    router.push("/");
+    router.refresh();
+  }
 
   const closeMenu = useCallback(() => {
     if (!mobileOpen) return;
     setClosing(true);
   }, [mobileOpen]);
+
+  useEffect(() => {
+    const supabase = createClient();
+    void supabase.auth.getSession().then(({ data: { session } }) => {
+      setHasSession(!!session);
+    });
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setHasSession(!!session);
+    });
+    return () => subscription.unsubscribe();
+  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -113,18 +138,38 @@ export function HeroNav({ onFixedChange }: HeroNavProps) {
 
         {/* Desktop CTA */}
         <div className="hidden items-center gap-3 sm:flex">
-          <Link
-            href="/login"
-            className="rounded-full px-3 py-1.5 text-sm font-medium text-stone-600 hover:bg-stone-100 transition-colors"
-          >
-            Log in
-          </Link>
-          <Link
-            href="/onboarding/manual"
-            className="cta-funky rounded-full bg-stone-900 px-3 py-1.5 text-sm font-medium !text-white shadow-sm hover:bg-stone-800 transition-colors font-display"
-          >
-            Get started
-          </Link>
+          {hasSession ? (
+            <>
+              <button
+                type="button"
+                onClick={handleLogOut}
+                className="rounded-full px-3 py-1.5 text-sm font-medium text-stone-600 hover:bg-stone-100 transition-colors"
+              >
+                Log out
+              </button>
+              <Link
+                href="/dashboard"
+                className="cta-funky rounded-full bg-stone-900 px-3 py-1.5 text-sm font-medium !text-white shadow-sm hover:bg-stone-800 transition-colors font-display"
+              >
+                Dashboard
+              </Link>
+            </>
+          ) : (
+            <>
+              <Link
+                href="/login"
+                className="rounded-full px-3 py-1.5 text-sm font-medium text-stone-600 hover:bg-stone-100 transition-colors"
+              >
+                Log in
+              </Link>
+              <Link
+                href="/onboarding/manual"
+                className="cta-funky rounded-full bg-stone-900 px-3 py-1.5 text-sm font-medium !text-white shadow-sm hover:bg-stone-800 transition-colors font-display"
+              >
+                Get started
+              </Link>
+            </>
+          )}
         </div>
 
         {/* Mobile menu button */}
@@ -199,20 +244,41 @@ export function HeroNav({ onFixedChange }: HeroNavProps) {
               ))}
             </div>
             <div className="mt-3 flex gap-2 border-t border-stone-200/80 pt-3">
-              <Link
-                href="/login"
-                onClick={closeMenu}
-                className="flex-1 rounded-full border border-stone-200 py-2.5 text-center text-sm font-medium text-stone-700 hover:bg-stone-100 transition-colors"
-              >
-                Log in
-              </Link>
-              <Link
-                href="/onboarding/manual"
-                onClick={closeMenu}
-                className="cta-funky flex-1 rounded-full bg-stone-900 py-2.5 text-center text-sm font-medium !text-white shadow-sm hover:bg-stone-800 transition-colors font-display"
-              >
-                Get started
-              </Link>
+              {hasSession ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={handleLogOut}
+                    className="flex-1 rounded-full border border-stone-200 py-2.5 text-center text-sm font-medium text-stone-700 hover:bg-stone-100 transition-colors"
+                  >
+                    Log out
+                  </button>
+                  <Link
+                    href="/dashboard"
+                    onClick={closeMenu}
+                    className="cta-funky flex-1 rounded-full bg-stone-900 py-2.5 text-center text-sm font-medium !text-white shadow-sm hover:bg-stone-800 transition-colors font-display"
+                  >
+                    Dashboard
+                  </Link>
+                </>
+              ) : (
+                <>
+                  <Link
+                    href="/login"
+                    onClick={closeMenu}
+                    className="flex-1 rounded-full border border-stone-200 py-2.5 text-center text-sm font-medium text-stone-700 hover:bg-stone-100 transition-colors"
+                  >
+                    Log in
+                  </Link>
+                  <Link
+                    href="/onboarding/manual"
+                    onClick={closeMenu}
+                    className="cta-funky flex-1 rounded-full bg-stone-900 py-2.5 text-center text-sm font-medium !text-white shadow-sm hover:bg-stone-800 transition-colors font-display"
+                  >
+                    Get started
+                  </Link>
+                </>
+              )}
             </div>
           </div>
         </>

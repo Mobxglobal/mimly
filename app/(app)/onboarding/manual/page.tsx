@@ -43,10 +43,21 @@ export default function OnboardingManualPage() {
       country: country.trim(),
     };
 
-    const draftB64 = btoa(unescape(encodeURIComponent(JSON.stringify(draft))));
+    const draftRes = await fetch("/api/onboarding/draft", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: draft.email, draft }),
+    });
+    if (!draftRes.ok) {
+      setSending(false);
+      setStatus("error");
+      setErrorMessage("Could not save your details. Please try again.");
+      return;
+    }
+
     const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(
       "/onboarding/complete"
-    )}&draft=${encodeURIComponent(draftB64)}`;
+    )}`;
 
     const { error } = await createClient().auth.signInWithOtp({
       email: draft.email,

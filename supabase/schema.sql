@@ -14,6 +14,13 @@ create table if not exists public.profiles (
   updated_at timestamptz default now()
 );
 
+-- Onboarding drafts: temporary store for brand data before magic-link callback (keyed by email)
+create table if not exists public.onboarding_drafts (
+  email text primary key,
+  draft jsonb not null,
+  created_at timestamptz default now()
+);
+
 -- Generated memes: per-user meme generation results
 create table if not exists public.generated_memes (
   id uuid primary key default gen_random_uuid(),
@@ -29,6 +36,7 @@ create table if not exists public.generated_memes (
 
 -- RLS
 alter table public.profiles enable row level security;
+alter table public.onboarding_drafts enable row level security;
 alter table public.generated_memes enable row level security;
 
 -- Profiles: users can read/update/insert their own row
@@ -43,6 +51,23 @@ create policy "Users can insert own profile"
 create policy "Users can update own profile"
   on public.profiles for update
   using (auth.uid() = id);
+
+-- Onboarding drafts: anyone can insert/update (before login); user can read/delete only their row by email
+create policy "Allow insert onboarding draft"
+  on public.onboarding_drafts for insert
+  with check (true);
+
+create policy "Allow update onboarding draft"
+  on public.onboarding_drafts for update
+  with check (true);
+
+create policy "Users can read and delete own draft by email"
+  on public.onboarding_drafts for select
+  using ((auth.jwt() ->> 'email') = email);
+
+create policy "Users can delete own draft by email"
+  on public.onboarding_drafts for delete
+  using ((auth.jwt() ->> 'email') = email);
 
 -- Generated memes: users can read/insert their own rows
 create policy "Users can read own memes"

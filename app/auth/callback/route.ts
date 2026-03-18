@@ -118,42 +118,65 @@ export async function GET(request: Request) {
     const supabase = await createClient();
     const { error } = await supabase.auth.exchangeCodeForSession(code);
     if (!error) {
-      if (draftB64) {
-        const draft = decodeDraft(draftB64);
-        if (draft) {
-          const cleaned = await cleanWithOpenAI(draft);
-          if (cleaned.needs_clarification) {
-            const params = new URLSearchParams();
-            params.set("review", "1");
-            params.set("issues", cleaned.issues.join(" "));
-            params.set("email", cleaned.clean.email);
-            params.set("brand_name", cleaned.clean.brand_name);
-            params.set("what_you_do", cleaned.clean.what_you_do);
-            params.set("audience", cleaned.clean.audience);
-            params.set("country", cleaned.clean.country);
-            return NextResponse.redirect(
-              new URL(`/onboarding/manual?${params.toString()}`, request.url)
-            );
-          }
+      let draft: DraftProfile | null = draftB64 ? decodeDraft(draftB64) : null;
 
-          const {
-            data: { user },
-          } = await supabase.auth.getUser();
-          if (user) {
-            await supabase.from("profiles").upsert(
-              {
-                id: user.id,
-                email: cleaned.clean.email || null,
-                brand_name: cleaned.clean.brand_name || null,
-                what_you_do: cleaned.clean.what_you_do || null,
-                audience: cleaned.clean.audience || null,
-                country: cleaned.clean.country || null,
-                onboarding_completed_at: new Date().toISOString(),
-                updated_at: new Date().toISOString(),
-              },
-              { onConflict: "id" }
-            );
+      if (!draft) {
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+        if (user?.email) {
+          const { data: row } = await supabase
+            .from("onboarding_drafts")
+            .select("draft")
+            .eq("email", user.email.toLowerCase())
+            .single();
+          if (row?.draft && typeof row.draft === "object") {
+            const d = row.draft as Record<string, unknown>;
+            draft = {
+              email: String(d.email ?? user.email ?? "").trim(),
+              brand_name: String(d.brand_name ?? "").trim(),
+              what_you_do: String(d.what_you_do ?? "").trim(),
+              audience: String(d.audience ?? "").trim(),
+              country: String(d.country ?? "").trim(),
+            };
+            await supabase.from("onboarding_drafts").delete().eq("email", user.email.toLowerCase());
           }
+        }
+      }
+
+      if (draft) {
+        const cleaned = await cleanWithOpenAI(draft);
+        if (cleaned.needs_clarification) {
+          const params = new URLSearchParams();
+          params.set("review", "1");
+          params.set("issues", cleaned.issues.join(" "));
+          params.set("email", cleaned.clean.email);
+          params.set("brand_name", cleaned.clean.brand_name);
+          params.set("what_you_do", cleaned.clean.what_you_do);
+          params.set("audience", cleaned.clean.audience);
+          params.set("country", cleaned.clean.country);
+          return NextResponse.redirect(
+            new URL(`/onboarding/manual?${params.toString()}`, request.url)
+          );
+        }
+
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+        if (user) {
+          await supabase.from("profiles").upsert(
+            {
+              id: user.id,
+              email: cleaned.clean.email || null,
+              brand_name: cleaned.clean.brand_name || null,
+              what_you_do: cleaned.clean.what_you_do || null,
+              audience: cleaned.clean.audience || null,
+              country: cleaned.clean.country || null,
+              onboarding_completed_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            },
+            { onConflict: "id" }
+          );
         }
       }
 

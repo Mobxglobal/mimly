@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { usePathname } from "next/navigation";
-import { LayoutGrid, Images, Settings, Sparkles } from "lucide-react";
+import { usePathname, useRouter } from "next/navigation";
+import { LayoutGrid, Images, Settings, Sparkles, LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { createClient } from "@/lib/supabase/client";
 
 const NAV_SECTIONS = [
   {
@@ -24,6 +25,14 @@ export function DashboardShell({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   const pathname = usePathname();
+  const router = useRouter();
+
+  async function handleLogOut() {
+    const supabase = createClient();
+    await supabase.auth.signOut();
+    router.push("/");
+    router.refresh();
+  }
 
   return (
     <div className="min-h-screen bg-[#05070b] text-stone-100">
@@ -141,9 +150,20 @@ export function DashboardShell({
               </div>
               <p className="text-xs text-stone-500">Create and manage your memes.</p>
             </div>
-            <Link href="/" className="text-sm font-medium text-stone-400 hover:text-white transition-colors">
-              Back to home
-            </Link>
+            <div className="flex items-center gap-3">
+              <Link href="/" className="text-sm font-medium text-stone-400 hover:text-white transition-colors">
+                Back to home
+              </Link>
+              <button
+                type="button"
+                onClick={handleLogOut}
+                className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium text-stone-400 hover:bg-white/5 hover:text-stone-200 transition-colors"
+                aria-label="Log out"
+              >
+                <LogOut className="h-3.5 w-3.5" />
+                Log out
+              </button>
+            </div>
           </header>
 
           <main className="flex-1 p-4 md:p-6 lg:p-8">{children}</main>

@@ -1,10 +1,12 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { FramedSection } from "./framed-section";
 import { HeroNav } from "./hero-nav";
 import { EngagementCard } from "./engagement-card";
+import { createClient } from "@/lib/supabase/client";
 
 const COUNT_START = 24;
 const COUNT_DURATION_MS = 2500;
@@ -47,6 +49,20 @@ function LikeCount({
 
 export function HeroSection() {
   const [navFixed, setNavFixed] = useState(false);
+  const [hasSession, setHasSession] = useState(false);
+
+  useEffect(() => {
+    const supabase = createClient();
+    void supabase.auth.getSession().then(({ data: { session } }) => {
+      setHasSession(!!session);
+    });
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setHasSession(!!session);
+    });
+    return () => subscription.unsubscribe();
+  }, []);
 
   return (
     <div className={cn("w-full", navFixed && "relative z-[100]")}>
@@ -70,9 +86,12 @@ export function HeroSection() {
               <span className="hero-word-online inline-block">online.</span>
             </h1>
             <p className="marketing-copy mx-auto mt-5 max-w-2xl text-pretty leading-relaxed">
-              While brands plan campaigns, the internet shares memes. Our AI
-              meme generator helps brands create contextually relevant{" "}
-              <span className="inline-block rounded-md bg-sky-200/70 px-1.5 py-0.5 font-medium text-stone-900 ring-1 ring-sky-300/60">
+              While brands plan campaigns, the internet shares memes. Our{" "}
+              <span className="inline-block rounded-md bg-sky-200/70 px-1.5 py-0.5 font-medium text-stone-900 ring-1 ring-sky-300/60 mx-0.5 my-0.5">
+                AI meme generator
+              </span>{" "}
+              helps brands create contextually relevant{" "}
+              <span className="inline-block rounded-md bg-sky-200/70 px-1.5 py-0.5 font-medium text-stone-900 ring-1 ring-sky-300/60 mx-0.5 my-0.5">
                 memes &amp; slideshows
               </span>{" "}
               for social media.
@@ -178,34 +197,47 @@ export function HeroSection() {
                 </div>
               </div>
             </div>
-            <form
-              action="/onboarding/analyze"
-              method="get"
-              className="mx-auto mt-8 flex max-w-md flex-col gap-3 sm:flex-row sm:items-center"
-            >
-              <label htmlFor="hero-website-url" className="sr-only">
-                Your website URL
-              </label>
-              <input
-                id="hero-website-url"
-                type="url"
-                name="website"
-                placeholder="Enter your website URL"
-                className="min-w-0 flex-1 rounded-xl border border-stone-200 bg-white/90 px-4 py-2 text-sm text-stone-900 placeholder:text-stone-400 focus:border-stone-400 focus:outline-none focus:ring-1 focus:ring-stone-400"
-              />
-              <button
-                type="submit"
-                className="cta-funky shrink-0 rounded-full bg-stone-900 px-5 py-2.5 text-sm font-medium !text-white shadow-sm hover:bg-stone-800 transition-colors font-display"
-              >
-                Get started
-              </button>
-            </form>
-            <p className="mt-3 text-center text-sm text-stone-500">
-              Don&apos;t have a website?{" "}
-              <a href="/onboarding/manual" className="font-medium text-stone-700 underline underline-offset-2 hover:text-stone-900">
-                Tap here.
-              </a>
-            </p>
+            {hasSession ? (
+              <div className="mx-auto mt-8 flex flex-col items-center gap-3">
+                <Link
+                  href="/dashboard"
+                  className="cta-funky shrink-0 rounded-full bg-stone-900 px-5 py-2.5 text-sm font-medium !text-white shadow-sm hover:bg-stone-800 transition-colors font-display"
+                >
+                  Dashboard
+                </Link>
+              </div>
+            ) : (
+              <>
+                <form
+                  action="/onboarding/analyze"
+                  method="get"
+                  className="mx-auto mt-8 flex max-w-md flex-col gap-3 sm:flex-row sm:items-center"
+                >
+                  <label htmlFor="hero-website-url" className="sr-only">
+                    Your website URL
+                  </label>
+                  <input
+                    id="hero-website-url"
+                    type="url"
+                    name="website"
+                    placeholder="Enter your website URL"
+                    className="min-w-0 flex-1 rounded-xl border border-stone-200 bg-white/90 px-4 py-2 text-sm text-stone-900 placeholder:text-stone-400 focus:border-stone-400 focus:outline-none focus:ring-1 focus:ring-stone-400"
+                  />
+                  <button
+                    type="submit"
+                    className="cta-funky shrink-0 rounded-full bg-stone-900 px-5 py-2.5 text-sm font-medium !text-white shadow-sm hover:bg-stone-800 transition-colors font-display"
+                  >
+                    Get started
+                  </button>
+                </form>
+                <p className="mt-3 text-center text-sm text-stone-500">
+                  Don&apos;t have a website?{" "}
+                  <a href="/onboarding/manual" className="font-medium text-stone-700 underline underline-offset-2 hover:text-stone-900">
+                    Tap here.
+                  </a>
+                </p>
+              </>
+            )}
           </div>
 
           <div className="mt-6 flex shrink-0 justify-center sm:mt-8">
