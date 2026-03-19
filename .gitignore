@@ -3,3 +3,4 @@ node_modules
 generated-memes
 .DS_Store
 templates/
+output-*.png
