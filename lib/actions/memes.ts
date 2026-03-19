@@ -6,6 +6,7 @@ import { getProfile } from "@/lib/actions/profile";
 import { createClient as createSupabaseAdminClient } from "@supabase/supabase-js";
 import { randomUUID } from "node:crypto";
 import { renderMemePNGFromTemplate } from "@/renderer/renderMemeTemplate";
+import { getActiveImportantDay } from "@/lib/memes/variants/get-active-important-day";
 
 export async function generateMockMemes(
   promotionContext?: string,
@@ -14,6 +15,7 @@ export async function generateMockMemes(
     excludeExistingUserTemplates?: boolean;
   }
 ): Promise<{ error: string | null }> {
+  try {
   const supabase = await createClient();
 
   const {
@@ -27,6 +29,7 @@ export async function generateMockMemes(
   }
 
   const PROMOTION_MAX_CHARS = 280;
+  const POST_CAPTION_MAX_CHARS = 220;
   const TITLE_MAX_CHARS = 45;
   const INITIAL_TEMPLATE_BATCH_SIZE = 3;
   const ORDERED_TEMPLATE_SLUG_POOL = [
@@ -46,7 +49,19 @@ export async function generateMockMemes(
   ] as const;
 
   type PromoMode = "none" | "light" | "direct";
-  type VariantType = "standard" | "promo" | "important_day" | "trending_signal";
+  type AssignedVariant = "standard" | "promo" | "important_day";
+  type TemplateVariantAssignment = {
+    template_id: string;
+    slug: string;
+    variantType: AssignedVariant;
+  };
+  type VariantContext = {
+    variantType: AssignedVariant;
+    promoText?: string | null;
+    importantDayKey?: string | null;
+    importantDayLabel?: string | null;
+    importantDayPromptContext?: string | null;
+  };
   type TemplateType =
     | "top_caption"
     | "side_caption"
@@ -62,6 +77,51 @@ export async function generateMockMemes(
 
   const promotion = normalizePromotionContext(promotionContext);
   const batchSize = options?.limit ?? INITIAL_TEMPLATE_BATCH_SIZE;
+  const generationRunId = randomUUID();
+  const batchNumber = 1;
+  const activeImportantDay = getActiveImportantDay();
+
+  console.log("[important-day] activeImportantDay", activeImportantDay);
+
+  const generationContext = {
+    promotion,
+    batchSize,
+    generationRunId,
+    batchNumber,
+    activeImportantDay,
+  };
+
+  console.log("[meme-gen] Generation start", {
+    hasPromotion: Boolean(generationContext.promotion),
+    promotionLength: generationContext.promotion?.length ?? 0,
+    batchSize: generationContext.batchSize,
+    generationRunId: generationContext.generationRunId,
+    batchNumber: generationContext.batchNumber,
+    excludeExistingUserTemplates: Boolean(options?.excludeExistingUserTemplates),
+    activeImportantDay: generationContext.activeImportantDay,
+  });
+
+  const { error: generatedMemesSchemaError } = await supabase
+    .from("generated_memes")
+    .select(
+      "id, template_id, variant_type, generation_run_id, batch_number, variant_metadata, post_caption"
+    )
+    .limit(1);
+
+  if (generatedMemesSchemaError) {
+    console.error("[meme-gen] generated_memes schema check failed", {
+      generatedMemesSchemaError,
+      expectedColumns: [
+        "variant_type",
+        "generation_run_id",
+        "batch_number",
+        "variant_metadata",
+        "post_caption",
+      ],
+      generationRunId: generationContext.generationRunId,
+    });
+    return { error: "Failed to generate memes. Check server logs for details." };
+  }
 
   // Keep the promo heuristic explicit and boring so it's easy to tune.
   const derivePromoMode = (template: {
@@ -230,8 +290,18 @@ export async function generateMockMemes(
   };
 
   const endsWithDanglingConnector = (text: string): boolean => {
-    return /\b(the|a|an|for|on|in|to|of|with|when|where|why|then|if|while|because|before|after|into|from|at|by)\b$/i.test(
+    return /\b(the|a|an|for|on|in|to|of|with|when|where|why|then|if|while|because|before|after|into|from|at|by|and|or|but|so)\b$/i.test(
       text
+    );
+  };
+
+  const looksIncompleteWomanYellingCaption = (text: string): boolean => {
+    const trimmed = text.trim();
+    if (!trimmed) return true;
+    if (endsWithDanglingConnector(trimmed)) return true;
+
+    return /^(when|if|me)\b.+\b(and|or|but|so|because|says|asks|why)$/i.test(
+      trimmed
     );
   };
 
@@ -294,6 +364,57 @@ export async function generateMockMemes(
     return { value: s, failRule: null, length: s.length };
   };
 
+  const validatePostCaption = (
+    v: unknown
+  ): { value: string | null; failRule: string | null; length: number | null } => {
+    if (typeof v !== "string") {
+      return {
+        value: null,
+        failRule: "post_caption_missing_or_invalid",
+        length: null,
+      };
+    }
+
+    const cleaned = v
+      .replace(/\r?\n/g, " ")
+      .replace(/\s+/g, " ")
+      .replace(/^["'“”‘’]+|["'“”‘’]+$/g, "")
+      .trim();
+
+    if (!cleaned) {
+      return {
+        value: null,
+        failRule: "post_caption_missing_or_invalid",
+        length: null,
+      };
+    }
+
+    if (cleaned.length > POST_CAPTION_MAX_CHARS) {
+      return {
+        value: null,
+        failRule: "post_caption_too_long",
+        length: cleaned.length,
+      };
+    }
+
+    return { value: cleaned, failRule: null, length: cleaned.length };
+  };
+
+  const buildFallbackPostCaption = (params: {
+    variantContext: VariantContext;
+  }): string => {
+    const { variantContext } = params;
+
+    const fallback =
+      variantContext.variantType === "important_day" && variantContext.importantDayLabel
+        ? `A little too real for ${variantContext.importantDayLabel}.`
+        : variantContext.variantType === "promo"
+          ? "A little too real while this offer is live."
+          : "A little too real not to post.";
+
+    return fallback.slice(0, POST_CAPTION_MAX_CHARS).trim();
+  };
+
   const validateSlotTextSingleLine = (
     v: unknown,
     maxChars: number,
@@ -340,6 +461,17 @@ export async function generateMockMemes(
       return {
         value: null,
         failRule: `${slotLabel}_likely_fragment_cutoff`,
+        length: cleaned.length,
+      };
+    }
+    if (
+      options?.templateSlug === "woman-yelling-cat" &&
+      slotLabel === "slot_1" &&
+      looksIncompleteWomanYellingCaption(cleaned)
+    ) {
+      return {
+        value: null,
+        failRule: `${slotLabel}_incomplete_reaction_caption`,
         length: cleaned.length,
       };
     }
@@ -597,13 +729,16 @@ Slot 1:
 
     if (
       template.slug === "woman-yelling-cat" &&
-      previousFailureRule === "slot_1_over_max_chars"
+      (previousFailureRule === "slot_1_over_max_chars" ||
+        previousFailureRule === "slot_1_likely_fragment_cutoff" ||
+        previousFailureRule === "slot_1_incomplete_reaction_caption")
     ) {
       return `Retry correction:
-- The previous top_text was too long.
-- Keep the same idea, but compress it.
-- Remove filler words.
-- Rewrite shorter and tighter.
+- The previous top_text was invalid.
+- top_text must be one complete standalone reaction/accusation line.
+- Do not end on open connectors like "and", "but", "so", or "because".
+- Keep it short without sounding cut off.
+- Remove filler words and rewrite tighter if needed.
 - Stay comfortably under ${template.slot_1_max_chars} characters.`;
     }
 
@@ -788,20 +923,72 @@ Slot 1:
     return { error: "No unused templates remain to generate." };
   }
 
+  const selectedTemplatesForBatch = orderedTemplatePool.slice(0, batchSize);
+  const desiredVariants: AssignedVariant[] = [];
+
+  if (generationContext.promotion) {
+    desiredVariants.push("promo");
+  }
+
+  if (generationContext.activeImportantDay) {
+    desiredVariants.push("important_day");
+  }
+
+  while (desiredVariants.length < selectedTemplatesForBatch.length) {
+    desiredVariants.push("standard");
+  }
+
+  const templateVariantAssignments: TemplateVariantAssignment[] =
+    selectedTemplatesForBatch.map((template, index) => ({
+      template_id: template.template_id,
+      slug: template.slug,
+      variantType: desiredVariants[index] ?? "standard",
+    }));
+
+  console.log(
+    "[variant-assignment] templateVariantAssignments",
+    templateVariantAssignments
+  );
+
+  console.log("[meme-gen] Selected templates for batch", {
+    generationRunId: generationContext.generationRunId,
+    selectedTemplates: selectedTemplatesForBatch.map((template, index) => ({
+      selectionIndex: index + 1,
+      template_id: template.template_id,
+      slug: template.slug,
+      templateType: template.template_type,
+      assignedVariant:
+        templateVariantAssignments[index]?.variantType ?? "standard",
+    })),
+  });
+
   const apiKey = process.env.OPENAI_API_KEY as string;
   const memeTemplatesBucket =
     process.env.MEME_TEMPLATES_BUCKET ?? "meme-templates";
   const generatedMemeBucket =
     process.env.MEME_GENERATED_MEMES_BUCKET ?? "generated-memes";
 
+  console.log("[meme-gen] Starting generation loop", {
+    generationRunId: generationContext.generationRunId,
+    orderedTemplatePoolSize: orderedTemplatePool.length,
+    targetInsertCount: batchSize,
+    selectedTemplateCount: selectedTemplatesForBatch.length,
+  });
+
   const generateForTemplate = async (
     template: CompatibleTemplate,
+    variantContext: VariantContext,
     promoMode: PromoMode,
     attempt: number,
     previousFailureRule: string | null
   ): Promise<
     | {
-        result: { title: string; top_text: string; bottom_text: string | null };
+        result: {
+          title: string;
+          top_text: string;
+          bottom_text: string | null;
+          post_caption: string;
+        };
         failureRule: null;
       }
     | { result: null; failureRule: string | null }
@@ -817,12 +1004,48 @@ Slot 1:
       template,
       previousFailureRule
     );
+    const variantPromptGuidance =
+      variantContext.variantType === "promo"
+        ? `Variant guidance:
+- This is the promo version.
+- Naturally incorporate the user promotion when it fits the meme.
+- Keep it meme-first, not ad-first.
+- Avoid banner, headline, or campaign-style copy.`
+        : variantContext.variantType === "important_day"
+          ? `IMPORTANT DAY CONTEXT
+- occasion_label: ${variantContext.importantDayLabel ?? "Unknown"}
+- seasonal_behaviours_and_tensions: ${variantContext.importantDayPromptContext ?? "None"}
+
+IMPORTANT DAY WRITING RULES
+- Build the joke around the seasonal behaviours, emotions, pressure, routines, or chaos created by this occasion.
+- The meme should feel timely and recognisable for this period.
+- The reference may be explicit or implicit.
+- Prioritise relatability and humour over directly naming the occasion.
+- Use the important day as context, not as a slogan.
+- Do not sound like a greeting card, seasonal campaign, or ad.
+- Keep it meme-first and template-compatible.
+- This variant should feel meaningfully more timely than the default version.`
+          : `Variant guidance:
+- This is the default version.
+- Do not reference promotions.
+- Do not reference holidays, seasons, or special events.`;
+
+    if (variantContext.variantType === "important_day") {
+      console.log("[important-day-prompt-block]", {
+        slug: template.slug,
+        importantDayPromptBlock: variantPromptGuidance,
+      });
+    }
 
     const topIdeal = Math.max(8, Math.floor(template.slot_1_max_chars * (attempt >= 2 ? 0.8 : 0.95)));
     const bottomIdeal = Math.max(8, Math.floor(template.slot_2_max_chars * (attempt >= 2 ? 0.8 : 0.95)));
 
     const promoModeInstructions =
-      promoMode === "direct"
+      variantContext.variantType !== "promo"
+        ? `Promo mode: none
+- Ignore the promotion entirely for this template.
+- Make the meme about the brand/audience context only.`
+        : promoMode === "direct"
         ? `Promo mode: direct
 - You may make the promotion part of the meme idea when it feels natural for this template.
 - The meme must still read like a meme first, not ad copy.
@@ -846,6 +1069,7 @@ Hard constraints (must obey):
 - top_text should ideally be <= ${topIdeal} characters.
 - bottom_text MUST be <= ${template.slot_2_max_chars} characters when present, and be complete. If it would exceed the limit, rewrite shorter and simpler.
 - bottom_text should ideally be <= ${bottomIdeal} characters when present.
+- post_caption MUST be <= ${POST_CAPTION_MAX_CHARS} characters and easy to post as-is.
 - Do not include markdown, HTML, code blocks, or newline characters.
 
 Brand context:
@@ -855,8 +1079,13 @@ Brand context:
 - country: ${country}
 
 Promotion context:
-- normalized_promotion: ${promotion ?? "None"}
-- promo_mode: ${promoMode}
+- normalized_promotion: ${variantContext.promoText ?? "None"}
+- promo_mode: ${variantContext.variantType === "promo" ? promoMode : "none"}
+
+Important day context:
+- active_important_day_key: ${variantContext.importantDayKey ?? "None"}
+- active_important_day_label: ${variantContext.importantDayLabel ?? "None"}
+- active_important_day_prompt_context: ${variantContext.importantDayPromptContext ?? "None"}
 
 Template metadata:
 - template_name: ${template.template_name}
@@ -894,14 +1123,21 @@ Rules:
 - If exact promo facts do not fit naturally or within the slot limits, leave them out rather than changing them.
 - Do not include disallowed/unsafe content (hate, sexual, illegal, harassment, personal data).
 - Never truncate mid-sentence: rewrite so it fits.
+- Also generate a short social caption for the post.
+- post_caption should complement the meme instead of repeating the on-image text exactly.
+- Keep post_caption concise, natural, and easy to post.
+- No surrounding quotation marks. Avoid heavy hashtag use.
 
 ${promoModeInstructions}
+
+${variantPromptGuidance}
 
 Return ONLY valid JSON with this exact shape:
 {
   "title": string,
   "top_text": string,
-  "bottom_text": ${template.isTwoSlot ? "string" : "null"}
+  "bottom_text": ${template.isTwoSlot ? "string" : "null"},
+  "post_caption": string
 }`;
 
     console.log("[meme-gen] OpenAI prompt", {
@@ -969,6 +1205,7 @@ Return ONLY valid JSON with this exact shape:
 
     // Validation: avoid inserting broken rows.
     const titleValidation = validateTitle(p.title);
+    const postCaptionValidation = validatePostCaption(p.post_caption);
     const topValidation = validateSlotTextSingleLine(
       p.top_text,
       template.slot_1_max_chars,
@@ -1057,12 +1294,25 @@ Return ONLY valid JSON with this exact shape:
     const finalTitle = titleValidation.value!;
     const finalTop = topValidation.value!;
     const finalBottom = template.isTwoSlot ? bottomValidation.value : null;
+    const finalPostCaption =
+      postCaptionValidation.value ?? buildFallbackPostCaption({ variantContext });
+
+    if (!postCaptionValidation.value) {
+      console.log("[meme-gen] Using post_caption fallback", {
+        template: template.slug,
+        variantType: variantContext.variantType,
+        failRule: postCaptionValidation.failRule,
+        generatedLength: postCaptionValidation.length,
+        fallbackPostCaption: finalPostCaption,
+      });
+    }
 
     return {
       result: {
         title: finalTitle,
         top_text: finalTop,
         bottom_text: finalBottom,
+        post_caption: finalPostCaption,
       },
       failureRule: null,
     };
@@ -1082,14 +1332,52 @@ Return ONLY valid JSON with this exact shape:
     attemptedTemplateIds.add(template.template_id);
     attemptedCount++;
     const maxAttempts = 2;
+    const templateVariantAssignment =
+      templateVariantAssignments.find(
+        (assignment) => assignment.template_id === template.template_id
+      ) ?? null;
+    const variantType: AssignedVariant =
+      templateVariantAssignment?.variantType ?? "standard";
+    const variantContext: VariantContext = {
+      variantType,
+      promoText: variantType === "promo" ? generationContext.promotion : null,
+      importantDayKey:
+        variantType === "important_day"
+          ? generationContext.activeImportantDay?.key ?? null
+          : null,
+      importantDayLabel:
+        variantType === "important_day"
+          ? generationContext.activeImportantDay?.label ?? null
+          : null,
+      importantDayPromptContext:
+        variantType === "important_day"
+          ? generationContext.activeImportantDay?.promptContext ?? null
+          : null,
+    };
     const promoMode = derivePromoMode(template);
-    const variantType: VariantType =
-      promotion && promoMode !== "none" ? "promo" : "standard";
     const fallbackReplacementUsed = failedCount > 0;
+    const variantMetadata =
+      variantType === "important_day"
+        ? {
+            important_day_key: variantContext.importantDayKey,
+            important_day_label: variantContext.importantDayLabel,
+          }
+        : null;
     let generated:
-      | { title: string; top_text: string; bottom_text: string | null }
+      | {
+          title: string;
+          top_text: string;
+          bottom_text: string | null;
+          post_caption: string;
+        }
       | null = null;
     let previousFailureRule: string | null = null;
+
+    console.log("[variant-prompt] ", {
+      slug: template.slug,
+      variantType,
+      variantContext,
+    });
 
     console.log("[meme-gen] Attempting template from ordered pool", {
       poolIndex: poolIndex + 1,
@@ -1107,6 +1395,7 @@ Return ONLY valid JSON with this exact shape:
       attemptUsed = attempt;
       const generationAttempt = await generateForTemplate(
         template,
+        variantContext,
         promoMode,
         attempt,
         previousFailureRule
@@ -1208,8 +1497,22 @@ Return ONLY valid JSON with this exact shape:
       format: template.template_name,
       top_text: generated.top_text,
       bottom_text: generated.bottom_text,
+      post_caption: generated.post_caption,
       image_url: imageUrl,
+      variant_type: variantType,
+      generation_run_id: generationContext.generationRunId,
+      batch_number: generationContext.batchNumber,
+      variant_metadata: variantMetadata,
     };
+
+    console.log("[variant-insert]", {
+      slug: template.slug,
+      variantType,
+      generationRunId: generationContext.generationRunId,
+      batchNumber: generationContext.batchNumber,
+      variantMetadata,
+      row,
+    });
 
     const { error: insertError } = await supabase
       .from("generated_memes")
@@ -1221,6 +1524,7 @@ Return ONLY valid JSON with this exact shape:
         templateType: template.template_type,
         variantType,
         promoMode,
+        row,
         insertError,
       });
       failedCount++;
@@ -1263,10 +1567,14 @@ Return ONLY valid JSON with this exact shape:
   console.log("[meme-gen] Generation summary", {
     compatibleTemplates: compatibleTemplates.length,
     orderedTemplatePoolSize: orderedTemplatePool.length,
-    batchSize,
+    batchSize: generationContext.batchSize,
+    generationRunId: generationContext.generationRunId,
+    batchNumber: generationContext.batchNumber,
     attemptedCount,
     insertedCount,
     failedCount,
+    activeImportantDay: generationContext.activeImportantDay,
+    templateVariantAssignments,
   });
 
   if (insertedCount === 0) {
@@ -1274,6 +1582,18 @@ Return ONLY valid JSON with this exact shape:
   }
 
   return { error: null };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const stack = error instanceof Error ? error.stack : null;
+    console.error("[meme-gen] Unhandled generation error", {
+      promotionContext,
+      options,
+      message,
+      stack,
+      error,
+    });
+    return { error: "Failed to generate memes. Check server logs for details." };
+  }
 }
 
 export async function generateMoreMemes(): Promise<{ error: string | null }> {
