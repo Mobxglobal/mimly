@@ -1,6 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { Check, Copy, LoaderCircle } from "lucide-react";
+import { regenerateTemplateIdea } from "@/lib/actions/memes";
 import { DownloadMemeButton } from "@/components/dashboard/download-meme-button";
 import { PlatformIconsRow } from "@/components/dashboard/platform-icons-row";
 
@@ -22,6 +25,7 @@ type VariantType = keyof typeof VARIANT_LABELS;
 type MemeRow = {
   id: string;
   template_id: string | null;
+  idea_group_id: string | null;
   title: string | null;
   format: string | null;
   top_text: string | null;
@@ -33,17 +37,16 @@ type MemeRow = {
   batch_number: number | null;
 };
 
-type TemplateGroup = {
+type IdeaGroup = {
   key: string;
-  templateId: string | null;
+  ideaGroupId: string | null;
   variants: MemeRow[];
 };
 
-type GenerationRunGroup = {
+type TemplateGroup = {
   key: string;
-  generationRunId: string | null;
-  batchNumber: number | null;
-  templateGroups: TemplateGroup[];
+  templateId: string | null;
+  ideaGroups: IdeaGroup[];
 };
 
 type Props = {
@@ -117,55 +120,52 @@ function sortVariants(variants: MemeRow[]): MemeRow[] {
   });
 }
 
-function groupMemesByRunAndTemplate(memes: MemeRow[]): GenerationRunGroup[] {
-  const runs = new Map<
+function hasPromoVariant(rows: MemeRow[]): boolean {
+  return rows.some((row) => normalizeVariantType(row.variant_type) === "promo");
+}
+
+function groupMemesByTemplateAndIdea(memes: MemeRow[]): TemplateGroup[] {
+  const templateGroups = new Map<
     string,
     {
-      generationRunId: string | null;
-      batchNumber: number | null;
-      templateGroups: Map<string, TemplateGroup>;
+      templateId: string | null;
+      ideaGroups: Map<string, IdeaGroup>;
     }
   >();
 
   for (const meme of memes) {
-    const runKey = meme.generation_run_id ?? "legacy";
-    const existingRun = runs.get(runKey);
-    const run =
-      existingRun ??
+    const templateKey = meme.template_id ?? meme.format ?? meme.id;
+    const ideaKey = meme.idea_group_id ?? meme.id;
+    const existingTemplateGroup = templateGroups.get(templateKey);
+    const templateGroup =
+      existingTemplateGroup ??
       {
-        generationRunId: meme.generation_run_id,
-        batchNumber: meme.batch_number,
-        templateGroups: new Map<string, TemplateGroup>(),
+        templateId: meme.template_id,
+        ideaGroups: new Map<string, IdeaGroup>(),
       };
 
-    const templateKey =
-      meme.generation_run_id != null
-        ? meme.template_id ?? meme.format ?? meme.id
-        : meme.id;
-    const existingTemplateGroup = run.templateGroups.get(templateKey);
-
-    if (existingTemplateGroup) {
-      existingTemplateGroup.variants.push(meme);
+    const existingIdeaGroup = templateGroup.ideaGroups.get(ideaKey);
+    if (existingIdeaGroup) {
+      existingIdeaGroup.variants.push(meme);
     } else {
-      run.templateGroups.set(templateKey, {
-        key: templateKey,
-        templateId: meme.template_id,
+      templateGroup.ideaGroups.set(ideaKey, {
+        key: ideaKey,
+        ideaGroupId: meme.idea_group_id,
         variants: [meme],
       });
     }
 
-    if (!existingRun) {
-      runs.set(runKey, run);
+    if (!existingTemplateGroup) {
+      templateGroups.set(templateKey, templateGroup);
     }
   }
 
-  return [...runs.entries()].map(([key, run]) => ({
+  return [...templateGroups.entries()].map(([key, group]) => ({
     key,
-    generationRunId: run.generationRunId,
-    batchNumber: run.batchNumber,
-    templateGroups: [...run.templateGroups.values()].map((group) => ({
-      ...group,
-      variants: sortVariants(group.variants),
+    templateId: group.templateId,
+    ideaGroups: [...group.ideaGroups.values()].map((ideaGroup) => ({
+      ...ideaGroup,
+      variants: sortVariants(ideaGroup.variants),
     })),
   }));
 }
@@ -177,14 +177,44 @@ function MemeTemplateCard({
   group: TemplateGroup;
   accent: string;
 }) {
-  const defaultVariant = getDefaultVariant(group.variants);
-  const [selectedVariantType, setSelectedVariantType] = useState<VariantType>(
-    normalizeVariantType(defaultVariant.variant_type)
+  const router = useRouter();
+  const [isRegenerating, startRegeneration] = useTransition();
+  const defaultIdeaGroup = group.ideaGroups[0];
+  const [selectedIdeaGroupKey, setSelectedIdeaGroupKey] = useState<string>(
+    defaultIdeaGroup?.key ?? ""
   );
   const [copyState, setCopyState] = useState<"idle" | "copied">("idle");
 
+  useEffect(() => {
+    if (group.ideaGroups[0]?.key) {
+      setSelectedIdeaGroupKey(group.ideaGroups[0].key);
+      setCopyState("idle");
+    }
+  }, [group.ideaGroups.length, group.ideaGroups[0]?.key]);
+
+  const selectedIdeaGroup =
+    group.ideaGroups.find((ideaGroup) => ideaGroup.key === selectedIdeaGroupKey) ??
+    defaultIdeaGroup;
+  const defaultVariant = getDefaultVariant(selectedIdeaGroup?.variants ?? []);
+  const [selectedVariantType, setSelectedVariantType] = useState<VariantType>(
+    normalizeVariantType(defaultVariant?.variant_type)
+  );
+
+  useEffect(() => {
+    if (selectedIdeaGroup) {
+      setSelectedVariantType(
+        normalizeVariantType(getDefaultVariant(selectedIdeaGroup.variants).variant_type)
+      );
+      setCopyState("idle");
+    }
+  }, [selectedIdeaGroup?.key]);
+
+  if (!selectedIdeaGroup || !defaultVariant) {
+    return null;
+  }
+
   const selectedVariant =
-    group.variants.find(
+    selectedIdeaGroup.variants.find(
       (variant) => normalizeVariantType(variant.variant_type) === selectedVariantType
     ) ?? defaultVariant;
 
@@ -193,6 +223,10 @@ function MemeTemplateCard({
   const bottomText = selectedVariant.bottom_text ?? "";
   const postCaption = getDisplayPostCaption(selectedVariant);
   const hasImage = Boolean(selectedVariant.image_url);
+  const templateHasPromoIdea = group.ideaGroups.some((ideaGroup) =>
+    hasPromoVariant(ideaGroup.variants)
+  );
+  const selectedIdeaIsPromo = hasPromoVariant(selectedIdeaGroup.variants);
 
   async function handleCopyCaption() {
     try {
@@ -209,8 +243,31 @@ function MemeTemplateCard({
     }
   }
 
+  function handleMoreIdeas() {
+    if (!group.templateId) return;
+
+    startRegeneration(async () => {
+      const result = await regenerateTemplateIdea(group.templateId as string);
+      if (result.error) {
+        console.error("[meme-results] More ideas failed", {
+          templateId: group.templateId,
+          error: result.error,
+        });
+        return;
+      }
+
+      router.refresh();
+    });
+  }
+
   return (
-    <div className="group overflow-hidden rounded-3xl border border-white/10 bg-white/[0.04] shadow-[0_20px_60px_rgba(0,0,0,0.28)] backdrop-blur-xl">
+    <div
+      className={`group overflow-hidden rounded-3xl border bg-white/[0.04] shadow-[0_20px_60px_rgba(0,0,0,0.28)] backdrop-blur-xl ${
+        templateHasPromoIdea
+          ? "border-emerald-400/30 shadow-[0_20px_60px_rgba(16,185,129,0.14)]"
+          : "border-white/10"
+      }`}
+    >
       <div
         className={`relative aspect-square w-full bg-gradient-to-br ${accent} ${hasImage ? "p-0" : "p-5"}`}
       >
@@ -250,16 +307,28 @@ function MemeTemplateCard({
             <p className="mt-1 text-xs text-stone-300">
               {selectedVariant.image_url ? "Image ready" : "1080 x 1080 meme export"}
             </p>
+            {templateHasPromoIdea && (
+              <p
+                className={`mt-2 text-xs font-medium ${
+                  selectedIdeaIsPromo ? "text-emerald-300" : "text-emerald-400/80"
+                }`}
+              >
+                {selectedIdeaIsPromo
+                  ? "Promotion-informed idea"
+                  : "Promo idea available in this template"}
+              </p>
+            )}
             <div className="mt-2 flex items-center gap-2">
               <span className="text-[11px] leading-relaxed text-stone-500">1080×1080</span>
               <PlatformIconsRow className="gap-1.5" />
             </div>
           </div>
-          {group.variants.length > 1 && (
+          {selectedIdeaGroup.variants.length > 1 && (
             <div className="flex flex-wrap items-center justify-end gap-1 rounded-full border border-white/10 bg-white/5 p-1">
-              {group.variants.map((variant) => {
+              {selectedIdeaGroup.variants.map((variant) => {
                 const variantType = normalizeVariantType(variant.variant_type);
-                const isActive = variantType === normalizeVariantType(selectedVariant.variant_type);
+                const isActive =
+                  variantType === normalizeVariantType(selectedVariant.variant_type);
 
                 return (
                   <button
@@ -283,33 +352,89 @@ function MemeTemplateCard({
           )}
         </div>
 
+        {group.ideaGroups.length > 1 && (
+          <div className="mt-4 flex flex-wrap items-center gap-2">
+            {group.ideaGroups.map((ideaGroup, index) => {
+              const isActive = ideaGroup.key === selectedIdeaGroup.key;
+              const ideaIsPromo = hasPromoVariant(ideaGroup.variants);
+
+              return (
+                <button
+                  key={ideaGroup.key}
+                  type="button"
+                  onClick={() => setSelectedIdeaGroupKey(ideaGroup.key)}
+                  className={`rounded-full border px-3 py-1 text-[11px] font-medium transition ${
+                    isActive
+                      ? "border-white bg-white text-stone-950"
+                      : "border-white/10 bg-white/[0.03] text-stone-300 hover:bg-white/[0.06] hover:text-white"
+                  }`}
+                >
+                  {ideaIsPromo ? `Idea ${index + 1} · Promo` : `Idea ${index + 1}`}
+                </button>
+              );
+            })}
+          </div>
+        )}
+
         <div className="mt-4 rounded-2xl border border-white/10 bg-white/[0.04] p-3">
-          <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-stone-500">
-            Caption
-          </p>
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-stone-500">
+              Caption
+            </p>
+            <button
+              type="button"
+              onClick={handleCopyCaption}
+              className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[11px] font-medium transition ${
+                copyState === "copied"
+                  ? "border-emerald-400/30 bg-emerald-500/10 text-emerald-300"
+                  : "border-white/10 bg-white/[0.03] text-stone-400 hover:bg-white/[0.06] hover:text-white"
+              }`}
+              aria-label={copyState === "copied" ? "Caption copied" : "Copy caption"}
+              title={copyState === "copied" ? "Copied" : "Copy caption"}
+            >
+              {copyState === "copied" ? (
+                <>
+                  <Check className="h-3.5 w-3.5" />
+                  <span>Copied</span>
+                </>
+              ) : (
+                <>
+                  <Copy className="h-3.5 w-3.5" />
+                  <span>Copy</span>
+                </>
+              )}
+            </button>
+          </div>
           <p className="mt-2 text-sm leading-relaxed text-white">{postCaption}</p>
         </div>
 
         <div className="mt-4 flex flex-col gap-3">
-          <button
-            type="button"
-            onClick={handleCopyCaption}
-            className="inline-flex items-center justify-center rounded-xl border border-white/10 bg-white/[0.03] px-4 py-2.5 text-sm font-medium text-stone-200 transition hover:bg-white/[0.06] hover:text-white"
-          >
-            {copyState === "copied" ? "Copied" : "Copy caption"}
-          </button>
-          <DownloadMemeButton
-            imageUrl={selectedVariant.image_url ?? null}
-            fallbackHref={getDownloadHref(title, topText, bottomText)}
-            downloadFilename={
-              selectedVariant.image_url
-                ? `${selectedVariant.id}.png`
-                : `${selectedVariant.id}.svg`
-            }
-            className="cta-funky inline-flex items-center justify-center rounded-xl bg-indigo-500 px-4 py-2.5 text-sm font-medium text-white shadow-[0_10px_30px_rgba(99,102,241,0.35)] hover:bg-indigo-400"
-          >
-            Download meme
-          </DownloadMemeButton>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <button
+              type="button"
+              onClick={handleMoreIdeas}
+              disabled={isRegenerating || !group.templateId}
+              className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-2.5 text-sm font-medium text-stone-200 transition hover:bg-white/[0.06] hover:text-white disabled:cursor-not-allowed disabled:opacity-70"
+            >
+              {isRegenerating && <LoaderCircle className="h-4 w-4 animate-spin" />}
+              {isRegenerating ? "Generating..." : "More ideas"}
+            </button>
+            <DownloadMemeButton
+              imageUrl={selectedVariant.image_url ?? null}
+              fallbackHref={getDownloadHref(title, topText, bottomText)}
+              downloadFilename={
+                selectedVariant.image_url
+                  ? `${selectedVariant.id}.png`
+                  : `${selectedVariant.id}.svg`
+              }
+              className="cta-funky inline-flex items-center justify-center rounded-xl bg-indigo-500 px-4 py-2.5 text-sm font-medium text-white shadow-[0_10px_30px_rgba(99,102,241,0.35)] hover:bg-indigo-400"
+            >
+              Download meme
+            </DownloadMemeButton>
+          </div>
+          {isRegenerating && (
+            <p className="text-xs text-stone-500">Generating a new idea for this template...</p>
+          )}
         </div>
       </div>
     </div>
@@ -317,45 +442,17 @@ function MemeTemplateCard({
 }
 
 export function MemeResultsGrid({ memes }: Props) {
-  const generationRuns = useMemo(() => groupMemesByRunAndTemplate(memes), [memes]);
+  const templateGroups = useMemo(() => groupMemesByTemplateAndIdea(memes), [memes]);
 
   return (
-    <div className="mt-6 space-y-8">
-      {generationRuns.map((run, runIndex) => {
-        const showRunHeader = generationRuns.length > 1;
-        const runLabel =
-          run.generationRunId == null
-            ? "Earlier results"
-            : runIndex === 0
-              ? "Latest set"
-              : `Previous set ${runIndex}`;
-
-        return (
-          <section key={run.key}>
-            {showRunHeader && (
-              <div className="mb-4 flex items-center justify-between gap-3">
-                <div>
-                  <h2 className="text-sm font-semibold text-white">{runLabel}</h2>
-                  <p className="mt-1 text-xs text-stone-400">
-                    {run.templateGroups.length} template
-                    {run.templateGroups.length !== 1 ? "s" : ""}
-                  </p>
-                </div>
-              </div>
-            )}
-
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              {run.templateGroups.map((group, index) => (
-                <MemeTemplateCard
-                  key={group.key}
-                  group={group}
-                  accent={ACCENTS[index % ACCENTS.length]}
-                />
-              ))}
-            </div>
-          </section>
-        );
-      })}
+    <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+      {templateGroups.map((group, index) => (
+        <MemeTemplateCard
+          key={group.key}
+          group={group}
+          accent={ACCENTS[index % ACCENTS.length]}
+        />
+      ))}
     </div>
   );
 }

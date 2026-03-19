@@ -7,6 +7,7 @@ import { MemeResultsGrid } from "@/components/dashboard/meme-results-grid";
 type MemeRow = {
   id: string;
   template_id: string | null;
+  idea_group_id: string | null;
   title: string | null;
   format: string | null;
   top_text: string | null;

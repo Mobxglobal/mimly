@@ -13,6 +13,8 @@ export async function generateMockMemes(
   options?: {
     limit?: number;
     excludeExistingUserTemplates?: boolean;
+    forcedTemplateId?: string;
+    forceStandardVariant?: boolean;
   }
 ): Promise<{ error: string | null }> {
   try {
@@ -97,6 +99,9 @@ export async function generateMockMemes(
 
   const promotion = normalizePromotionContext(promotionContext);
   const batchSize = options?.limit ?? INITIAL_TEMPLATE_BATCH_SIZE;
+  const forcedTemplateId = String(options?.forcedTemplateId ?? "").trim() || null;
+  const forceStandardVariant = Boolean(options?.forceStandardVariant);
+  const isTemplateRegeneration = Boolean(forcedTemplateId);
   const generationRunId = randomUUID();
   const batchNumber = 1;
   const activeImportantDay = getActiveImportantDay();
@@ -118,13 +123,16 @@ export async function generateMockMemes(
     generationRunId: generationContext.generationRunId,
     batchNumber: generationContext.batchNumber,
     excludeExistingUserTemplates: Boolean(options?.excludeExistingUserTemplates),
+    forcedTemplateId,
+    forceStandardVariant,
+    isTemplateRegeneration,
     activeImportantDay: generationContext.activeImportantDay,
   });
 
   const { error: generatedMemesSchemaError } = await supabase
     .from("generated_memes")
     .select(
-      "id, template_id, variant_type, generation_run_id, batch_number, variant_metadata, post_caption"
+      "id, template_id, idea_group_id, variant_type, generation_run_id, batch_number, variant_metadata, post_caption"
     )
     .limit(1);
 
@@ -132,6 +140,7 @@ export async function generateMockMemes(
     console.error("[meme-gen] generated_memes schema check failed", {
       generatedMemesSchemaError,
       expectedColumns: [
+        "idea_group_id",
         "variant_type",
         "generation_run_id",
         "batch_number",
@@ -920,10 +929,12 @@ Slot 1:
   }
 
   const attemptedTemplateIds = new Set<string>(excludedTemplateIds);
-  const orderedTemplatePool = buildOrderedTemplatePool(
-    compatibleTemplates,
-    attemptedTemplateIds
-  );
+  const orderedTemplatePool = forcedTemplateId
+    ? compatibleTemplates.filter(
+        (template) =>
+          template.template_id === forcedTemplateId || template.slug === forcedTemplateId
+      )
+    : buildOrderedTemplatePool(compatibleTemplates, attemptedTemplateIds);
 
   console.log("[meme-gen] Excluded template ids", {
     excludeExistingUserTemplates: Boolean(options?.excludeExistingUserTemplates),
@@ -944,7 +955,11 @@ Slot 1:
   );
 
   if (orderedTemplatePool.length === 0) {
-    return { error: "No unused templates remain to generate." };
+    return {
+      error: forcedTemplateId
+        ? "Template not found for regeneration."
+        : "No unused templates remain to generate.",
+    };
   }
 
   const selectedTemplatesForBatch = orderedTemplatePool.slice(0, batchSize);
@@ -1015,7 +1030,11 @@ Slot 1:
   ).fill("standard");
 
   let promoTemplateIndex: number | null = null;
-  if (generationContext.promotion && selectedTemplatesForBatch.length > 0) {
+  if (
+    !forceStandardVariant &&
+    generationContext.promotion &&
+    selectedTemplatesForBatch.length > 0
+  ) {
     promoTemplateIndex = selectedTemplatesForBatch.reduce(
       (bestIndex, template, index, templates) => {
         if (bestIndex === null) return index;
@@ -1035,7 +1054,11 @@ Slot 1:
   }
 
   let importantDayTemplateIndex: number | null = null;
-  if (generationContext.activeImportantDay && selectedTemplatesForBatch.length > 0) {
+  if (
+    !forceStandardVariant &&
+    generationContext.activeImportantDay &&
+    selectedTemplatesForBatch.length > 0
+  ) {
     importantDayTemplateIndex = selectedTemplatesForBatch.findIndex(
       (_template, index) => index !== promoTemplateIndex
     );
@@ -1498,6 +1521,7 @@ Return ONLY valid JSON with this exact shape:
         }
       | null = null;
     let previousFailureRule: string | null = null;
+    const ideaGroupId = randomUUID();
 
     console.log("[variant-prompt] ", {
       slug: template.slug,
@@ -1619,6 +1643,7 @@ Return ONLY valid JSON with this exact shape:
     const row = {
       user_id: user.id,
       template_id: template.template_id,
+      idea_group_id: ideaGroupId,
       title: generated.title,
       format: template.template_name,
       top_text: generated.top_text,
@@ -1637,8 +1662,19 @@ Return ONLY valid JSON with this exact shape:
       generationRunId: generationContext.generationRunId,
       batchNumber: generationContext.batchNumber,
       variantMetadata,
+      ideaGroupId,
       row,
     });
+
+    if (isTemplateRegeneration) {
+      console.log("[template-regen-insert]", {
+        slug: template.slug,
+        templateId: template.template_id,
+        ideaGroupId,
+        generationRunId: generationContext.generationRunId,
+        row,
+      });
+    }
 
     const { error: insertError } = await supabase
       .from("generated_memes")
@@ -1726,6 +1762,19 @@ export async function generateMoreMemes(): Promise<{ error: string | null }> {
   const result = await generateMockMemes(undefined, {
     limit: 3,
     excludeExistingUserTemplates: true,
+  });
+
+  revalidatePath("/dashboard/memes");
+  return result;
+}
+
+export async function regenerateTemplateIdea(
+  templateId: string
+): Promise<{ error: string | null }> {
+  const result = await generateMockMemes(undefined, {
+    limit: 1,
+    forcedTemplateId: templateId,
+    forceStandardVariant: true,
   });
 
   revalidatePath("/dashboard/memes");
