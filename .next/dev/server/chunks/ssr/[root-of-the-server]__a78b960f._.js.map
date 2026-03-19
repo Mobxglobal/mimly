@@ -1,6 +1,0 @@
-{
-  "version": 3,
-  "sources": [],
-  "sections": [
-    {"offset": {"line": 14, "column": 0}, "map": {"version":3,"sources":["file:///Users/alexattinger/ai-meme-generator/app/page.tsx"],"sourcesContent":["export default function HomePage() {\n  return (\n    <main className=\"min-h-screen flex items-center justify-center p-8\">\n      <div className=\"max-w-2xl text-center\">\n        <h1 className=\"text-5xl font-bold tracking-tight\">Meme Builder</h1>\n        <p className=\"mt-4 text-lg text-white/70\">\n          Frontend MVP is live.\n        </p>\n      </div>\n    </main>\n  );\n}\n"],"names":[],"mappings":";;;;;;AAAe,SAAS;IACtB,qBACE,yQAAC;QAAK,WAAU;kBACd,cAAA,yQAAC;YAAI,WAAU;;8BACb,yQAAC;oBAAG,WAAU;8BAAoC;;;;;;8BAClD,yQAAC;oBAAE,WAAU;8BAA6B;;;;;;;;;;;;;;;;;AAMlD"}}]
-}

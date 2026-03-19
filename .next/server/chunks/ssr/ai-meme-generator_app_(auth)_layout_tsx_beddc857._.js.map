@@ -1,1 +1,0 @@
-{"version":3,"sources":["../../../../../ai-meme-generator/app/%28auth%29/layout.tsx"],"sourcesContent":["export default function AuthLayout({\n  children,\n}: Readonly<{ children: React.ReactNode }>) {\n  return <>{children}</>;\n}\n"],"names":[],"mappings":"wDAAe,SAAS,EAAW,UACjC,CAAQ,CACgC,EACxC,MAAO,CAAA,EAAA,EAAA,GAAA,EAAA,EAAA,QAAA,CAAA,UAAG,GACZ"}

@@ -1,6 +1,0 @@
-{
-  "version": 3,
-  "sources": [],
-  "sections": [
-    {"offset": {"line": 4, "column": 0}, "map": {"version":3,"sources":["file:///Users/alexattinger/ai-meme-generator/app/%28app%29/layout.tsx"],"sourcesContent":["export default function AppLayout({\n  children,\n}: Readonly<{ children: React.ReactNode }>) {\n  return <>{children}</>;\n}\n"],"names":[],"mappings":";;;;;;AAAe,SAAS,UAAU,EAChC,QAAQ,EACgC;IACxC,qBAAO;kBAAG;;AACZ"}}]
-}

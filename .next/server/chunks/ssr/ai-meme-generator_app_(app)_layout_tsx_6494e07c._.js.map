@@ -1,1 +1,0 @@
-{"version":3,"sources":["../../../../../ai-meme-generator/app/%28app%29/layout.tsx"],"sourcesContent":["export default function AppLayout({\n  children,\n}: Readonly<{ children: React.ReactNode }>) {\n  return <>{children}</>;\n}\n"],"names":[],"mappings":"wDAAe,SAAS,EAAU,UAChC,CAAQ,CACgC,EACxC,MAAO,CAAA,EAAA,EAAA,GAAA,EAAA,EAAA,QAAA,CAAA,UAAG,GACZ"}

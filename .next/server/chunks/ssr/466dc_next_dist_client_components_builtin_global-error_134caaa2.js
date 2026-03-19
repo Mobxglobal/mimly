@@ -1,3 +1,0 @@
-module.exports=[56675,(a,b,c)=>{let{createClientModuleProxy:d}=a.r(3527);a.n(d("[project]/ai-meme-generator/node_modules/next/dist/client/components/builtin/global-error.js <module evaluation>"))},95250,(a,b,c)=>{let{createClientModuleProxy:d}=a.r(3527);a.n(d("[project]/ai-meme-generator/node_modules/next/dist/client/components/builtin/global-error.js"))},10366,a=>{"use strict";a.i(56675);var b=a.i(95250);a.n(b)}];
-
-//# sourceMappingURL=466dc_next_dist_client_components_builtin_global-error_134caaa2.js.map

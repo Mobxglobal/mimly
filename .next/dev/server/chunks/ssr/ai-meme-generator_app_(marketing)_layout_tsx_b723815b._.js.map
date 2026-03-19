@@ -1,6 +1,0 @@
-{
-  "version": 3,
-  "sources": [],
-  "sections": [
-    {"offset": {"line": 4, "column": 0}, "map": {"version":3,"sources":["file:///Users/alexattinger/ai-meme-generator/app/%28marketing%29/layout.tsx"],"sourcesContent":["export default function MarketingLayout({\n  children,\n}: Readonly<{ children: React.ReactNode }>) {\n  return (\n    <div className=\"min-h-screen bg-stone-100/90 scroll-smooth\">\n      {children}\n    </div>\n  );\n}\n"],"names":[],"mappings":";;;;;;AAAe,SAAS,gBAAgB,EACtC,QAAQ,EACgC;IACxC,qBACE,yQAAC;QAAI,WAAU;kBACZ;;;;;;AAGP"}}]
-}
