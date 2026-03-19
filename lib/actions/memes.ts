@@ -728,7 +728,8 @@ Slot 1:
 - Slot 2 should feel visibly better: cleaner, smarter, easier, faster, or more satisfying.
 - Use concrete wording, not abstract labels. Avoid vague terms like "solutions", "insights", "informed", "strategy", or "innovation".
 - Favor direct contrasts that a person can picture immediately.
-- Keep both labels ultra-short and parallel.`;
+- Keep both labels parallel, but allow slightly fuller wording when it improves clarity.
+- Short phrase labels are better than single-word labels here.`;
     }
 
     if (template.slug === "two-buttons") {
@@ -737,7 +738,8 @@ Slot 1:
 - Each slot must be a short, complete choice label, not a sentence fragment.
 - Both choices should feel plausible and in tension with each other immediately.
 - Avoid vague abstractions or labels that do not create a real dilemma.
-- Keep both options ultra-short, parallel, and comfortably under the max chars.`;
+- Keep both options parallel and compact, but allow slightly fuller wording when it makes the dilemma clearer.
+- A concise natural phrase is better than an overly compressed label.`;
     }
 
     if (template.slug === "woman-yelling-cat") {
@@ -746,9 +748,9 @@ Slot 1:
 - bottom_text MUST be null.
 - Do not write a second response line, second label, or opposing caption.
 - Write one sharp, complete reaction/accusation line only.
-- Aim for 22-24 characters ideally, not the full 26.
-- Avoid filler words and full sentence phrasing when possible.
-- Keep it punchy, compressed, and instantly readable.`;
+- It can use most of the available space if the line stays punchy and complete.
+- A concise natural reaction line is better than an over-compressed fragment.
+- Keep it instantly readable, but do not over-compress just to stay far under the max.`;
     }
 
     return "";
@@ -760,11 +762,100 @@ Slot 1:
   ): string => {
     if (!previousFailureRule) return "";
 
+    const getSlotMaxCharsForRule = (rule: string): number | null => {
+      if (rule.startsWith("slot_1_")) return template.slot_1_max_chars;
+      if (rule.startsWith("slot_2_")) return template.slot_2_max_chars;
+      return null;
+    };
+
+    const getSlotLabelForRule = (rule: string): string | null => {
+      if (rule.startsWith("slot_1_")) return "top_text";
+      if (rule.startsWith("slot_2_")) return "bottom_text";
+      return null;
+    };
+
+    const getTemplateTypeRetryShape = (): string => {
+      switch (template.template_type) {
+        case "side_caption":
+          return `- Keep each slot as a compact, complete label or very short phrase.
+- Do not write sentence-style captions in either slot.
+- Make the two slots parallel and instantly scannable.`;
+        case "overlay":
+          return `- Keep the wording visually readable on-image.
+- Prefer fewer words and faster comprehension.`;
+        case "sign_caption":
+          return `- Make the main text read naturally like sign text or a displayed statement.
+- Keep the supporting text minimal if a second slot is present.`;
+        case "top_caption":
+        default:
+          return `- Keep the caption punchy, complete, and natural for this template.`;
+      }
+    };
+
+    const slotLabel = getSlotLabelForRule(previousFailureRule);
+    const slotMaxChars = getSlotMaxCharsForRule(previousFailureRule);
+
+    if (previousFailureRule === "json_parse_failed") {
+      return `Retry correction:
+- The previous response was not valid JSON.
+- Return ONLY valid JSON with the exact required keys.
+- Do not include any prose before or after the JSON object.`;
+    }
+
+    if (previousFailureRule === "one_slot_bottom_text_not_null") {
+      return `Retry correction:
+- This template only supports one text slot.
+- bottom_text MUST be null.
+- Put the full meme idea into top_text only.`;
+    }
+
+    if (previousFailureRule === "title_missing_or_invalid") {
+      return `Retry correction:
+- The title was missing or invalid.
+- Return a short, clean meme title in plain text.
+- Keep the title concise and under ${TITLE_MAX_CHARS} characters.`;
+    }
+
+    if (previousFailureRule === "title_too_long") {
+      return `Retry correction:
+- The title was too long.
+- Rewrite the title shorter and simpler.
+- Keep the title under ${TITLE_MAX_CHARS} characters.`;
+    }
+
+    if (previousFailureRule.endsWith("_missing_or_invalid") && slotLabel && slotMaxChars) {
+      return `Retry correction:
+- ${slotLabel} was missing or invalid.
+- Provide a complete single-line value for ${slotLabel}.
+- Keep it under ${slotMaxChars} characters.
+${getTemplateTypeRetryShape()}`;
+    }
+
+    if (previousFailureRule.endsWith("_over_max_chars") && slotLabel && slotMaxChars) {
+      return `Retry correction:
+- The previous ${slotLabel} exceeded the character limit.
+- Rewrite ${slotLabel} shorter without changing the core joke.
+- Keep ${slotLabel} at or under ${slotMaxChars} characters.
+- Remove filler words and choose simpler phrasing.
+${getTemplateTypeRetryShape()}`;
+    }
+
+    if (
+      previousFailureRule.endsWith("_likely_fragment_cutoff") &&
+      slotLabel &&
+      slotMaxChars
+    ) {
+      return `Retry correction:
+- The previous ${slotLabel} looked cut off or incomplete.
+- Rewrite it as one complete, finishable phrase.
+- Do not end on open connectors like "and", "but", "so", "for", or "with".
+- Keep ${slotLabel} under ${slotMaxChars} characters while still sounding complete.
+${getTemplateTypeRetryShape()}`;
+    }
+
     if (
       template.slug === "woman-yelling-cat" &&
-      (previousFailureRule === "slot_1_over_max_chars" ||
-        previousFailureRule === "slot_1_likely_fragment_cutoff" ||
-        previousFailureRule === "slot_1_incomplete_reaction_caption")
+      previousFailureRule === "slot_1_incomplete_reaction_caption"
     ) {
       return `Retry correction:
 - The previous top_text was invalid.
@@ -775,7 +866,10 @@ Slot 1:
 - Stay comfortably under ${template.slot_1_max_chars} characters.`;
     }
 
-    return "";
+    return `Retry correction:
+- The previous attempt failed validation for this exact reason: ${previousFailureRule}.
+- Rewrite more conservatively and keep every field fully valid.
+- Make the output shorter, cleaner, and more complete than the last attempt.`;
   };
 
   const isUltraTightTemplate = (template: CompatibleTemplate): boolean => {
@@ -798,7 +892,7 @@ Slot 1:
     if (template.template_type === "side_caption") {
       return `Ultra-tight template mode:
 - This template is extremely space-constrained.
-- Prefer 1-3 word labels, not full sentence-like captions.
+- Prefer 2-4 word labels or very short phrases, not long sentence-like captions.
 - Aim comfortably under the max chars for each slot rather than writing up to the limit.
 - Remove filler words, articles, and extra connective phrasing unless they are essential.
 - For side-by-side contrast, make Slot 1 and Slot 2 feel parallel and instantly scannable.
@@ -817,6 +911,42 @@ Slot 1:
     template: CompatibleTemplate
   ): boolean => {
     return template.template_type === "side_caption" && isUltraTightTemplate(template);
+  };
+
+  const getIdealSlotTargets = (
+    template: CompatibleTemplate,
+    attempt: number
+  ): { topIdeal: number; bottomIdeal: number } => {
+    if (template.slug === "drake" || template.slug === "two-buttons") {
+      return {
+        topIdeal: Math.max(10, Math.floor(template.slot_1_max_chars * (attempt >= 2 ? 0.94 : 1))),
+        bottomIdeal: Math.max(
+          10,
+          Math.floor(template.slot_2_max_chars * (attempt >= 2 ? 0.94 : 1))
+        ),
+      };
+    }
+
+    if (template.slug === "woman-yelling-cat") {
+      return {
+        topIdeal: Math.max(18, Math.floor(template.slot_1_max_chars * (attempt >= 2 ? 0.92 : 1))),
+        bottomIdeal: Math.max(
+          8,
+          Math.floor(template.slot_2_max_chars * (attempt >= 2 ? 0.8 : 0.95))
+        ),
+      };
+    }
+
+    return {
+      topIdeal: Math.max(
+        8,
+        Math.floor(template.slot_1_max_chars * (attempt >= 2 ? 0.8 : 0.95))
+      ),
+      bottomIdeal: Math.max(
+        8,
+        Math.floor(template.slot_2_max_chars * (attempt >= 2 ? 0.8 : 0.95))
+      ),
+    };
   };
 
   const loadCompatibleTemplates = (rows: any[]): CompatibleTemplate[] => {
@@ -1175,8 +1305,7 @@ IMPORTANT DAY WRITING RULES
       });
     }
 
-    const topIdeal = Math.max(8, Math.floor(template.slot_1_max_chars * (attempt >= 2 ? 0.8 : 0.95)));
-    const bottomIdeal = Math.max(8, Math.floor(template.slot_2_max_chars * (attempt >= 2 ? 0.8 : 0.95)));
+    const { topIdeal, bottomIdeal } = getIdealSlotTargets(template, attempt);
 
     const promoModeInstructions =
       variantContext.variantType !== "promo"
@@ -1480,7 +1609,7 @@ Return ONLY valid JSON with this exact shape:
     const template = orderedTemplatePool[poolIndex];
     attemptedTemplateIds.add(template.template_id);
     attemptedCount++;
-    const maxAttempts = 2;
+    const maxAttempts = 3;
     const templateVariantAssignment =
       templateVariantAssignments.find(
         (assignment) => assignment.template_id === template.template_id
