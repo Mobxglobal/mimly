@@ -88,8 +88,8 @@ export function MemeResultsSection({ memes, onGenerateMore }: Props) {
         </div>
       </div>
 
-      <MemeResultsGrid memes={memes} />
       <GenerateMorePendingState />
+      <MemeResultsGrid memes={memes} />
     </form>
   );
 }

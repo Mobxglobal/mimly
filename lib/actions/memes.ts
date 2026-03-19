@@ -75,6 +75,26 @@ export async function generateMockMemes(
     return collapsed.slice(0, PROMOTION_MAX_CHARS).trim() || null;
   };
 
+  const isDirectFriendlyPromoText = (promoText: string): boolean => {
+    const normalized = promoText.toLowerCase().trim();
+    const words = normalized.split(/\s+/).filter(Boolean);
+
+    if (words.length === 0 || words.length > 8) {
+      return false;
+    }
+
+    return [
+      /\bno win no fee\b/,
+      /\bfree consultation\b/,
+      /\bbuy one get one\b/,
+      /\bbogo\b/,
+      /\bno obligation\b/,
+      /\b\d{1,3}%\s*off\b/,
+      /\bfree\b.*\b(consultation|quote|review|trial)\b/,
+      /\b(offer|sale|discount|deal)\b/,
+    ].some((pattern) => pattern.test(normalized));
+  };
+
   const promotion = normalizePromotionContext(promotionContext);
   const batchSize = options?.limit ?? INITIAL_TEMPLATE_BATCH_SIZE;
   const generationRunId = randomUUID();
@@ -181,7 +201,11 @@ export async function generateMockMemes(
       "hint",
     ];
     if (lightSignals.some((signal) => fit.includes(signal))) {
-      return "light";
+      return isDirectFriendlyPromoText(promotion) ? "direct" : "light";
+    }
+
+    if (isDirectFriendlyPromoText(promotion)) {
+      return "direct";
     }
 
     return "light";
@@ -924,25 +948,113 @@ Slot 1:
   }
 
   const selectedTemplatesForBatch = orderedTemplatePool.slice(0, batchSize);
-  const desiredVariants: AssignedVariant[] = [];
+  const getPromoSuitabilityScore = (template: CompatibleTemplate): number => {
+    const fit = template.promotion_fit.toLowerCase().trim();
+    if (!fit) return 0;
 
-  if (generationContext.promotion) {
-    desiredVariants.push("promo");
+    const noneSignals = [
+      "avoid",
+      "bad fit",
+      "poor fit",
+      "not fit",
+      "not a fit",
+      "not ideal",
+      "doesn't fit",
+      "does not fit",
+      "weak fit",
+      "no promo",
+      "ignore promo",
+      "general only",
+      "brand only",
+    ];
+    if (noneSignals.some((signal) => fit.includes(signal))) {
+      return -100;
+    }
+
+    let score = 0;
+
+    const directSignals = [
+      "promotion",
+      "promo",
+      "deal",
+      "offer",
+      "sale",
+      "discount",
+      "launch",
+      "announcement",
+      "cta",
+      "call to action",
+      "pricing",
+      "product drop",
+    ];
+    for (const signal of directSignals) {
+      if (fit.includes(signal)) score += 3;
+    }
+
+    const lightSignals = [
+      "light",
+      "subtle",
+      "soft",
+      "indirect",
+      "contextual",
+      "timing",
+      "emotion",
+      "reaction",
+      "vibe",
+      "hint",
+    ];
+    for (const signal of lightSignals) {
+      if (fit.includes(signal)) score += 1;
+    }
+
+    return score;
+  };
+
+  const assignedVariants = new Array<AssignedVariant>(
+    selectedTemplatesForBatch.length
+  ).fill("standard");
+
+  let promoTemplateIndex: number | null = null;
+  if (generationContext.promotion && selectedTemplatesForBatch.length > 0) {
+    promoTemplateIndex = selectedTemplatesForBatch.reduce(
+      (bestIndex, template, index, templates) => {
+        if (bestIndex === null) return index;
+
+        const bestScore = getPromoSuitabilityScore(templates[bestIndex]);
+        const currentScore = getPromoSuitabilityScore(template);
+
+        if (currentScore > bestScore) return index;
+        return bestIndex;
+      },
+      null as number | null
+    );
+
+    if (promoTemplateIndex !== null) {
+      assignedVariants[promoTemplateIndex] = "promo";
+    }
   }
 
-  if (generationContext.activeImportantDay) {
-    desiredVariants.push("important_day");
-  }
+  let importantDayTemplateIndex: number | null = null;
+  if (generationContext.activeImportantDay && selectedTemplatesForBatch.length > 0) {
+    importantDayTemplateIndex = selectedTemplatesForBatch.findIndex(
+      (_template, index) => index !== promoTemplateIndex
+    );
 
-  while (desiredVariants.length < selectedTemplatesForBatch.length) {
-    desiredVariants.push("standard");
+    if (importantDayTemplateIndex !== -1) {
+      assignedVariants[importantDayTemplateIndex] = "important_day";
+    } else if (promoTemplateIndex === null && selectedTemplatesForBatch.length > 0) {
+      assignedVariants[0] = "important_day";
+      importantDayTemplateIndex = 0;
+    } else {
+      importantDayTemplateIndex = null;
+    }
   }
 
   const templateVariantAssignments: TemplateVariantAssignment[] =
     selectedTemplatesForBatch.map((template, index) => ({
       template_id: template.template_id,
       slug: template.slug,
-      variantType: desiredVariants[index] ?? "standard",
+      variantType: assignedVariants[index] ?? "standard",
     }));
 
   console.log(
@@ -957,9 +1069,12 @@ Slot 1:
       template_id: template.template_id,
       slug: template.slug,
       templateType: template.template_type,
+      promoSuitabilityScore: getPromoSuitabilityScore(template),
       assignedVariant:
         templateVariantAssignments[index]?.variantType ?? "standard",
     })),
+    promoTemplateIndex,
+    importantDayTemplateIndex,
   });
 
   const apiKey = process.env.OPENAI_API_KEY as string;
@@ -1047,10 +1162,13 @@ IMPORTANT DAY WRITING RULES
 - Make the meme about the brand/audience context only.`
         : promoMode === "direct"
         ? `Promo mode: direct
-- You may make the promotion part of the meme idea when it feels natural for this template.
-- The meme must still read like a meme first, not ad copy.
-- If you mention the promotion, preserve the exact facts from the promo context. Do not change discount amounts, dates, terms, or offer details.
-- If the exact facts feel clunky or do not fit the slot limits, omit them instead of rewriting them inaccurately.`
+- This is a direct promo-capable variant.
+- If the promotion fits naturally, keep the offer wording recognisable.
+- Prefer the exact phrase or a very tight faithful rendering when possible.
+- Do not dilute the offer into a vague broader idea.
+- The joke must still work first, not the ad message.
+- Do not sound like a banner headline, ad slogan, or campaign copy.
+- If the exact wording becomes clunky or breaks the meme, omit it rather than distorting it inaccurately.`
         : promoMode === "light"
           ? `Promo mode: light
 - Use the promotion only as soft context.
@@ -1060,6 +1178,14 @@ IMPORTANT DAY WRITING RULES
           : `Promo mode: none
 - Ignore the promotion entirely for this template.
 - Make the meme about the brand/audience context only.`;
+
+    if (variantContext.variantType === "promo") {
+      console.log("[promo-prompt-block]", {
+        slug: template.slug,
+        promoMode,
+        promoModeInstructions,
+      });
+    }
 
     const prompt = `You generate brand-safe meme captions that follow a specific template.
 
