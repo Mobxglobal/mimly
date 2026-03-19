@@ -2,3 +2,4 @@ node_modules
 .env
 generated-memes
 .DS_Store
+templates/
