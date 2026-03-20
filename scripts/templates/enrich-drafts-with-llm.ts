@@ -164,6 +164,17 @@ function normalizeSingleLine(value: unknown): string | null {
   return cleaned || null;
 }
 
+function looksAllCapsShouty(value: string): boolean {
+  const lettersOnly = value.replace(/[^a-zA-Z]/g, "");
+  if (lettersOnly.length < 3) return false;
+  return lettersOnly === lettersOnly.toUpperCase();
+}
+
+function normalizeToSentenceCase(value: string): string {
+  const lower = value.toLowerCase();
+  return lower.charAt(0).toUpperCase() + lower.slice(1);
+}
+
 function isDraftTemplate(value: unknown): value is DraftTemplate {
   if (!value || typeof value !== "object") return false;
   const draft = value as Partial<DraftTemplate>;
@@ -409,9 +420,11 @@ Guidance:
 - template_logic should explain the caption behavior in one concise sentence
 - slot_1_role should describe what the top caption is doing structurally
 - example_output must be short, feel meme-native, fit a top-caption format, and reflect the distinctive vibe of this exact image
+- example_output must be written in natural sentence case and never in ALL CAPS
+- example_output should feel like a realistic meme caption someone would actually post
+- example_output should be a complete thought, not a fragment
 - example_output should avoid generic repeated placeholders across a batch
 - example_output should not be overly long or overly specific to one industry
-- example_output can be uppercase or natural meme-caption style if appropriate
 - Avoid reusing generic examples such as "WHEN THE CLIENT SAYS THEY NEED IT TODAY" unless it is truly the best fit for this exact image
 
 Template context:
@@ -428,7 +441,7 @@ Return exactly this JSON shape:
   "template_logic": "A caption describing something shocking, unexpected, or hard to believe.",
   "emotion_style": "surprised",
   "slot_1_role": "shock reaction caption",
-  "example_output": "WHEN YOU REALIZE THAT WAS THE PLAN"
+  "example_output": "When you realize that was the plan"
 }`;
 }
 
@@ -490,7 +503,14 @@ async function requestSemanticFields(params: {
     throw new Error(`Invalid model output: ${validated.error}`);
   }
 
-  return validated.data;
+  const normalizedSemanticFields: SemanticFields = {
+    ...validated.data,
+    example_output: looksAllCapsShouty(validated.data.example_output)
+      ? normalizeToSentenceCase(validated.data.example_output)
+      : validated.data.example_output,
+  };
+
+  return normalizedSemanticFields;
 }
 
 function mergeSemanticFields(draft: DraftTemplate, semanticFields: SemanticFields): DraftTemplate {
