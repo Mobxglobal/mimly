@@ -21,21 +21,65 @@ type MemeRow = {
 
 type Props = {
   memes: MemeRow[];
+  defaultContinuationFormat: "square_image" | "square_video";
   onGenerateMore: () => void;
+  onGenerateMoreImages: () => void;
+  onGenerateMoreVideos: () => void;
 };
 
-function GenerateMoreButton() {
+function GenerateMoreButton({
+  defaultContinuationFormat,
+  onGenerateMoreImages,
+  onGenerateMoreVideos,
+}: {
+  defaultContinuationFormat: "square_image" | "square_video";
+  onGenerateMoreImages: () => void;
+  onGenerateMoreVideos: () => void;
+}) {
   const { pending } = useFormStatus();
 
   return (
-    <button
-      type="submit"
-      disabled={pending}
-      className="cta-funky inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-500 px-4 py-2.5 text-sm font-medium text-white shadow-[0_10px_30px_rgba(99,102,241,0.35)] transition disabled:cursor-not-allowed disabled:opacity-80 hover:bg-indigo-400"
-    >
-      {pending && <LoaderCircle className="h-4 w-4 animate-spin" />}
-      {pending ? "Generating more..." : "Generate more"}
-    </button>
+    <div className="relative inline-flex items-stretch rounded-xl shadow-[0_10px_30px_rgba(99,102,241,0.35)]">
+      <button
+        type="submit"
+        disabled={pending}
+        className="cta-funky inline-flex items-center justify-center gap-2 rounded-l-xl bg-indigo-500 px-4 py-2.5 text-sm font-medium text-white transition disabled:cursor-not-allowed disabled:opacity-80 hover:bg-indigo-400"
+      >
+        {pending && <LoaderCircle className="h-4 w-4 animate-spin" />}
+        {pending ? "Generating more..." : "Generate more"}
+      </button>
+      <details className="group">
+        <summary
+          className="cta-funky inline-flex h-full cursor-pointer items-center justify-center rounded-r-xl border-l border-indigo-300/40 bg-indigo-500 px-2.5 text-sm text-white transition hover:bg-indigo-400"
+          aria-label={`Generate more options (default: ${
+            defaultContinuationFormat === "square_video" ? "videos" : "images"
+          })`}
+          title={`Default: ${
+            defaultContinuationFormat === "square_video" ? "videos" : "images"
+          }`}
+        >
+          ▾
+        </summary>
+        <div className="absolute right-0 top-[calc(100%+8px)] z-20 min-w-48 rounded-xl border border-white/10 bg-black/90 p-1 shadow-xl backdrop-blur">
+          <button
+            type="submit"
+            formAction={onGenerateMoreImages}
+            disabled={pending}
+            className="block w-full rounded-lg px-3 py-2 text-left text-sm text-stone-200 transition hover:bg-white/10 disabled:opacity-70"
+          >
+            Generate more images
+          </button>
+          <button
+            type="submit"
+            formAction={onGenerateMoreVideos}
+            disabled={pending}
+            className="block w-full rounded-lg px-3 py-2 text-left text-sm text-stone-200 transition hover:bg-white/10 disabled:opacity-70"
+          >
+            Generate more videos
+          </button>
+        </div>
+      </details>
+    </div>
   );
 }
 
@@ -69,7 +113,13 @@ function GenerateMorePendingState() {
   );
 }
 
-export function MemeResultsSection({ memes, onGenerateMore }: Props) {
+export function MemeResultsSection({
+  memes,
+  defaultContinuationFormat,
+  onGenerateMore,
+  onGenerateMoreImages,
+  onGenerateMoreVideos,
+}: Props) {
   return (
     <form action={onGenerateMore}>
       <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
@@ -85,7 +135,11 @@ export function MemeResultsSection({ memes, onGenerateMore }: Props) {
           <span className="rounded-full border border-emerald-400/20 bg-emerald-500/15 px-2.5 py-1 text-xs font-medium text-emerald-300">
             {memes.length} meme{memes.length !== 1 ? "s" : ""} generated
           </span>
-          <GenerateMoreButton />
+          <GenerateMoreButton
+            defaultContinuationFormat={defaultContinuationFormat}
+            onGenerateMoreImages={onGenerateMoreImages}
+            onGenerateMoreVideos={onGenerateMoreVideos}
+          />
         </div>
       </div>
 

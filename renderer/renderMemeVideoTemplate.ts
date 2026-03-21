@@ -6,6 +6,7 @@ import {
   renderTopCaptionOverlayPng,
   type MemeTemplateForRender,
 } from "@/renderer/renderMemeTemplate";
+import { wrapCaptionWithSoftEarlySplit } from "@/renderer/caption-wrap";
 
 type MemeVideoTemplateForRender = {
   canvas_width?: number | null;
@@ -43,31 +44,6 @@ function toMemeTemplateForRender(
     slot_1_max_chars: t.slot_1_max_chars,
     slot_1_max_lines: t.slot_1_max_lines,
   };
-}
-
-function normalizeText(v: string): string {
-  return v.replace(/\r?\n/g, " ").replace(/\s+/g, " ").trim();
-}
-
-function wrapText(text: string, maxChars: number, maxLines: number): string[] {
-  if (!text) return [];
-  const words = text.split(" ");
-  const lines: string[] = [];
-  let currentLine = "";
-
-  for (const word of words) {
-    const testLine = currentLine ? `${currentLine} ${word}` : word;
-    if (testLine.length <= maxChars) {
-      currentLine = testLine;
-    } else {
-      if (currentLine) lines.push(currentLine);
-      currentLine = word;
-      if (lines.length >= maxLines) break;
-    }
-  }
-
-  if (currentLine && lines.length < maxLines) lines.push(currentLine);
-  return lines.slice(0, maxLines);
 }
 
 function hexToFfmpegColor(input: string | null | undefined): string {
@@ -125,9 +101,9 @@ export async function renderMemeMP4FromTemplate(params: {
   const maxLines = params.template.slot_1_max_lines ?? 2;
   const fontSize = params.template.font_size ?? 46;
   const lineHeight = Math.round(fontSize * 1.2);
-  const alignment = (params.template.alignment ?? "center").toLowerCase();
-  const normalized = normalizeText(params.topText);
-  const lines = wrapText(normalized, maxChars, maxLines);
+  const lines = wrapCaptionWithSoftEarlySplit(params.topText, maxChars, maxLines);
+  const alignment =
+    lines.length > 1 ? "left" : (params.template.alignment ?? "center").toLowerCase();
   const textValue = lines.join("\n");
   const lineCount = Math.max(1, lines.length);
   const totalTextHeight = lineCount * lineHeight;

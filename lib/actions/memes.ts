@@ -752,19 +752,6 @@ Slot 1:
 - A concise natural phrase is better than an overly compressed label.`;
     }
 
-    if (template.slug === "woman-yelling-cat") {
-      return `Template-specific guidance: woman-yelling-cat
-- This template should produce exactly one strong caption in top_text.
-- bottom_text MUST be null.
-- Do not write a second response line, second label, or opposing caption.
-- Write one fuller, complete framing reaction/accusation line only.
-- Do not write this like a short label, topic tag, or clipped headline.
-- Prefer a natural accusation/reaction phrase that feels like something someone would actually yell or say.
-- It can use most of the available space if the line stays punchy and complete.
-- A complete, expressive line is better than an over-compressed fragment.
-- Aim for a natural sentence-like caption, not a 2-3 word label.`;
-    }
-
     return "";
   };
 
@@ -863,19 +850,6 @@ ${getTemplateTypeRetryShape()}`;
 - Do not end on open connectors like "and", "but", "so", "for", or "with".
 - Keep ${slotLabel} under ${slotMaxChars} characters while still sounding complete.
 ${getTemplateTypeRetryShape()}`;
-    }
-
-    if (
-      template.slug === "woman-yelling-cat" &&
-      previousFailureRule === "slot_1_incomplete_reaction_caption"
-    ) {
-      return `Retry correction:
-- The previous top_text was invalid.
-- top_text must be one complete standalone reaction/accusation line.
-- Do not end on open connectors like "and", "but", "so", or "because".
-- Keep it complete and natural, not clipped.
-- You may use most of the available characters if needed for clarity.
-- Stay under ${template.slot_1_max_chars} characters while preserving expressive phrasing.`;
     }
 
     return `Retry correction:
@@ -2047,10 +2021,13 @@ ${isThreeSlot
   }
 }
 
-export async function generateMoreMemes(): Promise<{ error: string | null }> {
+export async function generateMoreMemes(
+  outputFormat?: "square_image" | "square_video"
+): Promise<{ error: string | null }> {
   const result = await generateMockMemes(undefined, {
     limit: 3,
     excludeExistingUserTemplates: true,
+    outputFormat,
   });
 
   revalidatePath("/dashboard/memes");
@@ -2058,12 +2035,14 @@ export async function generateMoreMemes(): Promise<{ error: string | null }> {
 }
 
 export async function regenerateTemplateIdea(
-  templateId: string
+  templateId: string,
+  outputFormat?: "square_image" | "square_video"
 ): Promise<{ error: string | null }> {
   const result = await generateMockMemes(undefined, {
     limit: 1,
     forcedTemplateId: templateId,
     forceStandardVariant: true,
+    outputFormat,
   });
 
   revalidatePath("/dashboard/memes");

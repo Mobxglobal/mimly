@@ -1,4 +1,5 @@
 import sharp from "sharp";
+import { wrapCaptionWithSoftEarlySplit } from "@/renderer/caption-wrap";
 
 export type MemeTemplateForRender = {
   canvas_width: number;
@@ -47,27 +48,6 @@ function escapeXML(str: unknown) {
     .replace(/'/g, "&apos;");
 }
 
-function wrapText(text: string, maxChars: number, maxLines: number) {
-  if (!text) return [];
-  const words = text.split(" ");
-  const lines: string[] = [];
-  let currentLine = "";
-
-  for (const word of words) {
-    const testLine = currentLine ? `${currentLine} ${word}` : word;
-    if (testLine.length <= maxChars) {
-      currentLine = testLine;
-    } else {
-      if (currentLine) lines.push(currentLine);
-      currentLine = word;
-      if (lines.length >= maxLines) break;
-    }
-  }
-
-  if (currentLine && lines.length < maxLines) lines.push(currentLine);
-  return lines;
-}
-
 function getTextAnchor(alignment: string | null | undefined) {
   if (alignment === "left") return "start";
   if (alignment === "right") return "end";
@@ -107,6 +87,7 @@ function renderLines(
   const fontSize = style.fontSize;
   const lineHeight = Math.round(fontSize * 1.2);
   const x = getXPosition({ x: slot.x, width: slot.width }, style.alignment);
+  const textAnchor = getTextAnchor(style.alignment);
   const totalTextHeight = lines.length * lineHeight;
   const startY = slot.y + (slot.height - totalTextHeight) / 2 + fontSize;
 
@@ -117,7 +98,7 @@ function renderLines(
         style.strokeWidth > 0 && style.strokeColor
           ? `stroke="${style.strokeColor}" stroke-width="${style.strokeWidth}" paint-order="stroke"`
           : "";
-      return `<text x="${x}" y="${y}" class="caption" ${strokeAttrs}>${escapeXML(
+      return `<text x="${x}" y="${y}" class="caption" text-anchor="${textAnchor}" ${strokeAttrs}>${escapeXML(
         line
       )}</text>`;
     })
@@ -192,8 +173,12 @@ function buildSVG(template: MemeTemplateForRender, slotTexts: SlotTexts) {
 
   const renderedText = slots
     .map((slot) => {
-      const lines = wrapText(slot.text, slot.maxChars, slot.maxLines);
-      return renderLines(lines, slot as any, style);
+      const lines = wrapCaptionWithSoftEarlySplit(slot.text, slot.maxChars, slot.maxLines);
+      return renderLines(lines, slot as any, {
+        ...style,
+        // Keep existing single-line alignment; force left only after text is truly multi-line.
+        alignment: lines.length > 1 ? "left" : style.alignment,
+      });
     })
     .join("");
 
@@ -204,7 +189,6 @@ function buildSVG(template: MemeTemplateForRender, slotTexts: SlotTexts) {
       fill: ${style.textColor};
       font-size: ${style.fontSize}px;
       font-family: ${style.fontFamily}, sans-serif;
-      text-anchor: ${getTextAnchor(style.alignment)};
     }
   </style>
   ${renderedText}

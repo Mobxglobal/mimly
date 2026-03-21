@@ -284,12 +284,19 @@ function MemeTemplateCard({
 
   function handleMoreIdeas() {
     if (!group.templateId) return;
+    const outputFormat: "square_image" | "square_video" = isVideoAsset
+      ? "square_video"
+      : "square_image";
 
     startRegeneration(async () => {
-      const result = await regenerateTemplateIdea(group.templateId as string);
+      const result = await regenerateTemplateIdea(
+        group.templateId as string,
+        outputFormat
+      );
       if (result.error) {
         console.error("[meme-results] More ideas failed", {
           templateId: group.templateId,
+          outputFormat,
           error: result.error,
         });
         return;
