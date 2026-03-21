@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Check, Copy, LoaderCircle } from "lucide-react";
 import { regenerateTemplateIdea } from "@/lib/actions/memes";
@@ -35,7 +35,33 @@ type MemeRow = {
   variant_type: string | null;
   generation_run_id: string | null;
   batch_number: number | null;
+  variant_metadata?: unknown;
 };
+
+function isVideoAssetUrl(url: string | null | undefined): boolean {
+  if (!url) return false;
+  // Path or query may carry the extension; some CDNs omit obvious suffixes.
+  return /\.(mp4|webm|m4v)(\?|#|$)/i.test(url) || /\/object\/(?:public|sign)\/[^/]+\/.*\.(mp4|webm)/i.test(url);
+}
+
+function getVariantMediaType(variant: MemeRow): "video" | "image" | null {
+  const raw = variant.variant_metadata;
+  if (!raw || typeof raw !== "object" || !("media_type" in raw)) {
+    return null;
+  }
+  const mt = String((raw as { media_type?: unknown }).media_type ?? "")
+    .trim()
+    .toLowerCase();
+  if (mt === "video" || mt === "image") return mt;
+  return null;
+}
+
+function isVideoMemeVariant(variant: MemeRow): boolean {
+  const fromMeta = getVariantMediaType(variant);
+  if (fromMeta === "video") return true;
+  if (fromMeta === "image") return false;
+  return isVideoAssetUrl(variant.image_url);
+}
 
 type IdeaGroup = {
   key: string;
@@ -209,20 +235,33 @@ function MemeTemplateCard({
     }
   }, [selectedIdeaGroup?.key]);
 
-  if (!selectedIdeaGroup || !defaultVariant) {
-    return null;
-  }
-
   const selectedVariant =
-    selectedIdeaGroup.variants.find(
+    selectedIdeaGroup?.variants.find(
       (variant) => normalizeVariantType(variant.variant_type) === selectedVariantType
     ) ?? defaultVariant;
+
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+
+  useEffect(() => {
+    if (!selectedVariant?.image_url || !isVideoMemeVariant(selectedVariant)) return;
+    const el = videoRef.current;
+    if (!el) return;
+    el.muted = true;
+    void el.play().catch(() => {
+      /* autoplay may be blocked until user uses controls */
+    });
+  }, [selectedVariant?.id, selectedVariant?.image_url]);
+
+  if (!selectedIdeaGroup || !defaultVariant || !selectedVariant) {
+    return null;
+  }
 
   const title = selectedVariant.title ?? "Meme";
   const topText = selectedVariant.top_text ?? "";
   const bottomText = selectedVariant.bottom_text ?? "";
   const postCaption = getDisplayPostCaption(selectedVariant);
   const hasImage = Boolean(selectedVariant.image_url);
+  const isVideoAsset = isVideoMemeVariant(selectedVariant);
   const templateHasPromoIdea = group.ideaGroups.some((ideaGroup) =>
     hasPromoVariant(ideaGroup.variants)
   );
@@ -271,23 +310,35 @@ function MemeTemplateCard({
       <div
         className={`relative aspect-square w-full bg-gradient-to-br ${accent} ${hasImage ? "p-0" : "p-5"}`}
       >
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.08),transparent_26%)]" />
-        {hasImage && (
-          <img
-            src={selectedVariant.image_url as string}
-            alt={title}
-            className="absolute inset-0 h-full w-full object-cover"
-          />
-        )}
-        <div className="relative z-10 flex h-full flex-col justify-between">
-          {!hasImage && (
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.08),transparent_26%)]" />
+        {hasImage &&
+          (isVideoAsset ? (
+            <video
+              ref={videoRef}
+              key={`${selectedVariant.id}-${selectedVariant.image_url}`}
+              src={selectedVariant.image_url as string}
+              className="absolute inset-0 z-[1] h-full w-full object-cover"
+              playsInline
+              muted
+              loop
+              controls
+              preload="auto"
+              aria-label={`Video preview: ${title}`}
+            />
+          ) : (
+            <img
+              src={selectedVariant.image_url as string}
+              alt={title}
+              className="absolute inset-0 z-[1] h-full w-full object-cover"
+            />
+          ))}
+        {!hasImage && (
+          <div className="relative z-10 flex h-full flex-col justify-between">
             <div className="flex items-start justify-between gap-3">
               <span className="rounded-full border border-white/10 bg-black/20 px-2.5 py-1 text-[11px] font-medium uppercase tracking-[0.14em] text-stone-300">
                 {selectedVariant.format ?? "Meme"}
               </span>
             </div>
-          )}
-          {!hasImage && (
             <div className="space-y-3">
               <p className="max-w-[18ch] text-lg font-semibold leading-tight text-white sm:text-xl">
                 {topText}
@@ -296,8 +347,8 @@ function MemeTemplateCard({
                 {bottomText}
               </p>
             </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
       <div className="border-t border-white/10 bg-black/20 p-4">
@@ -305,7 +356,11 @@ function MemeTemplateCard({
           <div className="min-w-0">
             <h2 className="truncate text-sm font-semibold text-white">{title}</h2>
             <p className="mt-1 text-xs text-stone-300">
-              {selectedVariant.image_url ? "Image ready" : "1080 x 1080 meme export"}
+              {selectedVariant.image_url
+                ? isVideoAsset
+                  ? "Video ready"
+                  : "Image ready"
+                : "1080 x 1080 meme export"}
             </p>
             {templateHasPromoIdea && (
               <p
@@ -424,7 +479,7 @@ function MemeTemplateCard({
               fallbackHref={getDownloadHref(title, topText, bottomText)}
               downloadFilename={
                 selectedVariant.image_url
-                  ? `${selectedVariant.id}.png`
+                  ? `${selectedVariant.id}.${isVideoAsset ? "mp4" : "png"}`
                   : `${selectedVariant.id}.svg`
               }
               className="cta-funky inline-flex items-center justify-center rounded-xl bg-indigo-500 px-4 py-2.5 text-sm font-medium text-white shadow-[0_10px_30px_rgba(99,102,241,0.35)] hover:bg-indigo-400"

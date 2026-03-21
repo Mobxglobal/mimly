@@ -22,7 +22,7 @@ const FORMAT_OPTIONS = [
     subtitle: "1080×1080",
     helper: "Animated/video meme",
     showPlatformIcons: false,
-    available: false,
+    available: true,
     Icon: Clapperboard,
   },
   {
@@ -61,7 +61,7 @@ export default function CreatePage() {
               <div>
                 <p className="text-sm font-medium text-white">Choose format</p>
                 <p className="mt-1 text-xs text-stone-500">
-                  Square Image is live now. More formats are coming soon.
+                  Square Image and Square Video are live now.
                 </p>
               </div>
             </div>
@@ -159,6 +159,7 @@ export default function CreatePage() {
               onClick={() => {
                 const params = new URLSearchParams();
                 if (promotion.trim()) params.set("promotion", promotion.trim());
+                params.set("format", format);
                 router.push(
                   `/dashboard/generating${params.toString() ? `?${params.toString()}` : ""}`
                 );

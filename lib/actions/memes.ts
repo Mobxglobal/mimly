@@ -6,6 +6,7 @@ import { getProfile } from "@/lib/actions/profile";
 import { createClient as createSupabaseAdminClient } from "@supabase/supabase-js";
 import { randomUUID } from "node:crypto";
 import { renderMemePNGFromTemplate } from "@/renderer/renderMemeTemplate";
+import { renderMemeMP4FromTemplate } from "@/renderer/renderMemeVideoTemplate";
 import { getActiveImportantDay } from "@/lib/memes/variants/get-active-important-day";
 
 export async function generateMockMemes(
@@ -15,6 +16,7 @@ export async function generateMockMemes(
     excludeExistingUserTemplates?: boolean;
     forcedTemplateId?: string;
     forceStandardVariant?: boolean;
+    outputFormat?: "square_image" | "square_video";
   }
 ): Promise<{ error: string | null }> {
   try {
@@ -99,6 +101,8 @@ export async function generateMockMemes(
 
   const promotion = normalizePromotionContext(promotionContext);
   const batchSize = options?.limit ?? INITIAL_TEMPLATE_BATCH_SIZE;
+  const outputFormat = options?.outputFormat ?? "square_image";
+  const targetAssetType = outputFormat === "square_video" ? "video" : "image";
   const forcedTemplateId = String(options?.forcedTemplateId ?? "").trim() || null;
   const forceStandardVariant = Boolean(options?.forceStandardVariant);
   const isTemplateRegeneration = Boolean(forcedTemplateId);
@@ -118,6 +122,8 @@ export async function generateMockMemes(
 
   console.log("[meme-gen] Generation start", {
     hasPromotion: Boolean(generationContext.promotion),
+    outputFormat,
+    targetAssetType,
     promotionLength: generationContext.promotion?.length ?? 0,
     batchSize: generationContext.batchSize,
     generationRunId: generationContext.generationRunId,
@@ -531,6 +537,8 @@ export async function generateMockMemes(
     template_name: string;
     slug: string;
     template_type: TemplateType;
+    asset_type: "image" | "video";
+    media_format: string | null;
     template_logic: string;
     meme_mechanic: string;
     emotion_style: string;
@@ -551,6 +559,8 @@ export async function generateMockMemes(
 
     // Rendering metadata (MVP: 1-slot / 2-slot only)
     image_filename?: string | null;
+    source_media_path?: string | null;
+    preview_image_filename?: string | null;
     canvas_width: number;
     canvas_height: number;
     font?: string | null;
@@ -958,6 +968,10 @@ ${getTemplateTypeRetryShape()}`;
     return rows
       .filter((t: any) => isActive(t))
       .filter((t: any) => {
+        const assetType = String(t.asset_type ?? "image").trim().toLowerCase();
+        return assetType === targetAssetType;
+      })
+      .filter((t: any) => {
         const slug = String(t.slug ?? "").trim().toLowerCase();
         if (slug === "distracted-boyfriend") return true;
         return !hasSlot3(t);
@@ -974,6 +988,11 @@ ${getTemplateTypeRetryShape()}`;
           template_name: String(t.template_name ?? t.name ?? "").trim(),
           slug: String(t.slug ?? "").trim(),
           template_type: templateType,
+          asset_type:
+            String(t.asset_type ?? "image").trim().toLowerCase() === "video"
+              ? "video"
+              : "image",
+          media_format: t.media_format ? String(t.media_format).trim().toLowerCase() : null,
           template_logic: String(t.template_logic ?? "").trim(),
           meme_mechanic: String(t.meme_mechanic ?? "").trim(),
           emotion_style: String(t.emotion_style ?? "").trim(),
@@ -1000,6 +1019,12 @@ ${getTemplateTypeRetryShape()}`;
           example_output: String(t.example_output ?? "").trim(),
           isTwoSlot: hasSlot2(t),
           image_filename: t.image_filename ? String(t.image_filename).trim() : null,
+          source_media_path: t.source_media_path
+            ? String(t.source_media_path).trim()
+            : null,
+          preview_image_filename: t.preview_image_filename
+            ? String(t.preview_image_filename).trim()
+            : null,
           canvas_width: toNullableInt(t.canvas_width) ?? 1080,
           canvas_height: toNullableInt(t.canvas_height) ?? 1080,
           font: t.font ? String(t.font).trim() : null,
@@ -1043,7 +1068,12 @@ ${getTemplateTypeRetryShape()}`;
 
   if (compatibleTemplates.length === 0) {
     console.error("[meme-gen] No compatible templates found after filtering.");
-    return { error: "No compatible meme templates found." };
+    return {
+      error:
+        outputFormat === "square_video"
+          ? "No active square video templates found."
+          : "No compatible meme templates found.",
+    };
   }
 
   const excludedTemplateIds = new Set<string>();
@@ -1534,6 +1564,7 @@ ${isThreeSlot
         allowShortLabelMode: allowShortLabelValidationMode(template),
         templateSlug: template.slug,
         templateType: template.template_type,
+        assetType: template.asset_type,
       }
     );
     const rawBottom = slot2Value;
@@ -1717,8 +1748,11 @@ ${isThreeSlot
         ? {
             important_day_key: variantContext.importantDayKey,
             important_day_label: variantContext.importantDayLabel,
+            media_type: template.asset_type === "video" ? "video" : "image",
           }
-        : null;
+        : {
+            media_type: template.asset_type === "video" ? "video" : "image",
+          };
     let generated:
       | {
           title: string;
@@ -1797,51 +1831,93 @@ ${isThreeSlot
 
     let imageUrl: string | null = null;
     try {
-      const imageFilename = template.image_filename ?? "";
-      if (imageFilename) {
+      if (template.asset_type === "video") {
+        const sourceVideoPath = template.source_media_path ?? "";
+        if (!sourceVideoPath) {
+          throw new Error("Video template is missing source_media_path");
+        }
         const { data: baseBlob, error: baseDownloadError } =
-          await adminSupabase.storage
-            .from(memeTemplatesBucket)
-            .download(imageFilename);
+          await adminSupabase.storage.from(memeTemplatesBucket).download(sourceVideoPath);
 
         if (baseDownloadError) {
           throw new Error(
             baseDownloadError.message ||
-              `Failed to download base image: ${imageFilename}`
+              `Failed to download base video: ${sourceVideoPath}`
           );
         }
 
         const arrayBuffer = await (baseBlob as any).arrayBuffer();
-        const baseImageBuffer = Buffer.from(arrayBuffer);
+        const baseVideoBuffer = Buffer.from(arrayBuffer);
 
-        const pngBuffer = await renderMemePNGFromTemplate({
-          baseImageBuffer,
+        const mp4Buffer = await renderMemeMP4FromTemplate({
+          baseVideoBuffer,
           template,
           topText: generated.top_text,
-          bottomText: generated.bottom_text,
-          slot_3_text: generated.slot_3_text ?? undefined,
         });
 
-        const objectPath = `generated_memes/${user.id}/${template.template_id}/${randomUUID()}.png`;
-
+        const objectPath = `generated_memes/${user.id}/${template.template_id}/${randomUUID()}.mp4`;
         const { error: uploadError } = await adminSupabase.storage
           .from(generatedMemeBucket)
-          .upload(objectPath, pngBuffer, {
-            contentType: "image/png",
+          .upload(objectPath, mp4Buffer, {
+            contentType: "video/mp4",
             upsert: true,
           });
 
         if (uploadError) {
-          throw new Error(
-            uploadError.message || `Failed to upload generated meme`
-          );
+          throw new Error(uploadError.message || `Failed to upload generated meme video`);
         }
 
         const publicUrlRes = adminSupabase.storage
           .from(generatedMemeBucket)
           .getPublicUrl(objectPath);
-
         imageUrl = publicUrlRes.data.publicUrl ?? null;
+      } else {
+        const imageFilename = template.image_filename ?? "";
+        if (imageFilename) {
+          const { data: baseBlob, error: baseDownloadError } =
+            await adminSupabase.storage
+              .from(memeTemplatesBucket)
+              .download(imageFilename);
+
+          if (baseDownloadError) {
+            throw new Error(
+              baseDownloadError.message ||
+                `Failed to download base image: ${imageFilename}`
+            );
+          }
+
+          const arrayBuffer = await (baseBlob as any).arrayBuffer();
+          const baseImageBuffer = Buffer.from(arrayBuffer);
+
+          const pngBuffer = await renderMemePNGFromTemplate({
+            baseImageBuffer,
+            template,
+            topText: generated.top_text,
+            bottomText: generated.bottom_text,
+            slot_3_text: generated.slot_3_text ?? undefined,
+          });
+
+          const objectPath = `generated_memes/${user.id}/${template.template_id}/${randomUUID()}.png`;
+
+          const { error: uploadError } = await adminSupabase.storage
+            .from(generatedMemeBucket)
+            .upload(objectPath, pngBuffer, {
+              contentType: "image/png",
+              upsert: true,
+            });
+
+          if (uploadError) {
+            throw new Error(
+              uploadError.message || `Failed to upload generated meme`
+            );
+          }
+
+          const publicUrlRes = adminSupabase.storage
+            .from(generatedMemeBucket)
+            .getPublicUrl(objectPath);
+
+          imageUrl = publicUrlRes.data.publicUrl ?? null;
+        }
       }
     } catch (e) {
       const message = e instanceof Error ? e.message : "Unknown render error";

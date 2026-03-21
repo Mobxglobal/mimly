@@ -7,14 +7,22 @@ import { DashboardShell } from "@/components/dashboard/dashboard-shell";
 import { generateMockMemes } from "@/lib/actions/memes";
 
 const inflightGenerationRuns = new Map<string, Promise<{ error: string | null }>>();
+type OutputFormat = "square_image" | "square_video" | "vertical_short";
 
 export default function GeneratingPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [error, setError] = useState<string | null>(null);
   const promotion = searchParams.get("promotion");
+  const formatParam = searchParams.get("format");
+  const format: OutputFormat =
+    formatParam === "square_video"
+      ? "square_video"
+      : formatParam === "vertical_short"
+        ? "vertical_short"
+        : "square_image";
   const hasPromotion = Boolean(promotion?.trim());
-  const generationKey = `promotion:${promotion?.trim() ?? "__none__"}`;
+  const generationKey = `format:${format}|promotion:${promotion?.trim() ?? "__none__"}`;
 
   useEffect(() => {
     let cancelled = false;
@@ -23,7 +31,7 @@ export default function GeneratingPage() {
       const existingRun = inflightGenerationRuns.get(generationKey);
       const runPromise =
         existingRun ??
-        generateMockMemes(promotion ?? undefined).finally(() => {
+        generateMockMemes(promotion ?? undefined, { outputFormat: format }).finally(() => {
           inflightGenerationRuns.delete(generationKey);
         });
 
@@ -43,7 +51,7 @@ export default function GeneratingPage() {
     return () => {
       cancelled = true;
     };
-  }, [generationKey, router, promotion]);
+  }, [format, generationKey, router, promotion]);
 
   return (
     <DashboardShell>
@@ -81,7 +89,7 @@ export default function GeneratingPage() {
           <p className="mt-8 text-xs text-stone-500">
             {hasPromotion
               ? "Using your promotion where it improves the meme."
-              : "Generating a brand-led set for you now."}
+              : `Generating a ${format === "square_video" ? "video" : "brand-led"} set for you now.`}
           </p>
         </div>
       </div>

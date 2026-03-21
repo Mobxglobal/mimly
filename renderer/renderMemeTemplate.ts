@@ -1,6 +1,6 @@
 import sharp from "sharp";
 
-type MemeTemplateForRender = {
+export type MemeTemplateForRender = {
   canvas_width: number;
   canvas_height: number;
   font_size?: number | null;
@@ -230,5 +230,19 @@ export async function renderMemePNGFromTemplate(params: {
     .composite([{ input: svgBuffer }])
     .png()
     .toBuffer();
+}
+
+/** Transparent PNG (full canvas) with slot-1 caption only — for video overlay when ffmpeg lacks drawtext. */
+export async function renderTopCaptionOverlayPng(params: {
+  template: MemeTemplateForRender;
+  topText: string;
+}): Promise<Buffer> {
+  const svg = buildSVG(params.template, {
+    slot_1_text: params.topText,
+    slot_2_text: "",
+    slot_3_text: "",
+  });
+
+  return sharp(Buffer.from(svg)).png().toBuffer();
 }
 
