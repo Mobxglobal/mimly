@@ -131,6 +131,133 @@ Current naming/path conventions in repo:
 - approved docs/examples: `templates/approved/*.json`
 - previews folder used by publish script: `templates/previews`
 
+### Video Pipeline Scripts in Order (Operator Runbook)
+Use this sequence for end-to-end square video template onboarding.
+
+#### Step 1 — Create video drafts from local MP4s
+Ingests raw MP4 templates, extracts technical metadata, creates draft JSON, and creates poster previews.
+
+Script:
+- `scripts/templates/create-video-drafts-from-preset.ts`
+
+Command:
+```bash
+pnpm tsx scripts/templates/create-video-drafts-from-preset.ts \
+  --input="/Users/alexattinger/Desktop/New_templates/square-video-standard" \
+  --preset="square-video-standard" \
+  --drafts="./templates/drafts" \
+  --previews="./templates/previews"
+```
+
+#### Step 2 — Render review previews for video drafts
+Builds rendered QA previews from draft JSON + poster frame so caption placement can be validated.
+
+Script:
+- `scripts/templates/render-video-draft-previews.ts`
+
+Command:
+```bash
+pnpm tsx scripts/templates/render-video-draft-previews.ts \
+  --drafts="./templates/drafts" \
+  --previews="./templates/previews" \
+  --sample-text="When the launch is falling apart but you stay calm"
+```
+
+#### Step 3 — Enrich video drafts with semantic metadata
+Extracts multiple frames from each MP4 and fills semantic fields using the model.
+
+Script:
+- `scripts/templates/enrich-video-drafts-with-llm.ts`
+
+Dry run:
+```bash
+pnpm tsx scripts/templates/enrich-video-drafts-with-llm.ts \
+  --drafts="./templates/drafts" \
+  --model="gpt-4.1-mini" \
+  --frames-dir="./templates/previews/video-frames" \
+  --dry-run=true
+```
+
+Real run:
+```bash
+pnpm tsx scripts/templates/enrich-video-drafts-with-llm.ts \
+  --drafts="./templates/drafts" \
+  --model="gpt-4.1-mini" \
+  --frames-dir="./templates/previews/video-frames" \
+  --dry-run=false
+```
+
+#### Step 4 — Move approved JSON into approved folder
+No dedicated script currently; this is a manual move after review.
+
+All drafts:
+```bash
+mv ./templates/drafts/*.json ./templates/approved/
+```
+
+Single file:
+```bash
+mv ./templates/drafts/oscar-reaction.json ./templates/approved/
+```
+
+#### Step 5 — Publish approved video templates to Supabase
+Uploads MP4 + preview image and upserts template rows in `meme_templates`.
+
+Script:
+- `scripts/templates/publish-approved-to-supabase.ts`
+
+Dry run:
+```bash
+pnpm tsx scripts/templates/publish-approved-to-supabase.ts \
+  --approved="./templates/approved" \
+  --videos="/Users/alexattinger/Desktop/New_templates/square-video-standard" \
+  --previews="./templates/previews" \
+  --bucket="meme-templates" \
+  --storage-prefix="square" \
+  --video-storage-prefix="square-video" \
+  --dry-run=true
+```
+
+Real run:
+```bash
+pnpm tsx scripts/templates/publish-approved-to-supabase.ts \
+  --approved="./templates/approved" \
+  --videos="/Users/alexattinger/Desktop/New_templates/square-video-standard" \
+  --previews="./templates/previews" \
+  --bucket="meme-templates" \
+  --storage-prefix="square" \
+  --video-storage-prefix="square-video" \
+  --dry-run=false
+```
+
+#### Full pipeline summary
+Exact order:
+1. `scripts/templates/create-video-drafts-from-preset.ts`
+2. `scripts/templates/render-video-draft-previews.ts`
+3. `scripts/templates/enrich-video-drafts-with-llm.ts`
+4. manual move to `templates/approved/`
+5. `scripts/templates/publish-approved-to-supabase.ts`
+
+Supporting folders:
+- raw input MP4s: `/Users/alexattinger/Desktop/New_templates/square-video-standard`
+- drafts: `./templates/drafts`
+- previews: `./templates/previews`
+- extracted semantic frames: `./templates/previews/video-frames`
+- approved: `./templates/approved`
+
+Important note:
+- Step 5 uses the same publish script as image templates, with video-specific flags:
+  - `--videos`
+  - `--previews`
+  - `--video-storage-prefix`
+- There is no separate `publish-video-approved-to-supabase.ts` in the current process.
+
+Optional cleanup between batches:
+```bash
+pnpm tsx scripts/templates/clean-local-template-artifacts.ts --all=true --dry-run=true
+pnpm tsx scripts/templates/clean-local-template-artifacts.ts --all=true --dry-run=false
+```
+
 ---
 
 ## Backend Generation Flow
