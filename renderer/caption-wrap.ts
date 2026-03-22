@@ -1,3 +1,5 @@
+import { measureSquareTextLineWidthPx } from "@/renderer/square-text-measure";
+
 export const SOFT_WRAP_RATIO = 0.84;
 export const MIN_WORDS_FOR_SOFT_WRAP = 6;
 export const MIN_LAST_WORD_LENGTH = 4;
@@ -552,7 +554,7 @@ function interLineSquarePhrasePenalty(prevLine: string, nextLine: string): numbe
   return p;
 }
 
-/** Prefer fewer lines for medium-length square_text (aligns with wrapLineBudget in renderer). */
+/** Prefer fewer lines for medium-length square_text (used by pixel-based square layout scoring). */
 function preferredMaxLinesForSquare(textLen: number): number {
   if (textLen <= 140) return 3;
   if (textLen <= 260) return 4;
@@ -561,23 +563,264 @@ function preferredMaxLinesForSquare(textLen: number): number {
 }
 
 const SQUARE_LINE_COUNT_OVER_PREFER = 15;
-/** Soften slideshow “equal line length” pull — wide meme lines beat a narrow balanced stack. */
-const SQUARE_BALANCE_RELIEF = 0.24;
-/** Penalize early lines that use far below maxChars (ragged narrow stacks). */
+/**
+ * Soften slideshow width-variance term. Keep small: a large relief rewarded very uneven stacks
+ * (tiny line 1 + long line 2), which reads as “early break” on square text memes.
+ */
+const SQUARE_BALANCE_RELIEF = 0.08;
+/** Penalize middle lines that are still far below the pixel budget (non–line-1/2). */
 const SQUARE_SHORT_LINE_RATIO = 0.52;
 const SQUARE_SHORT_LINE_PENALTY = 7;
+/** Line 1 & 2: stricter “short line” threshold + slightly higher flat penalty. */
+const SQUARE_EARLY_SHORT_LINE_RATIO = 0.64;
+const SQUARE_EARLY_SHORT_LINE_PENALTY = 14;
+/**
+ * Target fill for early lines (when not the final line): penalize unused width so breaks move later
+ * when another word still fits under maxWidthPx. (Weights are tuned so ~0.72 fill pays clearly more
+ * than ~0.99 fill — the slideshow base score favors low r per line, which fights “full” early lines.)
+ */
+const SQUARE_EARLY_FILL_TARGET_RATIO = 0.82;
+const SQUARE_EARLY_UNDERFILL_WEIGHT = 118;
+const SQUARE_EARLY_UNDERFILL_CAP = 42;
 
-function scoreSquareTextLayout(
+/** Split a single token (no spaces) into chunks that each fit `maxWidthPx`. */
+function breakLongWordNoSpace(
+  word: string,
+  maxWidthPx: number,
+  measure: (s: string) => number
+): string[] {
+  if (!word) return [];
+  if (measure(word) <= maxWidthPx) return [word];
+  const out: string[] = [];
+  let i = 0;
+  while (i < word.length) {
+    let lo = i + 1;
+    let hi = word.length;
+    let best = i + 1;
+    while (lo <= hi) {
+      const mid = Math.floor((lo + hi) / 2);
+      const sub = word.slice(i, mid);
+      if (measure(sub) <= maxWidthPx) {
+        best = mid;
+        lo = mid + 1;
+      } else {
+        hi = mid - 1;
+      }
+    }
+    if (best <= i) best = i + 1;
+    out.push(word.slice(i, best));
+    i = best;
+  }
+  return out;
+}
+
+function wrapTextGreedyPixel(
+  text: string,
+  maxWidthPx: number,
+  maxLines: number,
+  measure: (s: string) => number
+): string[] {
+  const normalized = normalizeCaptionText(text);
+  if (!normalized) return [];
+
+  const words = normalized.split(/\s+/).filter(Boolean);
+  const lines: string[] = [];
+  let currentLine = "";
+
+  for (const word of words) {
+    const testLine = currentLine ? `${currentLine} ${word}` : word;
+    if (measure(testLine) <= maxWidthPx) {
+      currentLine = testLine;
+      continue;
+    }
+
+    if (currentLine) {
+      lines.push(currentLine);
+      currentLine = "";
+      if (lines.length >= maxLines) {
+        return lines.slice(0, maxLines);
+      }
+    }
+
+    if (measure(word) <= maxWidthPx) {
+      currentLine = word;
+    } else {
+      const chunks = breakLongWordNoSpace(word, maxWidthPx, measure);
+      for (let ci = 0; ci < chunks.length; ci++) {
+        const chunk = chunks[ci]!;
+        if (lines.length >= maxLines) {
+          return lines.slice(0, maxLines);
+        }
+        if (ci < chunks.length - 1) {
+          lines.push(chunk);
+        } else {
+          currentLine = chunk;
+        }
+      }
+    }
+  }
+
+  if (currentLine && lines.length < maxLines) {
+    lines.push(currentLine);
+  }
+
+  return lines.slice(0, maxLines);
+}
+
+function generateSlideshowWordBoundaryLayoutsPixel(
+  words: string[],
+  maxWidthPx: number,
+  maxK: number,
+  measure: (s: string) => number
+): string[][] {
+  const n = words.length;
+  const out: string[][] = [];
+  if (n === 0) return out;
+
+  const full = words.join(" ");
+  if (measure(full) <= maxWidthPx) {
+    out.push([full]);
+  }
+
+  function dfs(start: number, acc: string[], kRemaining: number): void {
+    if (kRemaining === 1) {
+      const last = words.slice(start).join(" ");
+      if (last.length > 0 && measure(last) <= maxWidthPx) {
+        out.push([...acc, last]);
+      }
+      return;
+    }
+    const endMax = n - (kRemaining - 1);
+    for (let end = start + 1; end <= endMax; end++) {
+      const line = words.slice(start, end).join(" ");
+      if (measure(line) > maxWidthPx) continue;
+      dfs(end, [...acc, line], kRemaining - 1);
+    }
+  }
+
+  const kCap = Math.min(maxK, n);
+  for (let k = 2; k <= kCap; k++) {
+    dfs(0, [], k);
+  }
+
+  return out;
+}
+
+function addSlideshowSentenceBoundaryLayoutsPixel(
+  normalized: string,
+  maxWidthPx: number,
+  maxK: number,
+  candidates: string[][],
+  seen: Set<string>,
+  measure: (s: string) => number
+): void {
+  const segs = normalized
+    .split(/(?<=[.!?])\s+/)
+    .map((x) => x.trim())
+    .filter(Boolean);
+  if (segs.length < 2) return;
+  if (segs.length > maxK) return;
+  if (!segs.every((s) => s.length > 0 && measure(s) <= maxWidthPx)) return;
+
+  const lay = [...segs];
+  const key = layoutDedupeKey(lay);
+  if (seen.has(key)) return;
+  seen.add(key);
+  candidates.push(lay);
+}
+
+function scoreSlideshowLayoutPixel(
   lines: string[],
-  maxChars: number,
-  textLen: number
+  maxWidthPx: number,
+  measure: (s: string) => number
 ): number {
-  let s = scoreSlideshowLayout(lines, maxChars);
+  if (!lines.length) return 1e9;
 
-  const lens = lines.map((l) => l.length);
-  const mean = lens.reduce((a, b) => a + b, 0) / Math.max(1, lens.length);
+  let s = 0;
+  const widths = lines.map((l) => measure(l));
+  const mean = widths.reduce((a, b) => a + b, 0) / widths.length;
   const variance =
-    lens.reduce((acc, len) => acc + (len - mean) ** 2, 0) / Math.max(1, lens.length);
+    widths.reduce((acc, w) => acc + (w - mean) ** 2, 0) / widths.length;
+  s += SS_BALANCE * Math.sqrt(variance);
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i] ?? "";
+    const r = maxWidthPx > 0 ? measure(line) / maxWidthPx : 0;
+    s += SS_WIDTH * Math.pow(r, SS_WIDTH_EXP);
+  }
+
+  s += SS_EXTRA_LINE * (lines.length - 1);
+
+  const last = lines[lines.length - 1] ?? "";
+  s += SS_ORPHAN_MULT * orphanPenaltyLastLine(last);
+
+  if (lines.length === 1) {
+    const r0 = maxWidthPx > 0 ? measure(lines[0]!) / maxWidthPx : 0;
+    if (r0 > SS_WIDE_SINGLE_THRESHOLD) {
+      s += SS_WIDE_SINGLE_MULT * (r0 - SS_WIDE_SINGLE_THRESHOLD);
+    }
+  }
+
+  for (let i = 0; i < lines.length - 1; i++) {
+    const line = (lines[i] ?? "").trim();
+    if (/[.!?]$/.test(line)) s -= SS_PHRASE_END_BONUS;
+    else if (/[,;:]$/.test(line)) s -= SS_PHRASE_COMMA_BONUS;
+    if (DANGLING_LINE_END.test(line)) s += SS_DANGLING;
+  }
+
+  if (
+    lines.length >= 2 &&
+    last.trim().length <= 22 &&
+    /[.!?]$/.test(last.trim())
+  ) {
+    s -= SS_PUNCH_LAST_BONUS;
+  }
+
+  s += phraseAndRhythmPenalty(lines);
+
+  return s;
+}
+
+function squareEarlyLineUnderfillPenalty(
+  lines: string[],
+  maxWidthPx: number,
+  measure: (s: string) => number
+): number {
+  if (lines.length <= 1 || maxWidthPx <= 0) return 0;
+  let p = 0;
+  const target = SQUARE_EARLY_FILL_TARGET_RATIO;
+  for (let i = 0; i < Math.min(2, lines.length - 1); i++) {
+    const r = measure(lines[i] ?? "") / maxWidthPx;
+    if (r < target) {
+      const raw = SQUARE_EARLY_UNDERFILL_WEIGHT * (target - r);
+      p += Math.min(SQUARE_EARLY_UNDERFILL_CAP, raw);
+    }
+  }
+  return p;
+}
+
+function squareEarlyLinesWidthSum(
+  lines: string[],
+  measure: (s: string) => number
+): number {
+  if (lines.length === 0) return 0;
+  const w0 = measure(lines[0] ?? "");
+  if (lines.length === 1) return w0;
+  return w0 + measure(lines[1] ?? "");
+}
+
+function scoreSquareTextLayoutPixel(
+  lines: string[],
+  maxWidthPx: number,
+  textLen: number,
+  measure: (s: string) => number
+): number {
+  let s = scoreSlideshowLayoutPixel(lines, maxWidthPx, measure);
+
+  const widths = lines.map((l) => measure(l));
+  const mean = widths.reduce((a, b) => a + b, 0) / Math.max(1, widths.length);
+  const variance =
+    widths.reduce((acc, w) => acc + (w - mean) ** 2, 0) / Math.max(1, widths.length);
   s -= SQUARE_BALANCE_RELIEF * Math.sqrt(variance);
 
   const pref = preferredMaxLinesForSquare(textLen);
@@ -585,14 +828,20 @@ function scoreSquareTextLayout(
     s += SQUARE_LINE_COUNT_OVER_PREFER * (lines.length - pref);
   }
 
-  if (lines.length >= 2 && maxChars > 0) {
+  if (lines.length >= 2 && maxWidthPx > 0) {
     for (let i = 0; i < lines.length - 1; i++) {
-      const L = (lines[i] ?? "").length;
-      if (L < maxChars * SQUARE_SHORT_LINE_RATIO) {
-        s += SQUARE_SHORT_LINE_PENALTY;
+      const w = measure(lines[i] ?? "");
+      const r = w / maxWidthPx;
+      const early = i < 2;
+      const thresh = early ? SQUARE_EARLY_SHORT_LINE_RATIO : SQUARE_SHORT_LINE_RATIO;
+      const pen = early ? SQUARE_EARLY_SHORT_LINE_PENALTY : SQUARE_SHORT_LINE_PENALTY;
+      if (r < thresh) {
+        s += pen;
       }
     }
   }
+
+  s += squareEarlyLineUnderfillPenalty(lines, maxWidthPx, measure);
 
   for (let i = 0; i < lines.length - 1; i++) {
     s += interLineSquarePhrasePenalty(lines[i] ?? "", lines[i + 1] ?? "");
@@ -600,16 +849,17 @@ function scoreSquareTextLayout(
   return s;
 }
 
-function pickBestSquareTextLayout(
+function pickBestSquareTextLayoutPixel(
   candidates: string[][],
-  maxChars: number,
-  textLen: number
+  maxWidthPx: number,
+  textLen: number,
+  measure: (s: string) => number
 ): string[] {
   let best = candidates[0]!;
-  let bestScore = scoreSquareTextLayout(best, maxChars, textLen);
+  let bestScore = scoreSquareTextLayoutPixel(best, maxWidthPx, textLen, measure);
   for (let i = 1; i < candidates.length; i++) {
     const c = candidates[i]!;
-    const sc = scoreSquareTextLayout(c, maxChars, textLen);
+    const sc = scoreSquareTextLayoutPixel(c, maxWidthPx, textLen, measure);
     if (sc < bestScore) {
       bestScore = sc;
       best = c;
@@ -620,7 +870,19 @@ function pickBestSquareTextLayout(
         best = c;
         continue;
       }
-      if (c.length === best.length && layoutDedupeKey(c) < layoutDedupeKey(best)) {
+      if (c.length > best.length) {
+        continue;
+      }
+      const cw = squareEarlyLinesWidthSum(c, measure);
+      const bw = squareEarlyLinesWidthSum(best, measure);
+      if (cw > bw) {
+        best = c;
+        continue;
+      }
+      if (cw < bw) {
+        continue;
+      }
+      if (layoutDedupeKey(c) < layoutDedupeKey(best)) {
         best = c;
       }
     }
@@ -629,28 +891,71 @@ function pickBestSquareTextLayout(
 }
 
 /**
- * Square meme PNG: same width limit as greedy, but search word-boundary layouts (2..K lines),
- * score with slideshow rhythm rules plus phrase-aware penalties between lines.
- * Greedy layout is always a candidate. Does not change other template renderers.
+ * Final guarantee: no line wider than `maxWidthPx`; respects `maxLines` via greedy reflow if needed.
+ */
+function enforceSquareTextMaxLineWidthFinal(
+  lines: string[],
+  maxWidthPx: number,
+  maxLines: number,
+  measure: (s: string) => number,
+  normalizedFullText: string
+): string[] {
+  const EPS = 1;
+
+  const reflowOversized = (arr: string[]): string[] =>
+    arr.flatMap((line) => {
+      if (measure(line) <= maxWidthPx + EPS) return [line];
+      const t = line.trim();
+      if (t.includes(" ")) {
+        return wrapTextGreedyPixel(t, maxWidthPx, 64, measure);
+      }
+      return breakLongWordNoSpace(t, maxWidthPx, measure);
+    });
+
+  let out = reflowOversized(lines);
+
+  if (out.length > maxLines || out.some((l) => measure(l) > maxWidthPx + EPS)) {
+    out = wrapTextGreedyPixel(normalizedFullText, maxWidthPx, maxLines, measure);
+  }
+
+  out = reflowOversized(out);
+
+  if (out.length > maxLines || out.some((l) => measure(l) > maxWidthPx + EPS)) {
+    out = wrapTextGreedyPixel(normalizedFullText, maxWidthPx, maxLines, measure);
+    out = reflowOversized(out);
+  }
+
+  if (out.length > maxLines) {
+    out = wrapTextGreedyPixel(normalizedFullText, maxWidthPx, maxLines, measure);
+  }
+
+  return out.filter((l) => l.length > 0);
+}
+
+/**
+ * Square meme PNG: word-boundary layouts scored like slideshow, but **line width** is capped
+ * using canvas `measureText` (52px Arial) — not character counts.
  */
 export function wrapSquareTextMemeLines(
   text: string,
-  maxChars: number,
+  maxLineWidthPx: number,
   maxLines: number
 ): string[] {
+  const measure = measureSquareTextLineWidthPx;
   const normalized = normalizeCaptionText(text);
   if (!normalized) return [];
 
   const words = normalized.split(/\s+/).filter(Boolean);
-  const greedy = wrapTextGreedy(normalized, maxChars, maxLines);
+  const greedy = wrapTextGreedyPixel(normalized, maxLineWidthPx, maxLines, measure);
 
   const maxK = Math.max(1, Math.min(maxLines, 6));
   const enumCap = words.length > 36 ? Math.min(maxK, 4) : maxK;
 
-  const generated = generateSlideshowWordBoundaryLayouts(
+  const generated = generateSlideshowWordBoundaryLayoutsPixel(
     words,
-    maxChars,
-    enumCap
+    maxLineWidthPx,
+    enumCap,
+    measure
   );
 
   const seen = new Set<string>();
@@ -663,12 +968,13 @@ export function wrapSquareTextMemeLines(
     }
   }
 
-  addSlideshowSentenceBoundaryLayouts(
+  addSlideshowSentenceBoundaryLayoutsPixel(
     normalized,
-    maxChars,
+    maxLineWidthPx,
     Math.min(enumCap, maxLines),
     candidates,
-    seen
+    seen,
+    measure
   );
 
   const gk = layoutDedupeKey(greedy);
@@ -677,10 +983,28 @@ export function wrapSquareTextMemeLines(
   }
 
   if (candidates.length === 0) {
-    return greedy;
+    return enforceSquareTextMaxLineWidthFinal(
+      greedy,
+      maxLineWidthPx,
+      maxLines,
+      measure,
+      normalized
+    );
   }
 
-  return pickBestSquareTextLayout(candidates, maxChars, normalized.length);
+  const best = pickBestSquareTextLayoutPixel(
+    candidates,
+    maxLineWidthPx,
+    normalized.length,
+    measure
+  );
+  return enforceSquareTextMaxLineWidthFinal(
+    best,
+    maxLineWidthPx,
+    maxLines,
+    measure,
+    normalized
+  );
 }
 
 /**

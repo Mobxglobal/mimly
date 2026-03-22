@@ -1,15 +1,22 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useSearchParams } from "next/navigation";
+import { useState, useEffect, useRef } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { OnboardingShell } from "@/components/onboarding/onboarding-shell";
 import { COUNTRY_OPTIONS } from "@/lib/countries";
-import { createClient } from "@/lib/supabase/client";
+import { ONBOARDING_SESSION_DRAFT_KEY } from "@/lib/onboarding/generation-mode";
+
+const scanReviewPillClass =
+  "inline-flex shrink-0 items-center rounded-full bg-stone-100 px-2 py-0.5 text-xs font-medium text-stone-600";
 
 export default function OnboardingConfirmPage() {
+  const router = useRouter();
   const searchParams = useSearchParams();
-  const [sending, setSending] = useState(false);
-  const [status, setStatus] = useState<"idle" | "success" | "error">("idle");
+  const emailInputRef = useRef<HTMLInputElement>(null);
+  const websiteParam = searchParams.get("website");
+  const fromWebsiteScan = Boolean(websiteParam?.trim());
+
+  const [status, setStatus] = useState<"idle" | "error">("idle");
   const [errorMessage, setErrorMessage] = useState("");
   const [email, setEmail] = useState("");
   const [brandName, setBrandName] = useState("");
@@ -24,11 +31,18 @@ export default function OnboardingConfirmPage() {
     setCountry(searchParams.get("country") ?? "United States");
   }, []);
 
-  async function handleSubmit(e: React.FormEvent) {
+  useEffect(() => {
+    if (!fromWebsiteScan) return;
+    const id = window.requestAnimationFrame(() => {
+      emailInputRef.current?.focus();
+    });
+    return () => window.cancelAnimationFrame(id);
+  }, [fromWebsiteScan]);
+
+  function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setErrorMessage("");
     setStatus("idle");
-    setSending(true);
 
     const draft = {
       email: email.trim(),
@@ -38,39 +52,27 @@ export default function OnboardingConfirmPage() {
       country: country.trim(),
     };
 
-    const draftRes = await fetch("/api/onboarding/draft", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: draft.email, draft }),
-    });
-    if (!draftRes.ok) {
-      setSending(false);
+    if (!draft.email || !draft.what_you_do || !draft.audience || !draft.country) {
       setStatus("error");
-      setErrorMessage("Could not save your details. Please try again.");
+      setErrorMessage("Please fill in all required fields.");
       return;
     }
 
-    const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(
-      "/onboarding/complete"
-    )}`;
-
-    const { error } = await createClient().auth.signInWithOtp({
-      email: draft.email,
-      options: { emailRedirectTo: redirectTo },
-    });
-
-    setSending(false);
-    if (error) {
+    try {
+      sessionStorage.setItem(ONBOARDING_SESSION_DRAFT_KEY, JSON.stringify(draft));
+    } catch {
       setStatus("error");
-      setErrorMessage(error.message);
+      setErrorMessage("Could not continue. Check that cookies/storage are enabled.");
       return;
     }
-    setStatus("success");
+
+    router.push("/onboarding/goal");
   }
 
   const inputClass =
     "mt-1 w-full rounded-xl border border-stone-200 bg-white/90 px-4 py-2.5 text-stone-900 placeholder:text-stone-400 focus:border-stone-400 focus:outline-none focus:ring-1 focus:ring-stone-400";
   const labelClass = "block text-sm font-medium text-stone-700";
+  const labelInlineClass = "text-sm font-medium text-stone-700";
 
   return (
     <OnboardingShell>
@@ -80,11 +82,6 @@ export default function OnboardingConfirmPage() {
       <p className="marketing-copy mt-2">
         We extracted this from your website. Edit if needed, then continue.
       </p>
-      {status === "success" && (
-        <div className="mt-6 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
-          Check your email for the magic link. Click it to save and continue.
-        </div>
-      )}
       {status === "error" && (
         <div className="mt-6 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
           {errorMessage}
@@ -93,9 +90,10 @@ export default function OnboardingConfirmPage() {
       <form onSubmit={handleSubmit} className="mt-6 flex flex-col gap-4">
         <div>
           <label htmlFor="confirm-email" className={labelClass}>
-            Email address
+            {fromWebsiteScan ? "Enter your email" : "Email address"}
           </label>
           <input
+            ref={emailInputRef}
             id="confirm-email"
             type="email"
             value={email}
@@ -103,7 +101,6 @@ export default function OnboardingConfirmPage() {
             className={inputClass}
             placeholder="you@company.com"
             required
-            disabled={sending}
           />
         </div>
         <div>
@@ -116,13 +113,17 @@ export default function OnboardingConfirmPage() {
             value={brandName}
             onChange={(e) => setBrandName(e.target.value)}
             className={inputClass}
-            disabled={sending}
           />
         </div>
         <div>
-          <label htmlFor="confirm-what-you-do" className={labelClass}>
-            What you do
-          </label>
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <label htmlFor="confirm-what-you-do" className={labelInlineClass}>
+              What you do
+            </label>
+            {fromWebsiteScan && (
+              <span className={scanReviewPillClass}>Check this</span>
+            )}
+          </div>
           <input
             id="confirm-what-you-do"
             type="text"
@@ -131,13 +132,17 @@ export default function OnboardingConfirmPage() {
             className={inputClass}
             placeholder="e.g. Online fitness coaching"
             required
-            disabled={sending}
           />
         </div>
         <div>
-          <label htmlFor="confirm-audience" className={labelClass}>
-            Target audience
-          </label>
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <label htmlFor="confirm-audience" className={labelInlineClass}>
+              Target audience
+            </label>
+            {fromWebsiteScan && (
+              <span className={scanReviewPillClass}>Check this</span>
+            )}
+          </div>
           <input
             id="confirm-audience"
             type="text"
@@ -145,7 +150,6 @@ export default function OnboardingConfirmPage() {
             onChange={(e) => setAudience(e.target.value)}
             className={inputClass}
             required
-            disabled={sending}
           />
         </div>
         <div>
@@ -158,7 +162,6 @@ export default function OnboardingConfirmPage() {
             onChange={(e) => setCountry(e.target.value)}
             className={inputClass + " cursor-pointer pr-8"}
             required
-            disabled={sending}
           >
             <optgroup label="United Kingdom & United States">
               <option value="United Kingdom">United Kingdom</option>
@@ -177,10 +180,9 @@ export default function OnboardingConfirmPage() {
         </div>
         <button
           type="submit"
-          disabled={sending}
           className="cta-funky mt-2 w-full rounded-full bg-stone-900 px-5 py-2.5 text-sm font-medium !text-white shadow-sm hover:bg-stone-800 transition-colors font-display disabled:opacity-60"
         >
-          {sending ? "Sending…" : "Save & continue"}
+          Continue
         </button>
       </form>
     </OnboardingShell>

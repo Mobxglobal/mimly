@@ -462,6 +462,8 @@ export async function runVerticalSlideshowGeneration(params: {
     excludeExistingUserTemplates?: boolean;
     forcedTemplateId?: string;
     forceStandardVariant?: boolean;
+    generationRunIdOverride?: string;
+    contentPack?: { batch: 1 | 2 | 3 };
   };
 }): Promise<{ error: string | null }> {
   const {
@@ -478,7 +480,8 @@ export async function runVerticalSlideshowGeneration(params: {
   const forcedTemplateId =
     String(options?.forcedTemplateId ?? "").trim() || null;
   const forceStandardVariant = Boolean(options?.forceStandardVariant);
-  const generationRunId = randomUUID();
+  const generationRunId = options?.generationRunIdOverride ?? randomUUID();
+  const batchNumber = options?.contentPack?.batch ?? 1;
   const activeImportantDay = getActiveImportantDay();
 
   if (!process.env.OPENAI_API_KEY) {
@@ -798,6 +801,15 @@ export async function runVerticalSlideshowGeneration(params: {
       slides: slideMeta,
     };
 
+    const contentPackMeta =
+      options?.contentPack && options?.generationRunIdOverride
+        ? {
+            content_pack: true as const,
+            content_pack_batch: options.contentPack.batch,
+            content_pack_run_id: options.generationRunIdOverride,
+          }
+        : null;
+
     const title = payload.slideshow_intent.slice(0, TITLE_MAX_CHARS);
     const row = {
       user_id: user.id,
@@ -811,10 +823,11 @@ export async function runVerticalSlideshowGeneration(params: {
       image_url: firstPublicUrl,
       variant_type: variantType,
       generation_run_id: generationRunId,
-      batch_number: 1,
+      batch_number: batchNumber,
       variant_metadata: {
         ...variantMetadata,
         requested_output_format: "vertical_slideshow",
+        ...(contentPackMeta ?? {}),
       },
     };
 

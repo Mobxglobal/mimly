@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { LayoutGrid, Images, Settings, Sparkles, LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
+import { useDashboardGenerationMode } from "@/components/dashboard/dashboard-generation-context";
 
 const NAV_SECTIONS = [
   {
@@ -26,6 +27,11 @@ export function DashboardShell({
 }: Readonly<{ children: React.ReactNode }>) {
   const pathname = usePathname();
   const router = useRouter();
+  const generationMode = useDashboardGenerationMode();
+  const primaryCtaLabel =
+    generationMode === "content_pack"
+      ? "Generate your content pack"
+      : "Create content";
 
   async function handleLogOut() {
     const supabase = createClient();
@@ -61,11 +67,15 @@ export function DashboardShell({
             />
           </Link>
           <Link
-            href="/dashboard/create"
+            href={
+              generationMode === "content_pack"
+                ? "/dashboard/generating?mode=content_pack&batch=1"
+                : "/dashboard/create"
+            }
             className="cta-funky flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-500 px-3 py-2.5 text-sm font-medium text-white shadow-[0_10px_30px_rgba(99,102,241,0.35)] hover:bg-indigo-400 md:flex"
           >
             <Sparkles className="h-4 w-4" />
-            Create meme
+            {primaryCtaLabel}
           </Link>
           <div className="hidden md:mt-6 md:flex md:flex-col md:gap-5">
             {NAV_SECTIONS.map((section) => (

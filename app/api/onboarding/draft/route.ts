@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { normalizeGenerationMode } from "@/lib/onboarding/generation-mode";
 import { NextResponse } from "next/server";
 
 type DraftBody = {
@@ -7,6 +8,7 @@ type DraftBody = {
   what_you_do: string;
   audience: string;
   country: string;
+  generation_mode?: string | null;
 };
 
 export async function POST(request: Request) {
@@ -19,12 +21,15 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "email and draft required" }, { status: 400 });
     }
 
+    const mode = normalizeGenerationMode(draft.generation_mode);
+
     const normalized = {
       email,
       brand_name: String(draft.brand_name ?? "").trim(),
       what_you_do: String(draft.what_you_do ?? "").trim(),
       audience: String(draft.audience ?? "").trim(),
       country: String(draft.country ?? "").trim(),
+      ...(mode ? { generation_mode: mode } : {}),
     };
 
     const supabase = await createClient();

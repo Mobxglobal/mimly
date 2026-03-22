@@ -9,6 +9,12 @@ create table if not exists public.profiles (
   what_you_do text,
   audience text,
   country text,
+  generation_mode text check (
+    generation_mode is null
+    or generation_mode in ('content_pack', 'on_demand')
+  ),
+  content_pack_unlocked_at timestamptz,
+  content_pack_last_completed_batch integer default 0,
   onboarding_completed_at timestamptz,
   created_at timestamptz default now(),
   updated_at timestamptz default now()

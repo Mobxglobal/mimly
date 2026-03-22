@@ -5,18 +5,39 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { LoaderCircle } from "lucide-react";
 import { DashboardShell } from "@/components/dashboard/dashboard-shell";
 import { generateMockMemes } from "@/lib/actions/memes";
+import { generateContentPackBatch } from "@/lib/actions/content-pack";
 
-const inflightGenerationRuns = new Map<string, Promise<{ error: string | null }>>();
+const inflightGenerationRuns = new Map<
+  string,
+  Promise<{ error: string | null }>
+>();
+
+const inflightContentPackBatches = new Map<
+  string,
+  Promise<{ error: string | null; packRunId?: string }>
+>();
+
 type OutputFormat =
   | "square_image"
   | "square_video"
   | "vertical_slideshow"
   | "square_text";
 
+function parseContentPackBatch(raw: string | null): 1 | 2 | 3 {
+  if (raw === "2") return 2;
+  if (raw === "3") return 3;
+  return 1;
+}
+
 export default function GeneratingPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [error, setError] = useState<string | null>(null);
+
+  const mode = searchParams.get("mode");
+  const isContentPack = mode === "content_pack";
+  const cpBatch = parseContentPackBatch(searchParams.get("batch"));
+
   const promotion = searchParams.get("promotion");
   const formatParam = searchParams.get("format");
   const format: OutputFormat =
@@ -29,8 +50,10 @@ export default function GeneratingPage() {
           : "square_image";
   const hasPromotion = Boolean(promotion?.trim());
   const generationKey = `format:${format}|promotion:${promotion?.trim() ?? "__none__"}`;
+  const contentPackKey = `batch:${cpBatch}`;
 
   useEffect(() => {
+    if (isContentPack) return;
     let cancelled = false;
 
     (async () => {
@@ -59,7 +82,50 @@ export default function GeneratingPage() {
     return () => {
       cancelled = true;
     };
-  }, [format, generationKey, router, promotion]);
+  }, [format, generationKey, router, promotion, isContentPack]);
+
+  useEffect(() => {
+    if (!isContentPack) return;
+    let cancelled = false;
+
+    (async () => {
+      const existing = inflightContentPackBatches.get(contentPackKey);
+      const runPromise =
+        existing ??
+        generateContentPackBatch(cpBatch).finally(() => {
+          inflightContentPackBatches.delete(contentPackKey);
+        });
+
+      if (!existing) {
+        inflightContentPackBatches.set(contentPackKey, runPromise);
+      }
+
+      const { error: err, packRunId } = await runPromise;
+      if (cancelled) return;
+      if (err) {
+        setError(err);
+        return;
+      }
+      if (!packRunId) {
+        setError("Content pack run id missing. Please try again.");
+        return;
+      }
+      router.replace(
+        `/dashboard/content-pack?run=${encodeURIComponent(packRunId)}&batch=${cpBatch}`
+      );
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isContentPack, contentPackKey, cpBatch, router]);
+
+  const packFooter =
+    cpBatch === 1
+      ? "Creating the first 12 posts in your 36-post test pack now."
+      : cpBatch === 2
+        ? "Creating the next 12 posts in your 36-post test pack now."
+        : "Creating the final 12 posts in your 36-post test pack now.";
 
   return (
     <DashboardShell>
@@ -69,40 +135,75 @@ export default function GeneratingPage() {
             <LoaderCircle className="h-8 w-8 animate-spin" />
           </div>
 
-          <h1 className="mt-6 text-3xl font-semibold tracking-tight text-white md:text-4xl">
-            Generating your memes
-          </h1>
-          <p className="mt-3 text-sm text-stone-400 sm:text-base">
-            We&apos;re creating your meme set now.
-          </p>
-          <p className="mt-1 text-sm text-stone-500">
-            This usually only takes a moment.
-          </p>
+          {isContentPack ? (
+            <>
+              <h1 className="mt-6 text-3xl font-semibold tracking-tight text-white md:text-4xl">
+                Creating your content pack
+              </h1>
+              <p className="mt-3 text-sm text-stone-400 sm:text-base">
+                We&apos;re generating a custom mix of memes, slideshows, videos,
+                and text posts for your brand.
+              </p>
+              <p className="mt-1 text-sm text-stone-500">
+                We&apos;re also preparing caption suggestions so everything is
+                ready for social media.
+              </p>
 
-          <div className="mx-auto mt-8 max-w-md">
-            <div className="h-2 overflow-hidden rounded-full bg-white/5">
-              <div className="h-full w-2/3 animate-pulse rounded-full bg-gradient-to-r from-indigo-500 via-sky-400 to-emerald-400" />
-            </div>
-            <p className="mt-3 text-xs font-medium uppercase tracking-[0.14em] text-stone-500">
-              Building your first batch...
-            </p>
-          </div>
+              <div className="mx-auto mt-8 max-w-md">
+                <div className="h-2 overflow-hidden rounded-full bg-white/5">
+                  <div className="h-full w-2/3 animate-pulse rounded-full bg-gradient-to-r from-indigo-500 via-sky-400 to-emerald-400" />
+                </div>
+                <p className="mt-3 text-xs font-medium uppercase tracking-[0.14em] text-stone-500">
+                  BUILDING YOUR CONTENT PACK
+                </p>
+              </div>
 
-          {error && (
-            <div className="mt-6 rounded-2xl border border-rose-400/20 bg-rose-500/[0.08] p-4 text-sm text-rose-300">
-              {error}
-            </div>
+              {error && (
+                <div className="mt-6 rounded-2xl border border-rose-400/20 bg-rose-500/[0.08] p-4 text-sm text-rose-300">
+                  {error}
+                </div>
+              )}
+
+              <p className="mt-8 text-xs text-stone-500">{packFooter}</p>
+            </>
+          ) : (
+            <>
+              <h1 className="mt-6 text-3xl font-semibold tracking-tight text-white md:text-4xl">
+                Generating your memes
+              </h1>
+              <p className="mt-3 text-sm text-stone-400 sm:text-base">
+                We&apos;re creating your meme set now.
+              </p>
+              <p className="mt-1 text-sm text-stone-500">
+                This usually only takes a moment.
+              </p>
+
+              <div className="mx-auto mt-8 max-w-md">
+                <div className="h-2 overflow-hidden rounded-full bg-white/5">
+                  <div className="h-full w-2/3 animate-pulse rounded-full bg-gradient-to-r from-indigo-500 via-sky-400 to-emerald-400" />
+                </div>
+                <p className="mt-3 text-xs font-medium uppercase tracking-[0.14em] text-stone-500">
+                  Building your first batch...
+                </p>
+              </div>
+
+              {error && (
+                <div className="mt-6 rounded-2xl border border-rose-400/20 bg-rose-500/[0.08] p-4 text-sm text-rose-300">
+                  {error}
+                </div>
+              )}
+
+              <p className="mt-8 text-xs text-stone-500">
+                {hasPromotion
+                  ? "Using your promotion where it improves the meme."
+                  : format === "vertical_slideshow"
+                    ? "Generating your vertical slideshow set (3–5 slides) now."
+                    : format === "square_text"
+                      ? "Generating your square text meme set now."
+                      : `Generating a ${format === "square_video" ? "video" : "brand-led"} set for you now.`}
+              </p>
+            </>
           )}
-
-          <p className="mt-8 text-xs text-stone-500">
-            {hasPromotion
-              ? "Using your promotion where it improves the meme."
-              : format === "vertical_slideshow"
-                ? "Generating your vertical slideshow set (3–5 slides) now."
-                : format === "square_text"
-                  ? "Generating your square text meme set now."
-                  : `Generating a ${format === "square_video" ? "video" : "brand-led"} set for you now.`}
-          </p>
         </div>
       </div>
     </DashboardShell>

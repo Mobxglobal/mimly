@@ -9,6 +9,10 @@ export type Profile = {
   what_you_do: string | null;
   audience: string | null;
   country: string | null;
+  /** content_pack | on_demand; null = treat as on_demand */
+  generation_mode: string | null;
+  content_pack_unlocked_at: string | null;
+  content_pack_last_completed_batch: number | null;
   onboarding_completed_at: string | null;
   created_at: string;
   updated_at: string;

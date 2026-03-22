@@ -1,4 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
+import {
+  normalizeGenerationMode,
+  type GenerationMode,
+} from "@/lib/onboarding/generation-mode";
 import { NextResponse } from "next/server";
 
 type DraftProfile = {
@@ -7,6 +11,7 @@ type DraftProfile = {
   what_you_do: string;
   audience: string;
   country: string;
+  generation_mode?: GenerationMode | null;
 };
 
 type CleanResult = {
@@ -31,6 +36,7 @@ function decodeDraft(draftB64: string): DraftProfile | null {
       what_you_do: String(parsed.what_you_do ?? "").trim(),
       audience: String(parsed.audience ?? "").trim(),
       country: String(parsed.country ?? "").trim(),
+      generation_mode: normalizeGenerationMode(parsed.generation_mode),
     };
   } catch {
     return null;
@@ -94,6 +100,8 @@ async function cleanWithOpenAI(draft: DraftProfile): Promise<CleanResult> {
     what_you_do: String(clean.what_you_do ?? draft.what_you_do).trim(),
     audience: String(clean.audience ?? draft.audience).trim(),
     country: String(clean.country ?? draft.country).trim(),
+    generation_mode:
+      normalizeGenerationMode(draft.generation_mode) ?? "on_demand",
   };
 
   const issues = Array.isArray(parsed.issues)
@@ -149,6 +157,7 @@ export async function GET(request: Request) {
               what_you_do: String(d.what_you_do ?? "").trim(),
               audience: String(d.audience ?? "").trim(),
               country: String(d.country ?? "").trim(),
+              generation_mode: normalizeGenerationMode(d.generation_mode),
             };
             await supabaseAfter
               .schema("public")
@@ -166,6 +175,7 @@ export async function GET(request: Request) {
                 what_you_do: String(parsed.what_you_do ?? "").trim(),
                 audience: String(parsed.audience ?? "").trim(),
                 country: String(parsed.country ?? "").trim(),
+                generation_mode: normalizeGenerationMode(parsed.generation_mode),
               };
               await supabaseAfter
                 .schema("public")
@@ -225,6 +235,8 @@ export async function GET(request: Request) {
           params.set("what_you_do", cleaned.clean.what_you_do);
           params.set("audience", cleaned.clean.audience);
           params.set("country", cleaned.clean.country);
+          const gm = normalizeGenerationMode(draft.generation_mode);
+          if (gm) params.set("generation_mode", gm);
           return NextResponse.redirect(
             new URL(`/onboarding/manual?${params.toString()}`, request.url)
           );
@@ -245,6 +257,9 @@ export async function GET(request: Request) {
                 what_you_do: cleaned.clean.what_you_do || null,
                 audience: cleaned.clean.audience || null,
                 country: cleaned.clean.country || null,
+                generation_mode:
+                  normalizeGenerationMode(cleaned.clean.generation_mode) ??
+                  "on_demand",
                 onboarding_completed_at: new Date().toISOString(),
                 updated_at: new Date().toISOString(),
               },

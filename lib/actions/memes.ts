@@ -20,6 +20,10 @@ export async function generateMockMemes(
     forcedTemplateId?: string;
     forceStandardVariant?: boolean;
     outputFormat?: MemeOutputFormat;
+    /** When set, all inserts in this run share this generation_run_id (e.g. content pack batch). */
+    generationRunIdOverride?: string;
+    /** Tags rows for content pack preview / unlock flow. */
+    contentPack?: { batch: 1 | 2 | 3 };
   }
 ): Promise<{ error: string | null }> {
   try {
@@ -110,8 +114,8 @@ export async function generateMockMemes(
   const forcedTemplateId = String(options?.forcedTemplateId ?? "").trim() || null;
   const forceStandardVariant = Boolean(options?.forceStandardVariant);
   const isTemplateRegeneration = Boolean(forcedTemplateId);
-  const generationRunId = randomUUID();
-  const batchNumber = 1;
+  const generationRunId = options?.generationRunIdOverride ?? randomUUID();
+  const batchNumber = options?.contentPack?.batch ?? 1;
   const activeImportantDay = getActiveImportantDay();
 
   console.log("[important-day] activeImportantDay", activeImportantDay);
@@ -267,7 +271,14 @@ export async function generateMockMemes(
       user,
       profile,
       promotionContext,
-      options,
+      options: {
+        limit: options?.limit ?? 3,
+        excludeExistingUserTemplates: options?.excludeExistingUserTemplates,
+        forcedTemplateId: options?.forcedTemplateId,
+        forceStandardVariant: options?.forceStandardVariant,
+        generationRunIdOverride: options?.generationRunIdOverride,
+        contentPack: options?.contentPack,
+      },
     });
   }
 
@@ -2046,6 +2057,15 @@ ${isThreeSlot
       imageUrl = null;
     }
 
+    const contentPackMeta =
+      options?.contentPack && options?.generationRunIdOverride
+        ? {
+            content_pack: true as const,
+            content_pack_batch: options.contentPack.batch,
+            content_pack_run_id: options.generationRunIdOverride,
+          }
+        : null;
+
     const row = {
       user_id: user.id,
       template_id: template.template_id,
@@ -2059,7 +2079,9 @@ ${isThreeSlot
       variant_type: variantType,
       generation_run_id: generationContext.generationRunId,
       batch_number: generationContext.batchNumber,
-      variant_metadata: variantMetadata,
+      variant_metadata: contentPackMeta
+        ? { ...(variantMetadata as Record<string, unknown>), ...contentPackMeta }
+        : variantMetadata,
     };
 
     console.log("[variant-insert]", {

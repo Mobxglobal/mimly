@@ -1,12 +1,17 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { OnboardingShell } from "@/components/onboarding/onboarding-shell";
 import { COUNTRY_OPTIONS } from "@/lib/countries";
+import {
+  ONBOARDING_SESSION_DRAFT_KEY,
+  type GenerationMode,
+} from "@/lib/onboarding/generation-mode";
 import { createClient } from "@/lib/supabase/client";
 
 export default function OnboardingManualPage() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const [sending, setSending] = useState(false);
   const [status, setStatus] = useState<"idle" | "success" | "error">("idle");
@@ -17,6 +22,10 @@ export default function OnboardingManualPage() {
   const [audience, setAudience] = useState("");
   const [country, setCountry] = useState("");
   const [reviewMessage, setReviewMessage] = useState<string | null>(null);
+  const [reviewGenerationMode, setReviewGenerationMode] =
+    useState<GenerationMode | null>(null);
+
+  const isReview = searchParams.get("review") === "1";
 
   useEffect(() => {
     if (searchParams.get("review") !== "1") return;
@@ -27,13 +36,18 @@ export default function OnboardingManualPage() {
     setWhatYouDo(searchParams.get("what_you_do") ?? "");
     setAudience(searchParams.get("audience") ?? "");
     setCountry(searchParams.get("country") ?? "");
+    const gm = searchParams.get("generation_mode");
+    if (gm === "content_pack" || gm === "on_demand") {
+      setReviewGenerationMode(gm);
+    } else {
+      setReviewGenerationMode(null);
+    }
   }, [searchParams]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setErrorMessage("");
     setStatus("idle");
-    setSending(true);
 
     const draft = {
       email: email.trim(),
@@ -41,7 +55,39 @@ export default function OnboardingManualPage() {
       what_you_do: whatYouDo.trim(),
       audience: audience.trim(),
       country: country.trim(),
+      ...(isReview
+        ? { generation_mode: reviewGenerationMode ?? ("on_demand" as const) }
+        : {}),
     };
+
+    if (!draft.email || !draft.what_you_do || !draft.audience || !draft.country) {
+      setStatus("error");
+      setErrorMessage("Please fill in all required fields.");
+      return;
+    }
+
+    if (!isReview) {
+      try {
+        sessionStorage.setItem(
+          ONBOARDING_SESSION_DRAFT_KEY,
+          JSON.stringify({
+            email: draft.email,
+            brand_name: draft.brand_name,
+            what_you_do: draft.what_you_do,
+            audience: draft.audience,
+            country: draft.country,
+          })
+        );
+      } catch {
+        setStatus("error");
+        setErrorMessage("Could not continue. Check that cookies/storage are enabled.");
+        return;
+      }
+      router.push("/onboarding/goal");
+      return;
+    }
+
+    setSending(true);
 
     const draftRes = await fetch("/api/onboarding/draft", {
       method: "POST",
@@ -214,7 +260,7 @@ export default function OnboardingManualPage() {
           disabled={sending}
           className="cta-funky mt-2 w-full rounded-full bg-stone-900 px-5 py-2.5 text-sm font-medium !text-white shadow-sm hover:bg-stone-800 transition-colors font-display disabled:opacity-60"
         >
-          {sending ? "Sending…" : "Save & continue"}
+          {sending ? "Sending…" : isReview ? "Save & continue" : "Continue"}
         </button>
       </form>
     </OnboardingShell>
