@@ -8,6 +8,7 @@ import { randomUUID } from "node:crypto";
 import { renderMemePNGFromTemplate } from "@/renderer/renderMemeTemplate";
 import { renderMemeMP4FromTemplate } from "@/renderer/renderMemeVideoTemplate";
 import { getActiveImportantDay } from "@/lib/memes/variants/get-active-important-day";
+import { runVerticalSlideshowGeneration } from "@/lib/memes/slideshow/generate-vertical-slideshow";
 
 export async function generateMockMemes(
   promotionContext?: string,
@@ -16,7 +17,7 @@ export async function generateMockMemes(
     excludeExistingUserTemplates?: boolean;
     forcedTemplateId?: string;
     forceStandardVariant?: boolean;
-    outputFormat?: "square_image" | "square_video";
+    outputFormat?: "square_image" | "square_video" | "vertical_slideshow";
   }
 ): Promise<{ error: string | null }> {
   try {
@@ -255,6 +256,17 @@ export async function generateMockMemes(
     process.env.SUPABASE_SERVICE_ROLE_KEY,
     { auth: { persistSession: false } }
   );
+
+  if (outputFormat === "vertical_slideshow") {
+    return runVerticalSlideshowGeneration({
+      supabase,
+      adminSupabase,
+      user,
+      profile,
+      promotionContext,
+      options,
+    });
+  }
 
   const { data: templatesRaw, error: templatesError } = await adminSupabase
     .from("meme_templates")
@@ -942,6 +954,11 @@ ${getTemplateTypeRetryShape()}`;
     return rows
       .filter((t: any) => isActive(t))
       .filter((t: any) => {
+        const family = String(t.template_family ?? "square_meme").trim();
+        if (family === "vertical_slideshow") return false;
+        return true;
+      })
+      .filter((t: any) => {
         const assetType = String(t.asset_type ?? "image").trim().toLowerCase();
         return assetType === targetAssetType;
       })
@@ -1024,7 +1041,7 @@ ${getTemplateTypeRetryShape()}`;
     templates: CompatibleTemplate[],
     excludedTemplateIds: Set<string>
   ): CompatibleTemplate[] => {
-    const slugOrder = new Map(
+    const slugOrder = new Map<string, number>(
       ORDERED_TEMPLATE_SLUG_POOL.map((slug, index) => [slug, index])
     );
 
@@ -1538,7 +1555,6 @@ ${isThreeSlot
         allowShortLabelMode: allowShortLabelValidationMode(template),
         templateSlug: template.slug,
         templateType: template.template_type,
-        assetType: template.asset_type,
       }
     );
     const rawBottom = slot2Value;
@@ -2022,7 +2038,7 @@ ${isThreeSlot
 }
 
 export async function generateMoreMemes(
-  outputFormat?: "square_image" | "square_video"
+  outputFormat?: "square_image" | "square_video" | "vertical_slideshow"
 ): Promise<{ error: string | null }> {
   const result = await generateMockMemes(undefined, {
     limit: 3,
@@ -2036,7 +2052,7 @@ export async function generateMoreMemes(
 
 export async function regenerateTemplateIdea(
   templateId: string,
-  outputFormat?: "square_image" | "square_video"
+  outputFormat?: "square_image" | "square_video" | "vertical_slideshow"
 ): Promise<{ error: string | null }> {
   const result = await generateMockMemes(undefined, {
     limit: 1,

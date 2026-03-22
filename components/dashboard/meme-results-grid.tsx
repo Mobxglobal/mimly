@@ -63,6 +63,40 @@ function isVideoMemeVariant(variant: MemeRow): boolean {
   return isVideoAssetUrl(variant.image_url);
 }
 
+type SlideshowSlidePreview = {
+  index: number;
+  role: string;
+  image_url: string;
+  text: string;
+  layout_variant: string;
+};
+
+function getSlideshowSlides(variant: MemeRow): SlideshowSlidePreview[] | null {
+  const raw = variant.variant_metadata;
+  if (!raw || typeof raw !== "object") return null;
+  const m = raw as Record<string, unknown>;
+  if (m.media_type !== "slideshow" || m.output_format !== "vertical_slideshow") {
+    return null;
+  }
+  const slides = m.slides;
+  if (!Array.isArray(slides)) return null;
+  const out: SlideshowSlidePreview[] = [];
+  for (const s of slides) {
+    if (!s || typeof s !== "object") continue;
+    const o = s as Record<string, unknown>;
+    const url = String(o.image_url ?? "").trim();
+    if (!url) continue;
+    out.push({
+      index: Number(o.index ?? 0),
+      role: String(o.role ?? ""),
+      image_url: url,
+      text: String(o.text ?? ""),
+      layout_variant: String(o.layout_variant ?? ""),
+    });
+  }
+  return out.length ? [...out].sort((a, b) => a.index - b.index) : null;
+}
+
 type IdeaGroup = {
   key: string;
   ideaGroupId: string | null;
@@ -260,6 +294,7 @@ function MemeTemplateCard({
   const topText = selectedVariant.top_text ?? "";
   const bottomText = selectedVariant.bottom_text ?? "";
   const postCaption = getDisplayPostCaption(selectedVariant);
+  const slideshowSlides = getSlideshowSlides(selectedVariant);
   const hasImage = Boolean(selectedVariant.image_url);
   const isVideoAsset = isVideoMemeVariant(selectedVariant);
   const templateHasPromoIdea = group.ideaGroups.some((ideaGroup) =>
@@ -284,9 +319,14 @@ function MemeTemplateCard({
 
   function handleMoreIdeas() {
     if (!group.templateId) return;
-    const outputFormat: "square_image" | "square_video" = isVideoAsset
-      ? "square_video"
-      : "square_image";
+    const outputFormat:
+      | "square_image"
+      | "square_video"
+      | "vertical_slideshow" = slideshowSlides?.length
+      ? "vertical_slideshow"
+      : isVideoAsset
+        ? "square_video"
+        : "square_image";
 
     startRegeneration(async () => {
       const result = await regenerateTemplateIdea(
@@ -315,10 +355,39 @@ function MemeTemplateCard({
       }`}
     >
       <div
-        className={`relative aspect-square w-full bg-gradient-to-br ${accent} ${hasImage ? "p-0" : "p-5"}`}
+        className={`relative w-full bg-gradient-to-br ${accent} ${
+          hasImage || (slideshowSlides && slideshowSlides.length > 0) ? "p-0" : "p-5"
+        } ${
+          slideshowSlides && slideshowSlides.length > 0
+            ? "aspect-[9/16] max-h-[min(560px,72vh)] mx-auto max-w-[min(100%,320px)]"
+            : "aspect-square"
+        }`}
       >
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.08),transparent_26%)]" />
-        {hasImage &&
+        {slideshowSlides && slideshowSlides.length > 0 ? (
+          <div className="absolute inset-0 z-[1] flex snap-x snap-mandatory gap-2 overflow-x-auto overflow-y-hidden bg-black/30 p-2 [scrollbar-width:thin]">
+            {slideshowSlides.map((s) => (
+              <div
+                key={`${selectedVariant.id}-${s.index}-${s.image_url}`}
+                className="relative h-full min-w-full shrink-0 snap-center overflow-hidden rounded-2xl border border-white/15 shadow-lg"
+              >
+                <img
+                  src={s.image_url}
+                  alt={`${s.role}: ${s.text}`}
+                  className="h-full w-full object-cover"
+                />
+                <div className="pointer-events-none absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-3 pt-8">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-indigo-200/90">
+                    {s.role} · {s.layout_variant}
+                  </p>
+                  <p className="mt-1 line-clamp-3 text-xs leading-snug text-white">{s.text}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : null}
+        {!slideshowSlides?.length &&
+          hasImage &&
           (isVideoAsset ? (
             <video
               ref={videoRef}
@@ -339,7 +408,7 @@ function MemeTemplateCard({
               className="absolute inset-0 z-[1] h-full w-full object-cover"
             />
           ))}
-        {!hasImage && (
+        {!hasImage && !slideshowSlides?.length && (
           <div className="relative z-10 flex h-full flex-col justify-between">
             <div className="flex items-start justify-between gap-3">
               <span className="rounded-full border border-white/10 bg-black/20 px-2.5 py-1 text-[11px] font-medium uppercase tracking-[0.14em] text-stone-300">
@@ -363,11 +432,13 @@ function MemeTemplateCard({
           <div className="min-w-0">
             <h2 className="truncate text-sm font-semibold text-white">{title}</h2>
             <p className="mt-1 text-xs text-stone-300">
-              {selectedVariant.image_url
-                ? isVideoAsset
-                  ? "Video ready"
-                  : "Image ready"
-                : "1080 x 1080 meme export"}
+              {slideshowSlides?.length
+                ? `Slideshow · ${slideshowSlides.length} slides · 1080×1920 PNG`
+                : selectedVariant.image_url
+                  ? isVideoAsset
+                    ? "Video ready"
+                    : "Image ready"
+                  : "1080 x 1080 meme export"}
             </p>
             {templateHasPromoIdea && (
               <p
@@ -381,8 +452,10 @@ function MemeTemplateCard({
               </p>
             )}
             <div className="mt-2 flex items-center gap-2">
-              <span className="text-[11px] leading-relaxed text-stone-500">1080×1080</span>
-              <PlatformIconsRow className="gap-1.5" />
+              <span className="text-[11px] leading-relaxed text-stone-500">
+                {slideshowSlides?.length ? "1080×1920 slides" : "1080×1080"}
+              </span>
+              {!slideshowSlides?.length && <PlatformIconsRow className="gap-1.5" />}
             </div>
           </div>
           {selectedIdeaGroup.variants.length > 1 && (
@@ -471,7 +544,13 @@ function MemeTemplateCard({
         </div>
 
         <div className="mt-4 flex flex-col gap-3">
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div
+            className={
+              slideshowSlides?.length
+                ? "flex flex-col gap-3"
+                : "grid gap-3 sm:grid-cols-2"
+            }
+          >
             <button
               type="button"
               onClick={handleMoreIdeas}
@@ -481,18 +560,34 @@ function MemeTemplateCard({
               {isRegenerating && <LoaderCircle className="h-4 w-4 animate-spin" />}
               {isRegenerating ? "Generating..." : "More ideas"}
             </button>
-            <DownloadMemeButton
-              imageUrl={selectedVariant.image_url ?? null}
-              fallbackHref={getDownloadHref(title, topText, bottomText)}
-              downloadFilename={
-                selectedVariant.image_url
-                  ? `${selectedVariant.id}.${isVideoAsset ? "mp4" : "png"}`
-                  : `${selectedVariant.id}.svg`
-              }
-              className="cta-funky inline-flex items-center justify-center rounded-xl bg-indigo-500 px-4 py-2.5 text-sm font-medium text-white shadow-[0_10px_30px_rgba(99,102,241,0.35)] hover:bg-indigo-400"
-            >
-              Download meme
-            </DownloadMemeButton>
+            {slideshowSlides?.length ? (
+              <div className="flex flex-wrap gap-2">
+                {slideshowSlides.map((s) => (
+                  <DownloadMemeButton
+                    key={`dl-${s.index}`}
+                    imageUrl={s.image_url}
+                    fallbackHref={s.image_url}
+                    downloadFilename={`${selectedVariant.id}-slide-${s.index + 1}.png`}
+                    className="inline-flex items-center justify-center rounded-xl border border-indigo-400/30 bg-indigo-500/20 px-3 py-2 text-xs font-medium text-indigo-100 hover:bg-indigo-500/30"
+                  >
+                    Slide {s.index + 1}
+                  </DownloadMemeButton>
+                ))}
+              </div>
+            ) : (
+              <DownloadMemeButton
+                imageUrl={selectedVariant.image_url ?? null}
+                fallbackHref={getDownloadHref(title, topText, bottomText)}
+                downloadFilename={
+                  selectedVariant.image_url
+                    ? `${selectedVariant.id}.${isVideoAsset ? "mp4" : "png"}`
+                    : `${selectedVariant.id}.svg`
+                }
+                className="cta-funky inline-flex items-center justify-center rounded-xl bg-indigo-500 px-4 py-2.5 text-sm font-medium text-white shadow-[0_10px_30px_rgba(99,102,241,0.35)] hover:bg-indigo-400"
+              >
+                Download meme
+              </DownloadMemeButton>
+            )}
           </div>
           {isRegenerating && (
             <p className="text-xs text-stone-500">Generating a new idea for this template...</p>

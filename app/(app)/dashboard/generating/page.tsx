@@ -7,7 +7,7 @@ import { DashboardShell } from "@/components/dashboard/dashboard-shell";
 import { generateMockMemes } from "@/lib/actions/memes";
 
 const inflightGenerationRuns = new Map<string, Promise<{ error: string | null }>>();
-type OutputFormat = "square_image" | "square_video" | "vertical_short";
+type OutputFormat = "square_image" | "square_video" | "vertical_slideshow";
 
 export default function GeneratingPage() {
   const router = useRouter();
@@ -18,8 +18,8 @@ export default function GeneratingPage() {
   const format: OutputFormat =
     formatParam === "square_video"
       ? "square_video"
-      : formatParam === "vertical_short"
-        ? "vertical_short"
+      : formatParam === "vertical_slideshow"
+        ? "vertical_slideshow"
         : "square_image";
   const hasPromotion = Boolean(promotion?.trim());
   const generationKey = `format:${format}|promotion:${promotion?.trim() ?? "__none__"}`;
@@ -31,7 +31,9 @@ export default function GeneratingPage() {
       const existingRun = inflightGenerationRuns.get(generationKey);
       const runPromise =
         existingRun ??
-        generateMockMemes(promotion ?? undefined, { outputFormat: format }).finally(() => {
+        generateMockMemes(promotion ?? undefined, {
+          outputFormat: format,
+        }).finally(() => {
           inflightGenerationRuns.delete(generationKey);
         });
 
@@ -89,7 +91,9 @@ export default function GeneratingPage() {
           <p className="mt-8 text-xs text-stone-500">
             {hasPromotion
               ? "Using your promotion where it improves the meme."
-              : `Generating a ${format === "square_video" ? "video" : "brand-led"} set for you now.`}
+              : format === "vertical_slideshow"
+                ? "Generating your vertical slideshow set (3–5 slides) now."
+                : `Generating a ${format === "square_video" ? "video" : "brand-led"} set for you now.`}
           </p>
         </div>
       </div>

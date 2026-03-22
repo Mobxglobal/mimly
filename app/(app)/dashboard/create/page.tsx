@@ -26,12 +26,12 @@ const FORMAT_OPTIONS = [
     Icon: Clapperboard,
   },
   {
-    id: "vertical_short",
-    label: "Vertical Short",
+    id: "vertical_slideshow",
+    label: "Vertical Slideshow",
     subtitle: "1080×1920",
-    helper: "Reels / TikTok",
+    helper: "3–5 PNG slides (curated images)",
     showPlatformIcons: false,
-    available: false,
+    available: true,
     Icon: Smartphone,
   },
 ] as const;
@@ -61,7 +61,7 @@ export default function CreatePage() {
               <div>
                 <p className="text-sm font-medium text-white">Choose format</p>
                 <p className="mt-1 text-xs text-stone-500">
-                  Square Image and Square Video are live now.
+                  Square Image, Square Video, and Vertical Slideshow are live now.
                 </p>
               </div>
             </div>

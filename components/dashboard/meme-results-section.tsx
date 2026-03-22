@@ -19,24 +19,36 @@ type MemeRow = {
   batch_number: number | null;
 };
 
+type ContinuationFormat = "square_image" | "square_video" | "vertical_slideshow";
+
 type Props = {
   memes: MemeRow[];
-  defaultContinuationFormat: "square_image" | "square_video";
+  defaultContinuationFormat: ContinuationFormat;
   onGenerateMore: () => void;
   onGenerateMoreImages: () => void;
   onGenerateMoreVideos: () => void;
+  onGenerateMoreSlideshows: () => void;
 };
+
+function defaultFormatLabel(f: ContinuationFormat): string {
+  if (f === "square_video") return "videos";
+  if (f === "vertical_slideshow") return "slideshows";
+  return "images";
+}
 
 function GenerateMoreButton({
   defaultContinuationFormat,
   onGenerateMoreImages,
   onGenerateMoreVideos,
+  onGenerateMoreSlideshows,
 }: {
-  defaultContinuationFormat: "square_image" | "square_video";
+  defaultContinuationFormat: ContinuationFormat;
   onGenerateMoreImages: () => void;
   onGenerateMoreVideos: () => void;
+  onGenerateMoreSlideshows: () => void;
 }) {
   const { pending } = useFormStatus();
+  const label = defaultFormatLabel(defaultContinuationFormat);
 
   return (
     <div className="relative inline-flex items-stretch rounded-xl shadow-[0_10px_30px_rgba(99,102,241,0.35)]">
@@ -51,16 +63,12 @@ function GenerateMoreButton({
       <details className="group">
         <summary
           className="cta-funky inline-flex h-full cursor-pointer items-center justify-center rounded-r-xl border-l border-indigo-300/40 bg-indigo-500 px-2.5 text-sm text-white transition hover:bg-indigo-400"
-          aria-label={`Generate more options (default: ${
-            defaultContinuationFormat === "square_video" ? "videos" : "images"
-          })`}
-          title={`Default: ${
-            defaultContinuationFormat === "square_video" ? "videos" : "images"
-          }`}
+          aria-label={`Generate more options (default: ${label})`}
+          title={`Default: ${label}`}
         >
           ▾
         </summary>
-        <div className="absolute right-0 top-[calc(100%+8px)] z-20 min-w-48 rounded-xl border border-white/10 bg-black/90 p-1 shadow-xl backdrop-blur">
+        <div className="absolute right-0 top-[calc(100%+8px)] z-20 min-w-52 rounded-xl border border-white/10 bg-black/90 p-1 shadow-xl backdrop-blur">
           <button
             type="submit"
             formAction={onGenerateMoreImages}
@@ -76,6 +84,14 @@ function GenerateMoreButton({
             className="block w-full rounded-lg px-3 py-2 text-left text-sm text-stone-200 transition hover:bg-white/10 disabled:opacity-70"
           >
             Generate more videos
+          </button>
+          <button
+            type="submit"
+            formAction={onGenerateMoreSlideshows}
+            disabled={pending}
+            className="block w-full rounded-lg px-3 py-2 text-left text-sm text-stone-200 transition hover:bg-white/10 disabled:opacity-70"
+          >
+            Generate more slideshows
           </button>
         </div>
       </details>
@@ -119,6 +135,7 @@ export function MemeResultsSection({
   onGenerateMore,
   onGenerateMoreImages,
   onGenerateMoreVideos,
+  onGenerateMoreSlideshows,
 }: Props) {
   return (
     <form action={onGenerateMore}>
@@ -139,6 +156,7 @@ export function MemeResultsSection({
             defaultContinuationFormat={defaultContinuationFormat}
             onGenerateMoreImages={onGenerateMoreImages}
             onGenerateMoreVideos={onGenerateMoreVideos}
+            onGenerateMoreSlideshows={onGenerateMoreSlideshows}
           />
         </div>
       </div>
