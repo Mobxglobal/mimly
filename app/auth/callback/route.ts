@@ -1,127 +1,23 @@
 import { createClient } from "@/lib/supabase/server";
-import {
-  normalizeGenerationMode,
-  type GenerationMode,
-} from "@/lib/onboarding/generation-mode";
-import { inferEnglishVariantFromOnboarding } from "@/lib/onboarding/english-variant";
+import { linkAnonymousWorkspacesToUser } from "@/lib/workspace/auth";
+import { getOrCreateDefaultWorkspaceForUser } from "@/lib/workspace/default-workspace";
 import { NextResponse } from "next/server";
 
-type DraftProfile = {
-  email: string;
-  brand_name: string;
-  what_you_do: string;
-  audience: string;
-  country: string;
-  generation_mode?: GenerationMode | null;
-};
-
-type CleanResult = {
-  clean: DraftProfile;
-  needs_clarification: boolean;
-  issues: string[];
-};
-
-function decodeDraft(draftB64: string): DraftProfile | null {
-  try {
-    const json = decodeURIComponent(
-      Array.prototype.map
-        .call(atob(draftB64), (c: string) => {
-          return "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2);
-        })
-        .join("")
-    );
-    const parsed = JSON.parse(json) as Partial<DraftProfile>;
-    return {
-      email: String(parsed.email ?? "").trim(),
-      brand_name: String(parsed.brand_name ?? "").trim(),
-      what_you_do: String(parsed.what_you_do ?? "").trim(),
-      audience: String(parsed.audience ?? "").trim(),
-      country: String(parsed.country ?? "").trim(),
-      generation_mode: normalizeGenerationMode(parsed.generation_mode),
-    };
-  } catch {
-    return null;
-  }
-}
-
-function basicIssues(draft: DraftProfile): string[] {
-  const issues: string[] = [];
-  const what = draft.what_you_do.toLowerCase();
-  const aud = draft.audience.toLowerCase();
-
-  if (draft.what_you_do.trim().length < 8) issues.push("What you sell is too short.");
-  if (what.includes("idk") || what.includes("not sure")) issues.push("What you sell is unclear.");
-
-  if (draft.audience.trim().length < 8) issues.push("Audience is too short.");
-  if (aud.includes("everyone") || aud.includes("anyone")) issues.push("Audience is too broad.");
-  if (aud.includes("all") && aud.includes("people")) issues.push("Audience is too broad.");
-
-  return issues;
-}
-
-async function cleanWithOpenAI(draft: DraftProfile): Promise<CleanResult> {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) {
-    const issues = basicIssues(draft);
-    return { clean: draft, needs_clarification: issues.length > 0, issues };
-  }
-
-  const prompt = `You are cleaning user onboarding inputs for a content generator.\n\nRules:\n- Do NOT invent facts. Only rewrite/normalize what the user wrote.\n- Fix obvious typos and make wording concise.\n- If either field is vague (e.g. audience = \"everyone\"), set needs_clarification=true and add specific issues.\n- Output JSON only.\n\nInput JSON:\n${JSON.stringify(draft)}\n\nReturn JSON with:\n{\n  \"clean\": {\"email\": string, \"brand_name\": string, \"what_you_do\": string, \"audience\": string, \"country\": string},\n  \"needs_clarification\": boolean,\n  \"issues\": string[]\n}`;
-
-  const res = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: "gpt-4o-mini",
-      temperature: 0.2,
-      response_format: { type: "json_object" },
-      messages: [
-        { role: "system", content: "Return only valid JSON. No markdown." },
-        { role: "user", content: prompt },
-      ],
-    }),
-  });
-
-  if (!res.ok) {
-    const issues = basicIssues(draft);
-    return { clean: draft, needs_clarification: issues.length > 0, issues };
-  }
-
-  const json = await res.json();
-  const content = json?.choices?.[0]?.message?.content ?? "{}";
-  const parsed = JSON.parse(content) as Partial<CleanResult>;
-
-  const clean = (parsed.clean ?? {}) as Partial<DraftProfile>;
-  const normalized: DraftProfile = {
-    email: String(clean.email ?? draft.email).trim(),
-    brand_name: String(clean.brand_name ?? draft.brand_name).trim(),
-    what_you_do: String(clean.what_you_do ?? draft.what_you_do).trim(),
-    audience: String(clean.audience ?? draft.audience).trim(),
-    country: String(clean.country ?? draft.country).trim(),
-    generation_mode:
-      normalizeGenerationMode(draft.generation_mode) ?? "on_demand",
-  };
-
-  const issues = Array.isArray(parsed.issues)
-    ? parsed.issues.map((s) => String(s)).filter(Boolean)
-    : basicIssues(normalized);
-
-  const needs = Boolean(parsed.needs_clarification) || issues.length > 0;
-
-  return { clean: normalized, needs_clarification: needs, issues };
+function isAllowedWorkspacePath(path: string): boolean {
+  return /^\/workspace\/[0-9a-f-]+(?:\/settings)?$/i.test(path);
 }
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const code = searchParams.get("code");
-  const next = searchParams.get("next") || "/dashboard";
-  const draftB64 = searchParams.get("draft");
+  const next = searchParams.get("next") || "/workspace";
 
-  const allowedNext = new Set(["/dashboard", "/onboarding/complete"]);
-  const nextPath = allowedNext.has(next) ? next : "/dashboard";
+  const nextPath =
+    next === "/dashboard" ||
+    next === "/workspace" ||
+    isAllowedWorkspacePath(next)
+      ? next
+      : "/workspace";
 
   if (code) {
     const supabase = await createClient();
@@ -130,156 +26,14 @@ export async function GET(request: Request) {
       // Re-create client after code exchange so subsequent queries
       // use the updated auth cookies/tokens.
       const supabaseAfter = await createClient();
-
-      let draft: DraftProfile | null = draftB64 ? decodeDraft(draftB64) : null;
-      let draftLoadError: string | null = null;
-
-      if (!draft) {
-        const {
-          data: { user },
-        } = await supabaseAfter.auth.getUser();
-        if (user?.email) {
-          const { data: row, error: rowError } = await supabaseAfter
-            .schema("public")
-            .from("onboarding_drafts")
-            .select("draft")
-            .eq("email", user.email.toLowerCase())
-            .single();
-
-          if (rowError) {
-            draftLoadError = rowError.message || rowError.code || "unknown";
-            console.error("[auth/callback] onboarding_drafts select failed", rowError);
-          }
-          if (row?.draft && typeof row.draft === "object") {
-            const d = row.draft as Record<string, unknown>;
-            draft = {
-              email: String(d.email ?? user.email ?? "").trim(),
-              brand_name: String(d.brand_name ?? "").trim(),
-              what_you_do: String(d.what_you_do ?? "").trim(),
-              audience: String(d.audience ?? "").trim(),
-              country: String(d.country ?? "").trim(),
-              generation_mode: normalizeGenerationMode(d.generation_mode),
-            };
-            await supabaseAfter
-              .schema("public")
-              .from("onboarding_drafts")
-              .delete()
-              .eq("email", user.email.toLowerCase());
-          } else if (typeof row?.draft === "string") {
-            // Some Supabase setups return jsonb values as strings.
-            // Your table view shows draft stored like: "{\"email\": ... }"
-            try {
-              const parsed = JSON.parse(row.draft) as Record<string, unknown>;
-              draft = {
-                email: String(parsed.email ?? user.email ?? "").trim(),
-                brand_name: String(parsed.brand_name ?? "").trim(),
-                what_you_do: String(parsed.what_you_do ?? "").trim(),
-                audience: String(parsed.audience ?? "").trim(),
-                country: String(parsed.country ?? "").trim(),
-                generation_mode: normalizeGenerationMode(parsed.generation_mode),
-              };
-              await supabaseAfter
-                .schema("public")
-                .from("onboarding_drafts")
-                .delete()
-                .eq("email", user.email.toLowerCase());
-            } catch {
-              // Fall through to fallback redirect below.
-            }
-          }
-        }
-      }
-
-      if (!draft) {
-        // If we couldn't load the saved onboarding draft (often due to RLS/policy issues),
-        // send the user back to manual onboarding so they can re-save.
-        const {
-          data: { user },
-        } = await supabaseAfter.auth.getUser();
-        if (user?.email) {
-          // Returning users may not have an onboarding draft row anymore (or it may fail
-          // to load). In that case, if we already have an onboarded profile, allow login.
-          const { data: existingProfile } = await supabaseAfter
-            .schema("public")
-            .from("profiles")
-            .select("onboarding_completed_at")
-            .eq("id", user.id)
-            .maybeSingle();
-
-          if (existingProfile?.onboarding_completed_at) {
-            return NextResponse.redirect(new URL(nextPath, request.url));
-          }
-
-          const params = new URLSearchParams();
-          params.set("review", "1");
-          params.set(
-            "issues",
-            draftLoadError
-              ? `Draft load failed: ${draftLoadError}`
-              : "We couldn't load your saved onboarding details. Please confirm and save again."
-          );
-          params.set("email", user.email);
-          return NextResponse.redirect(
-            new URL(`/onboarding/manual?${params.toString()}`, request.url)
-          );
-        }
-      }
-
-      if (draft) {
-        const cleaned = await cleanWithOpenAI(draft);
-        if (cleaned.needs_clarification) {
-          const params = new URLSearchParams();
-          params.set("review", "1");
-          params.set("issues", cleaned.issues.join(" "));
-          params.set("email", cleaned.clean.email);
-          params.set("brand_name", cleaned.clean.brand_name);
-          params.set("what_you_do", cleaned.clean.what_you_do);
-          params.set("audience", cleaned.clean.audience);
-          params.set("country", cleaned.clean.country);
-          const gm = normalizeGenerationMode(draft.generation_mode);
-          if (gm) params.set("generation_mode", gm);
-          return NextResponse.redirect(
-            new URL(`/onboarding/manual?${params.toString()}`, request.url)
-          );
-        }
-
-        const {
-          data: { user },
-        } = await supabaseAfter.auth.getUser();
-        if (user) {
-          const { error: upsertError } = await supabaseAfter
-            .schema("public")
-            .from("profiles")
-            .upsert(
-              {
-                id: user.id,
-                email: cleaned.clean.email || null,
-                brand_name: cleaned.clean.brand_name || null,
-                what_you_do: cleaned.clean.what_you_do || null,
-                audience: cleaned.clean.audience || null,
-                country: cleaned.clean.country || null,
-                english_variant: inferEnglishVariantFromOnboarding({
-                  country: cleaned.clean.country,
-                }),
-                generation_mode:
-                  normalizeGenerationMode(cleaned.clean.generation_mode) ??
-                  "on_demand",
-                onboarding_completed_at: new Date().toISOString(),
-                updated_at: new Date().toISOString(),
-              },
-              { onConflict: "id" }
-            );
-
-          if (upsertError) {
-            console.error("[auth/callback] profiles upsert failed", upsertError);
-            const params = new URLSearchParams();
-            params.set("review", "1");
-            params.set("issues", `profiles upsert failed: ${upsertError.message}`);
-            params.set("email", cleaned.clean.email || user.email || "");
-            return NextResponse.redirect(
-              new URL(`/onboarding/manual?${params.toString()}`, request.url)
-            );
-          }
+      const {
+        data: { user: linkedUser },
+      } = await supabaseAfter.auth.getUser();
+      if (linkedUser?.id) {
+        await linkAnonymousWorkspacesToUser(linkedUser.id);
+        if (nextPath === "/dashboard" || nextPath === "/workspace") {
+          const workspaceId = await getOrCreateDefaultWorkspaceForUser(linkedUser.id);
+          return NextResponse.redirect(new URL(`/workspace/${workspaceId}`, request.url));
         }
       }
 

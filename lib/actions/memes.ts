@@ -1,8 +1,7 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { getProfile } from "@/lib/actions/profile";
+import { getProfile, type Profile } from "@/lib/actions/profile";
 import {
   englishVariantPromptInstruction,
   resolveEffectiveEnglishVariant,
@@ -28,17 +27,50 @@ export async function generateMockMemes(
     generationRunIdOverride?: string;
     /** Tags rows for content pack preview / unlock flow. */
     contentPack?: { batch: 1 | 2 | 3 };
+    /** Workspace bridge: allows prompt-first flow to reuse this pipeline pre-auth. */
+    workspaceContext?: {
+      allowAnonymousWrite?: boolean;
+      actorUserId?: string | null;
+      storagePathNamespace?: string | null;
+      workspaceId?: string | null;
+      profileOverride?: Partial<Profile> | null;
+    };
   }
-): Promise<{ error: string | null }> {
+): Promise<{ error: string | null; generationRunId?: string }> {
   try {
   const supabase = await createClient();
 
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) return { error: "Not authenticated" };
+  const workspaceContext = options?.workspaceContext;
+  if (!workspaceContext) {
+    console.error("[legacy-generation] generateMockMemes called without workspace context");
+    return { error: "Legacy generation path no longer supported" };
+  }
+  const actorUserId = workspaceContext?.actorUserId ?? user?.id ?? null;
+  const allowAnonymousWrite = Boolean(workspaceContext?.allowAnonymousWrite);
+  if (!actorUserId && !allowAnonymousWrite) return { error: "Not authenticated" };
 
-  const profile = await getProfile();
+  const profileOverride = workspaceContext?.profileOverride ?? null;
+  const profile = profileOverride
+    ? ({
+        id: profileOverride.id ?? actorUserId ?? randomUUID(),
+        email: profileOverride.email ?? null,
+        brand_name: profileOverride.brand_name ?? null,
+        what_you_do: profileOverride.what_you_do ?? null,
+        audience: profileOverride.audience ?? null,
+        country: profileOverride.country ?? null,
+        english_variant: profileOverride.english_variant ?? "en-GB",
+        generation_mode: profileOverride.generation_mode ?? null,
+        content_pack_unlocked_at: profileOverride.content_pack_unlocked_at ?? null,
+        content_pack_last_completed_batch:
+          profileOverride.content_pack_last_completed_batch ?? 0,
+        onboarding_completed_at: profileOverride.onboarding_completed_at ?? null,
+        created_at: profileOverride.created_at ?? new Date().toISOString(),
+        updated_at: profileOverride.updated_at ?? new Date().toISOString(),
+      } satisfies Profile)
+    : await getProfile();
   if (!profile) {
     return { error: "Missing profile. Please complete onboarding again." };
   }
@@ -46,23 +78,7 @@ export async function generateMockMemes(
   const PROMOTION_MAX_CHARS = 280;
   const POST_CAPTION_MAX_CHARS = 220;
   const TITLE_MAX_CHARS = 45;
-  const INITIAL_TEMPLATE_BATCH_SIZE = 3;
-  const ORDERED_TEMPLATE_SLUG_POOL = [
-    "square-text-v1",
-    "victorian-nobody-me",
-    "drake",
-    "woman-yelling-cat",
-    "green-mile-tired-boss",
-    "two-buttons",
-    "disaster-girl",
-    "leo-cheers",
-    "pov-anne-hathaway",
-    "this-is-fine",
-    "surprised-pikachu",
-    "man-standing-up",
-    "need-my-fix",
-    "beetlejuice-surprised",
-  ] as const;
+  const INITIAL_TEMPLATE_BATCH_SIZE = 1;
 
   type PromoMode = "none" | "light" | "direct";
   type AssignedVariant = "standard" | "promo" | "important_day";
@@ -269,6 +285,12 @@ export async function generateMockMemes(
   );
 
   if (outputFormat === "vertical_slideshow") {
+    if (!user) {
+      return {
+        error:
+          "Vertical slideshow generation requires authentication in this build.",
+      };
+    }
     return runVerticalSlideshowGeneration({
       supabase,
       adminSupabase,
@@ -276,12 +298,15 @@ export async function generateMockMemes(
       profile,
       promotionContext,
       options: {
-        limit: options?.limit ?? 3,
+        limit: options?.limit ?? 1,
         excludeExistingUserTemplates: options?.excludeExistingUserTemplates,
         forcedTemplateId: options?.forcedTemplateId,
         forceStandardVariant: options?.forceStandardVariant,
         generationRunIdOverride: options?.generationRunIdOverride,
         contentPack: options?.contentPack,
+        workspaceContext: {
+          workspaceId: workspaceContext?.workspaceId ?? null,
+        },
       },
     });
   }
@@ -1139,22 +1164,25 @@ ${getTemplateTypeRetryShape()}`;
       .filter((t) => t.template_id && t.template_name && t.slug && t.slot_1_role);
   };
 
-  const buildOrderedTemplatePool = (
-    templates: CompatibleTemplate[],
-    excludedTemplateIds: Set<string>
+  const pickRandomTemplates = (
+    pool: CompatibleTemplate[],
+    count: number,
+    avoidTemplateIds: Set<string>
   ): CompatibleTemplate[] => {
-    const slugOrder = new Map<string, number>(
-      ORDERED_TEMPLATE_SLUG_POOL.map((slug, index) => [slug, index])
-    );
-
-    return [...templates]
-      .filter((template) => !excludedTemplateIds.has(template.template_id))
-      .sort((a, b) => {
-        const aIndex = slugOrder.get(a.slug) ?? Number.MAX_SAFE_INTEGER;
-        const bIndex = slugOrder.get(b.slug) ?? Number.MAX_SAFE_INTEGER;
-        if (aIndex !== bIndex) return aIndex - bIndex;
-        return a.slug.localeCompare(b.slug);
-      });
+    if (pool.length === 0 || count <= 0) return [];
+    const available = [...pool];
+    const selected: CompatibleTemplate[] = [];
+    while (available.length > 0 && selected.length < count) {
+      const preferred = available.filter((t) => !avoidTemplateIds.has(t.template_id));
+      const source = preferred.length > 0 ? preferred : available;
+      const chosen = source[Math.floor(Math.random() * source.length)];
+      selected.push(chosen);
+      const chosenId = chosen.template_id;
+      const next = available.filter((t) => t.template_id !== chosenId);
+      available.length = 0;
+      available.push(...next);
+    }
+    return selected;
   };
 
   const compatibleTemplates = loadCompatibleTemplates(templates);
@@ -1172,11 +1200,15 @@ ${getTemplateTypeRetryShape()}`;
   }
 
   const excludedTemplateIds = new Set<string>();
-  if (options?.excludeExistingUserTemplates) {
+  if (
+    options?.excludeExistingUserTemplates &&
+    actorUserId &&
+    outputFormat !== "square_text"
+  ) {
     const { data: existingRows, error: existingRowsError } = await supabase
       .from("generated_memes")
       .select("template_id")
-      .eq("user_id", user.id)
+      .eq("user_id", actorUserId)
       .not("template_id", "is", null);
 
     if (existingRowsError) {
@@ -1193,12 +1225,12 @@ ${getTemplateTypeRetryShape()}`;
   }
 
   const attemptedTemplateIds = new Set<string>(excludedTemplateIds);
-  const orderedTemplatePool = forcedTemplateId
+  const templatePool = forcedTemplateId
     ? compatibleTemplates.filter(
         (template) =>
           template.template_id === forcedTemplateId || template.slug === forcedTemplateId
       )
-    : buildOrderedTemplatePool(compatibleTemplates, attemptedTemplateIds);
+    : compatibleTemplates.filter((template) => !attemptedTemplateIds.has(template.template_id));
 
   console.log("[meme-gen] Excluded template ids", {
     excludeExistingUserTemplates: Boolean(options?.excludeExistingUserTemplates),
@@ -1206,19 +1238,19 @@ ${getTemplateTypeRetryShape()}`;
     excludedTemplateIds: [...excludedTemplateIds],
   });
 
-  console.log(
-    "[meme-gen] Ordered template pool",
-    orderedTemplatePool.map((template, index) => ({
+  console.log("[meme-gen] Template pool", {
+    size: templatePool.length,
+    templates: templatePool.map((template, index) => ({
       poolIndex: index + 1,
       template: template.slug,
       template_id: template.template_id,
       template_type: template.template_type,
       meme_mechanic: template.meme_mechanic || null,
       emotion_style: template.emotion_style || null,
-    }))
-  );
+    })),
+  });
 
-  if (orderedTemplatePool.length === 0) {
+  if (templatePool.length === 0) {
     return {
       error: forcedTemplateId
         ? "Template not found for regeneration."
@@ -1226,7 +1258,25 @@ ${getTemplateTypeRetryShape()}`;
     };
   }
 
-  const selectedTemplatesForBatch = orderedTemplatePool.slice(0, batchSize);
+  const recentWorkspaceTemplateIds = new Set<string>();
+  if (workspaceContext?.workspaceId) {
+    const { data: recentWorkspaceRows } = await adminSupabase
+      .from("generated_memes")
+      .select("template_id, variant_metadata")
+      .contains("variant_metadata", { workspace_id: workspaceContext.workspaceId })
+      .order("created_at", { ascending: false })
+      .limit(6);
+    for (const row of recentWorkspaceRows ?? []) {
+      const templateId = String((row as any).template_id ?? "").trim();
+      if (templateId) recentWorkspaceTemplateIds.add(templateId);
+    }
+  }
+
+  const selectedTemplatesForBatch = pickRandomTemplates(
+    templatePool,
+    batchSize,
+    outputFormat === "square_text" ? recentWorkspaceTemplateIds : recentWorkspaceTemplateIds
+  );
   const getPromoSuitabilityScore = (template: CompatibleTemplate): number => {
     const fit = template.promotion_fit.toLowerCase().trim();
     if (!fit) return 0;
@@ -1372,7 +1422,7 @@ ${getTemplateTypeRetryShape()}`;
 
   console.log("[meme-gen] Starting generation loop", {
     generationRunId: generationContext.generationRunId,
-    orderedTemplatePoolSize: orderedTemplatePool.length,
+    templatePoolSize: templatePool.length,
     targetInsertCount: batchSize,
     selectedTemplateCount: selectedTemplatesForBatch.length,
   });
@@ -1817,11 +1867,11 @@ ${isThreeSlot
 
   for (
     let poolIndex = 0;
-    poolIndex < orderedTemplatePool.length &&
+    poolIndex < selectedTemplatesForBatch.length &&
     insertedCount < batchSize;
     poolIndex++
   ) {
-    const template = orderedTemplatePool[poolIndex];
+    const template = selectedTemplatesForBatch[poolIndex];
     attemptedTemplateIds.add(template.template_id);
     attemptedCount++;
     const maxAttempts = 3;
@@ -1889,7 +1939,7 @@ ${isThreeSlot
       variantContext,
     });
 
-    console.log("[meme-gen] Attempting template from ordered pool", {
+  console.log("[meme-gen] Attempting template from pool", {
       poolIndex: poolIndex + 1,
       template: template.slug,
       templateType: template.template_type,
@@ -1940,7 +1990,7 @@ ${isThreeSlot
       });
       console.log("[meme-gen] Fallback replacement queued", {
         failedTemplate: template.slug,
-        nextTemplate: orderedTemplatePool[poolIndex + 1]?.slug ?? null,
+        nextTemplate: selectedTemplatesForBatch[poolIndex + 1]?.slug ?? null,
         insertedCount,
         failedCount,
       });
@@ -1957,7 +2007,7 @@ ${isThreeSlot
           slot2MaxLines: template.isTwoSlot ? template.slot_2_max_lines : 0,
         });
 
-        const objectPath = `generated_memes/${user.id}/${template.template_id}/${randomUUID()}.png`;
+        const objectPath = `generated_memes/${workspaceContext?.storagePathNamespace ?? actorUserId ?? "anonymous"}/${template.template_id}/${randomUUID()}.png`;
         const { error: uploadError } = await adminSupabase.storage
           .from(generatedMemeBucket)
           .upload(objectPath, pngBuffer, {
@@ -1997,7 +2047,7 @@ ${isThreeSlot
           topText: generated.top_text,
         });
 
-        const objectPath = `generated_memes/${user.id}/${template.template_id}/${randomUUID()}.mp4`;
+        const objectPath = `generated_memes/${workspaceContext?.storagePathNamespace ?? actorUserId ?? "anonymous"}/${template.template_id}/${randomUUID()}.mp4`;
         const { error: uploadError } = await adminSupabase.storage
           .from(generatedMemeBucket)
           .upload(objectPath, mp4Buffer, {
@@ -2039,7 +2089,7 @@ ${isThreeSlot
             slot_3_text: generated.slot_3_text ?? undefined,
           });
 
-          const objectPath = `generated_memes/${user.id}/${template.template_id}/${randomUUID()}.png`;
+          const objectPath = `generated_memes/${workspaceContext?.storagePathNamespace ?? actorUserId ?? "anonymous"}/${template.template_id}/${randomUUID()}.png`;
 
           const { error: uploadError } = await adminSupabase.storage
             .from(generatedMemeBucket)
@@ -2079,9 +2129,25 @@ ${isThreeSlot
             content_pack_run_id: options.generationRunIdOverride,
           }
         : null;
+    const workspaceMeta = workspaceContext?.workspaceId
+      ? {
+          workspace_id: workspaceContext.workspaceId,
+        }
+      : null;
+    const mergedVariantMetadata = {
+      ...(variantMetadata as Record<string, unknown>),
+      ...(workspaceMeta ?? {}),
+      ...(contentPackMeta ?? {}),
+      selected_template_slug: template.slug,
+      selection_strategy:
+        outputFormat === "square_text"
+          ? "square_text_open_variant"
+          : "random_template",
+      workflow_mode: "single_output",
+    };
 
     const row = {
-      user_id: user.id,
+      user_id: actorUserId,
       template_id: template.template_id,
       idea_group_id: ideaGroupId,
       title: generated.title,
@@ -2093,9 +2159,7 @@ ${isThreeSlot
       variant_type: variantType,
       generation_run_id: generationContext.generationRunId,
       batch_number: generationContext.batchNumber,
-      variant_metadata: contentPackMeta
-        ? { ...(variantMetadata as Record<string, unknown>), ...contentPackMeta }
-        : variantMetadata,
+      variant_metadata: mergedVariantMetadata,
     };
 
     console.log("[variant-insert]", {
@@ -2118,7 +2182,8 @@ ${isThreeSlot
       });
     }
 
-    const { error: insertError } = await supabase
+    const writeClient = !user && allowAnonymousWrite ? adminSupabase : supabase;
+    const { error: insertError } = await writeClient
       .from("generated_memes")
       .insert(row);
 
@@ -2143,7 +2208,7 @@ ${isThreeSlot
       });
       console.log("[meme-gen] Fallback replacement queued", {
         failedTemplate: template.slug,
-        nextTemplate: orderedTemplatePool[poolIndex + 1]?.slug ?? null,
+        nextTemplate: selectedTemplatesForBatch[poolIndex + 1]?.slug ?? null,
         insertedCount,
         failedCount,
       });
@@ -2170,7 +2235,7 @@ ${isThreeSlot
 
   console.log("[meme-gen] Generation summary", {
     compatibleTemplates: compatibleTemplates.length,
-    orderedTemplatePoolSize: orderedTemplatePool.length,
+    templatePoolSize: templatePool.length,
     batchSize: generationContext.batchSize,
     generationRunId: generationContext.generationRunId,
     batchNumber: generationContext.batchNumber,
@@ -2185,7 +2250,7 @@ ${isThreeSlot
     return { error: "Failed to generate memes. Check server logs for details." };
   }
 
-  return { error: null };
+  return { error: null, generationRunId: generationContext.generationRunId };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     const stack = error instanceof Error ? error.stack : null;
@@ -2202,28 +2267,18 @@ ${isThreeSlot
 
 export async function generateMoreMemes(
   outputFormat?: MemeOutputFormat
-): Promise<{ error: string | null }> {
-  const result = await generateMockMemes(undefined, {
-    limit: 3,
-    excludeExistingUserTemplates: true,
-    outputFormat,
-  });
-
-  revalidatePath("/dashboard/memes");
-  return result;
+): Promise<{ error: string | null; generationRunId?: string }> {
+  console.error("[legacy-generation] generateMoreMemes called", { outputFormat });
+  throw new Error("Legacy generation path no longer supported");
 }
 
 export async function regenerateTemplateIdea(
   templateId: string,
   outputFormat?: MemeOutputFormat
-): Promise<{ error: string | null }> {
-  const result = await generateMockMemes(undefined, {
-    limit: 1,
-    forcedTemplateId: templateId,
-    forceStandardVariant: true,
+): Promise<{ error: string | null; generationRunId?: string }> {
+  console.error("[legacy-generation] regenerateTemplateIdea called", {
+    templateId,
     outputFormat,
   });
-
-  revalidatePath("/dashboard/memes");
-  return result;
+  throw new Error("Legacy generation path no longer supported");
 }

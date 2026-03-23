@@ -17,7 +17,7 @@ export default function LoginPage() {
     setErrorMessage("");
     setStatus("loading");
 
-    const next = searchParams.get("next") || "/dashboard";
+    const next = searchParams.get("next") || "/workspace";
     const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`;
 
     const { error } = await createClient().auth.signInWithOtp({

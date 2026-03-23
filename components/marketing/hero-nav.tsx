@@ -148,25 +148,19 @@ export function HeroNav({ onFixedChange }: HeroNavProps) {
                 Log out
               </button>
               <Link
-                href="/dashboard"
+                href="/workspace"
                 className="cta-funky rounded-full bg-stone-900 px-3 py-1.5 text-sm font-medium !text-white shadow-sm hover:bg-stone-800 transition-colors font-display"
               >
-                Dashboard
+                Workspace
               </Link>
             </>
           ) : (
             <>
               <Link
                 href="/login"
-                className="rounded-full px-3 py-1.5 text-sm font-medium text-stone-600 hover:bg-stone-100 transition-colors"
-              >
-                Log in
-              </Link>
-              <Link
-                href="/onboarding/manual"
                 className="cta-funky rounded-full bg-stone-900 px-3 py-1.5 text-sm font-medium !text-white shadow-sm hover:bg-stone-800 transition-colors font-display"
               >
-                Get started
+                Log in
               </Link>
             </>
           )}
@@ -254,11 +248,11 @@ export function HeroNav({ onFixedChange }: HeroNavProps) {
                     Log out
                   </button>
                   <Link
-                    href="/dashboard"
+                    href="/workspace"
                     onClick={closeMenu}
                     className="cta-funky flex-1 rounded-full bg-stone-900 py-2.5 text-center text-sm font-medium !text-white shadow-sm hover:bg-stone-800 transition-colors font-display"
                   >
-                    Dashboard
+                    Workspace
                   </Link>
                 </>
               ) : (
@@ -266,16 +260,9 @@ export function HeroNav({ onFixedChange }: HeroNavProps) {
                   <Link
                     href="/login"
                     onClick={closeMenu}
-                    className="flex-1 rounded-full border border-stone-200 py-2.5 text-center text-sm font-medium text-stone-700 hover:bg-stone-100 transition-colors"
-                  >
-                    Log in
-                  </Link>
-                  <Link
-                    href="/onboarding/manual"
-                    onClick={closeMenu}
                     className="cta-funky flex-1 rounded-full bg-stone-900 py-2.5 text-center text-sm font-medium !text-white shadow-sm hover:bg-stone-800 transition-colors font-display"
                   >
-                    Get started
+                    Log in
                   </Link>
                 </>
               )}

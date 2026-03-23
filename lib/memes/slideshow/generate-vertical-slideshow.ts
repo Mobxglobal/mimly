@@ -469,6 +469,9 @@ export async function runVerticalSlideshowGeneration(params: {
     forceStandardVariant?: boolean;
     generationRunIdOverride?: string;
     contentPack?: { batch: 1 | 2 | 3 };
+    workspaceContext?: {
+      workspaceId?: string | null;
+    };
   };
 }): Promise<{ error: string | null }> {
   const {
@@ -481,7 +484,7 @@ export async function runVerticalSlideshowGeneration(params: {
   } = params;
 
   const promotion = normalizePromotionContext(promotionContext);
-  const batchSize = options?.limit ?? 3;
+  const batchSize = options?.limit ?? 1;
   const forcedTemplateId =
     String(options?.forcedTemplateId ?? "").trim() || null;
   const forceStandardVariant = Boolean(options?.forceStandardVariant);
@@ -575,7 +578,40 @@ export async function runVerticalSlideshowGeneration(params: {
     };
   }
 
-  const selected = pool.slice(0, batchSize);
+  const recentWorkspaceTemplateIds = new Set<string>();
+  if (options?.workspaceContext?.workspaceId) {
+    const { data: recentWorkspaceRows } = await adminSupabase
+      .from("generated_memes")
+      .select("template_id, variant_metadata")
+      .contains("variant_metadata", {
+        workspace_id: options.workspaceContext.workspaceId,
+      })
+      .order("created_at", { ascending: false })
+      .limit(6);
+    for (const row of recentWorkspaceRows ?? []) {
+      const templateId = String((row as { template_id?: unknown }).template_id ?? "").trim();
+      if (templateId) recentWorkspaceTemplateIds.add(templateId);
+    }
+  }
+  const pickRandomTemplates = (
+    templates: SlideshowTemplate[],
+    count: number,
+    avoidIds: Set<string>
+  ) => {
+    const available = [...templates];
+    const selectedTemplates: SlideshowTemplate[] = [];
+    while (available.length > 0 && selectedTemplates.length < count) {
+      const preferred = available.filter((t) => !avoidIds.has(t.template_id));
+      const source = preferred.length > 0 ? preferred : available;
+      const chosen = source[Math.floor(Math.random() * source.length)];
+      selectedTemplates.push(chosen);
+      const next = available.filter((t) => t.template_id !== chosen.template_id);
+      available.length = 0;
+      available.push(...next);
+    }
+    return selectedTemplates;
+  };
+  const selected = pickRandomTemplates(pool, batchSize, recentWorkspaceTemplateIds);
   const assignedVariants: AssignedVariant[] = new Array(selected.length).fill(
     "standard"
   );
@@ -831,8 +867,14 @@ export async function runVerticalSlideshowGeneration(params: {
       batch_number: batchNumber,
       variant_metadata: {
         ...variantMetadata,
+        selected_template_slug: template.slug,
+        selection_strategy: "random_template",
+        workflow_mode: "single_output",
         requested_output_format: "vertical_slideshow",
         ...(contentPackMeta ?? {}),
+        ...(options?.workspaceContext?.workspaceId
+          ? { workspace_id: options.workspaceContext.workspaceId }
+          : {}),
       },
     };
 

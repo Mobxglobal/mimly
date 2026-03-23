@@ -16,7 +16,7 @@ export default function OnboardingCompletePage() {
       </p>
       <button
         type="button"
-        onClick={() => router.push("/dashboard")}
+        onClick={() => router.push("/workspace")}
         className="cta-funky mt-6 w-full rounded-full bg-stone-900 px-5 py-2.5 text-sm font-medium !text-white shadow-sm hover:bg-stone-800 transition-colors font-display"
       >
         Go to Home

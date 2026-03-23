@@ -2,14 +2,26 @@
 
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { FramedSection } from "./framed-section";
 import { HeroNav } from "./hero-nav";
 import { EngagementCard } from "./engagement-card";
 import { createClient } from "@/lib/supabase/client";
+import { createWorkspaceFromPrompt } from "@/lib/actions/workspace";
 
 const COUNT_START = 24;
 const COUNT_DURATION_MS = 2500;
+const HERO_PROMPT_EXAMPLES = [
+  "Create memes for my coffee shop to help engage people on Instagram",
+  "Make funny memes for a personal trainer targeting busy professionals",
+  "Create a viral slideshow for a skincare brand to post on TikTok",
+  "Generate relatable memes for a real estate agent to attract first-time buyers",
+] as const;
+const PLACEHOLDER_INITIAL_DELAY_MS = 400;
+const PLACEHOLDER_VISIBLE_MS = 1800;
+const PLACEHOLDER_TYPE_MS = 24;
+const PLACEHOLDER_DELETE_MS = 14;
 
 /** Single like count that runs from start to end on mount so it clearly increases on load. */
 function LikeCount({
@@ -50,6 +62,13 @@ function LikeCount({
 export function HeroSection() {
   const [navFixed, setNavFixed] = useState(false);
   const [hasSession, setHasSession] = useState(false);
+  const [prompt, setPrompt] = useState("");
+  const [promptError, setPromptError] = useState<string | null>(null);
+  const [isSubmittingPrompt, setIsSubmittingPrompt] = useState(false);
+  const [placeholderIndex, setPlaceholderIndex] = useState(0);
+  const [typedPlaceholder, setTypedPlaceholder] = useState("");
+  const [isPromptFocused, setIsPromptFocused] = useState(false);
+  const router = useRouter();
 
   useEffect(() => {
     const supabase = createClient();
@@ -63,6 +82,50 @@ export function HeroSection() {
     });
     return () => subscription.unsubscribe();
   }, []);
+
+  useEffect(() => {
+    const isInteracting = isPromptFocused || prompt.trim().length > 0;
+    if (isInteracting) {
+      setTypedPlaceholder("");
+      return;
+    }
+
+    const fullText = HERO_PROMPT_EXAMPLES[placeholderIndex];
+    let i = 0;
+    let deleting = false;
+    let timer: ReturnType<typeof setTimeout>;
+
+    const tick = () => {
+      if (!deleting) {
+        i += 1;
+        setTypedPlaceholder(fullText.slice(0, i));
+        if (i >= fullText.length) {
+          deleting = true;
+          timer = setTimeout(tick, PLACEHOLDER_VISIBLE_MS);
+          return;
+        }
+        timer = setTimeout(tick, PLACEHOLDER_TYPE_MS);
+        return;
+      }
+
+      i -= 1;
+      setTypedPlaceholder(fullText.slice(0, Math.max(0, i)));
+      if (i <= 0) {
+        setPlaceholderIndex((prev) => (prev + 1) % HERO_PROMPT_EXAMPLES.length);
+        return;
+      }
+      timer = setTimeout(tick, PLACEHOLDER_DELETE_MS);
+    };
+
+    const startTimer = setTimeout(() => {
+      timer = setTimeout(tick, PLACEHOLDER_TYPE_MS);
+    }, PLACEHOLDER_INITIAL_DELAY_MS);
+
+    return () => {
+      clearTimeout(startTimer);
+      if (timer) clearTimeout(timer);
+    };
+  }, [isPromptFocused, prompt, placeholderIndex]);
 
   return (
     <div className={cn("w-full", navFixed && "relative z-[100]")}>
@@ -96,7 +159,7 @@ export function HeroSection() {
               </span>{" "}
               for social media.
             </p>
-            <div className="mt-5 flex items-center justify-center">
+            {/* <div className="mt-5 flex items-center justify-center">
               <div className="flex items-start gap-3 sm:gap-4">
                 <div
                   className="hero-social-item flex flex-col items-center gap-1.5"
@@ -196,46 +259,86 @@ export function HeroSection() {
                   </span>
                 </div>
               </div>
-            </div>
+            </div> */}
             {hasSession ? (
               <div className="mx-auto mt-8 flex flex-col items-center gap-3">
                 <Link
-                  href="/dashboard"
+                  href="/workspace"
                   className="cta-funky shrink-0 rounded-full bg-stone-900 px-5 py-2.5 text-sm font-medium !text-white shadow-sm hover:bg-stone-800 transition-colors font-display"
                 >
-                  Dashboard
+                  Workspace
                 </Link>
               </div>
             ) : (
               <>
                 <form
-                  action="/onboarding/analyze"
-                  method="get"
-                  className="mx-auto mt-8 flex max-w-md flex-col gap-3 sm:flex-row sm:items-center"
+                  onSubmit={async (event) => {
+                    event.preventDefault();
+                    const nextPrompt = prompt.trim();
+                    if (isSubmittingPrompt) return;
+                    if (!nextPrompt || nextPrompt.length < 8) {
+                      setPromptError("Please enter a longer prompt so we can generate better results.");
+                      return;
+                    }
+                    setPromptError(null);
+                    setIsSubmittingPrompt(true);
+                    const result = await createWorkspaceFromPrompt(nextPrompt);
+                    setIsSubmittingPrompt(false);
+                    if (result.error || !result.workspaceId) {
+                      setPromptError(result.error ?? "Failed to start workspace.");
+                      return;
+                    }
+                    router.push(`/workspace/${result.workspaceId}`);
+                  }}
+                  className="mx-auto mt-10 w-full max-w-4xl"
                 >
-                  <label htmlFor="hero-website-url" className="sr-only">
-                    Your website URL
-                  </label>
-                  <input
-                    id="hero-website-url"
-                    type="url"
-                    name="website"
-                    placeholder="Enter your website URL"
-                    className="min-w-0 flex-1 rounded-xl border border-stone-200 bg-white/90 px-4 py-2 text-sm text-stone-900 placeholder:text-stone-400 focus:border-stone-400 focus:outline-none focus:ring-1 focus:ring-stone-400"
-                  />
-                  <button
-                    type="submit"
-                    className="cta-funky shrink-0 rounded-full bg-stone-900 px-5 py-2.5 text-sm font-medium !text-white shadow-sm hover:bg-stone-800 transition-colors font-display"
-                  >
-                    Get started
-                  </button>
+                  <div className="relative overflow-hidden rounded-[30px] border border-stone-200/90 bg-gradient-to-b from-white to-stone-50 p-3 shadow-[0_18px_55px_rgba(20,24,40,0.14)] ring-1 ring-white/80">
+                    <div className="relative rounded-[24px] border border-stone-200/80 bg-white/95 p-5 sm:p-6">
+                      <label htmlFor="hero-prompt" className="sr-only">
+                        Describe what you want to generate
+                      </label>
+                      <textarea
+                        id="hero-prompt"
+                        value={prompt}
+                        onChange={(event) => {
+                          setPrompt(event.target.value);
+                          if (promptError) setPromptError(null);
+                        }}
+                        onFocus={() => setIsPromptFocused(true)}
+                        onBlur={() => setIsPromptFocused(false)}
+                        rows={3}
+                        placeholder=""
+                        className="w-full resize-none border-none bg-transparent text-left text-lg leading-relaxed text-stone-900 placeholder:text-stone-500 focus:outline-none"
+                      />
+                      {!prompt.trim() ? (
+                        <span
+                          className="pointer-events-none absolute left-5 right-5 top-5 text-left text-base leading-relaxed text-stone-500 sm:text-lg"
+                        >
+                          {typedPlaceholder}
+                        </span>
+                      ) : null}
+
+                      <div className="mt-4 flex items-center justify-end gap-3">
+                        <button
+                          type="submit"
+                          disabled={isSubmittingPrompt}
+                          aria-label={isSubmittingPrompt ? "Starting workspace" : "Start workspace"}
+                          className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-stone-900 text-lg font-semibold text-white shadow-sm transition hover:bg-stone-800 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {isSubmittingPrompt ? "…" : "↑"}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
                 </form>
-                <p className="mt-3 text-center text-sm text-stone-500">
-                  Don&apos;t have a website?{" "}
-                  <a href="/onboarding/manual" className="font-medium text-stone-700 underline underline-offset-2 hover:text-stone-900">
-                    Tap here.
-                  </a>
-                </p>
+                {isSubmittingPrompt ? (
+                  <p className="mt-3 text-center text-sm text-stone-500">
+                    Creating your workspace...
+                  </p>
+                ) : null}
+                {promptError ? (
+                  <p className="mt-2 text-center text-sm text-rose-600">{promptError}</p>
+                ) : null}
               </>
             )}
           </div>
