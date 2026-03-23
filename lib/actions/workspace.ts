@@ -60,6 +60,7 @@ export type WorkspaceOutput = {
   format: string | null;
   variant_metadata: Record<string, unknown> | null;
   created_at: string;
+  is_pinned: boolean;
 };
 
 export type WorkspaceState = {
@@ -291,8 +292,36 @@ export async function getWorkspaceState(
         if (seen.has(output.id)) return false;
         seen.add(output.id);
         return true;
-      });
+      })
+      .map((output) => ({ ...output, is_pinned: false }));
   }
+
+  const { data: pinRows } = await admin
+    .schema("public")
+    .from("workspace_output_pins")
+    .select("generated_meme_id, pinned_at")
+    .eq("workspace_id", workspaceId)
+    .order("pinned_at", { ascending: true });
+  const pinnedIdsOrdered = (pinRows ?? [])
+    .map((row: any) => String(row.generated_meme_id ?? "").trim())
+    .filter(Boolean);
+  const pinnedIdSet = new Set(pinnedIdsOrdered);
+  const pinnedOrderMap = new Map<string, number>();
+  pinnedIdsOrdered.forEach((id, index) => pinnedOrderMap.set(id, index));
+
+  outputs = outputs
+    .map((output) => ({
+      ...output,
+      is_pinned: pinnedIdSet.has(output.id),
+    }))
+    .sort((a, b) => {
+      if (a.is_pinned && b.is_pinned) {
+        return (pinnedOrderMap.get(a.id) ?? Number.MAX_SAFE_INTEGER) - (pinnedOrderMap.get(b.id) ?? Number.MAX_SAFE_INTEGER);
+      }
+      if (a.is_pinned) return -1;
+      if (b.is_pinned) return 1;
+      return 0;
+    });
 
   const isAuthenticated = Boolean(currentUserId || workspace.user_id);
   const hasEntitlement = currentPlan !== "free_preview";
@@ -334,6 +363,102 @@ export async function getWorkspaceState(
     },
     error: null,
   };
+}
+
+export async function pinWorkspaceOutput(
+  workspaceId: string,
+  outputId: string
+): Promise<{ error: string | null }> {
+  const normalizedOutputId = String(outputId ?? "").trim();
+  if (!normalizedOutputId) return { error: "Invalid output." };
+
+  const loaded = await loadAccessibleWorkspace(workspaceId);
+  if (!loaded.workspace || !loaded.admin) {
+    return { error: loaded.error ?? "Workspace not found." };
+  }
+  const { admin } = loaded as {
+    admin: ReturnType<typeof createWorkspaceAdminClient>;
+  };
+
+  const { data: existingPin } = await admin
+    .schema("public")
+    .from("workspace_output_pins")
+    .select("id")
+    .eq("workspace_id", workspaceId)
+    .eq("generated_meme_id", normalizedOutputId)
+    .maybeSingle();
+  if (existingPin?.id) return { error: null };
+
+  const { data: currentPins } = await admin
+    .schema("public")
+    .from("workspace_output_pins")
+    .select("id")
+    .eq("workspace_id", workspaceId)
+    .order("pinned_at", { ascending: true });
+  if ((currentPins ?? []).length >= 3) {
+    return { error: "You can pin up to 3 templates." };
+  }
+
+  const { data: workspaceJobs } = await admin
+    .schema("public")
+    .from("generation_jobs")
+    .select("id")
+    .eq("workspace_id", workspaceId)
+    .limit(500);
+  const workspaceJobIds = (workspaceJobs ?? [])
+    .map((job: any) => String(job.id ?? "").trim())
+    .filter(Boolean);
+  if (workspaceJobIds.length === 0) return { error: "Output not found in this workspace." };
+
+  const { data: mappedOutput } = await admin
+    .schema("public")
+    .from("generation_job_outputs")
+    .select("generated_meme_id")
+    .eq("generated_meme_id", normalizedOutputId)
+    .in("generation_job_id", workspaceJobIds)
+    .limit(1)
+    .maybeSingle();
+  if (!mappedOutput?.generated_meme_id) {
+    return { error: "Output not found in this workspace." };
+  }
+
+  const { error: pinError } = await admin
+    .schema("public")
+    .from("workspace_output_pins")
+    .insert({
+      workspace_id: workspaceId,
+      generated_meme_id: normalizedOutputId,
+      pinned_at: new Date().toISOString(),
+    });
+  if (pinError?.code === "23505") return { error: null };
+  if (pinError) return { error: pinError.message };
+
+  return { error: null };
+}
+
+export async function unpinWorkspaceOutput(
+  workspaceId: string,
+  outputId: string
+): Promise<{ error: string | null }> {
+  const normalizedOutputId = String(outputId ?? "").trim();
+  if (!normalizedOutputId) return { error: "Invalid output." };
+
+  const loaded = await loadAccessibleWorkspace(workspaceId);
+  if (!loaded.workspace || !loaded.admin) {
+    return { error: loaded.error ?? "Workspace not found." };
+  }
+  const { admin } = loaded as {
+    admin: ReturnType<typeof createWorkspaceAdminClient>;
+  };
+
+  const { error } = await admin
+    .schema("public")
+    .from("workspace_output_pins")
+    .delete()
+    .eq("workspace_id", workspaceId)
+    .eq("generated_meme_id", normalizedOutputId);
+
+  return { error: error?.message ?? null };
 }
 
 export async function startGenerationIfQueued(
