@@ -304,12 +304,6 @@ export async function generateMockMemes(
   );
 
   if (outputFormat === "vertical_slideshow") {
-    if (!user) {
-      return {
-        error:
-          "Vertical slideshow generation requires authentication in this build.",
-      };
-    }
     return runVerticalSlideshowGeneration({
       supabase,
       adminSupabase,
@@ -338,6 +332,7 @@ export async function generateMockMemes(
         contentPack: options?.contentPack,
         workspaceContext: {
           workspaceId: workspaceContext?.workspaceId ?? null,
+          storagePathNamespace: workspaceContext?.storagePathNamespace ?? null,
         },
       },
     });

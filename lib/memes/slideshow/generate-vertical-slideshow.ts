@@ -371,6 +371,8 @@ theme, mood, setting, subject_type, industry_tags, color_profile
 Optional: min_layout_fit_score (integer 0-10)
 Do not use other keys.
 
+Each slide must use a meaningfully different image_selection from the other slides (vary theme, mood, setting, subject_type, tags, and/or color_profile) so the sequence does not repeat the same background look.
+
 Controlled vocabulary:
 - theme: comfort | discomfort | luxury | productivity | cleanliness | stress | relief | lifestyle
 - mood: calm | warm | cool | serious | aspirational | frustrated
@@ -454,7 +456,7 @@ ${retryHint ? `=== RETRY CORRECTION ===\nFix the previous attempt:\n${retryHint}
 export async function runVerticalSlideshowGeneration(params: {
   supabase: SupabaseClient;
   adminSupabase: SupabaseClient;
-  user: User;
+  user: User | null;
   profile: Profile;
   promotionContext?: string;
   context?: {
@@ -473,6 +475,7 @@ export async function runVerticalSlideshowGeneration(params: {
     contentPack?: { batch: 1 | 2 | 3 };
     workspaceContext?: {
       workspaceId?: string | null;
+      storagePathNamespace?: string | null;
     };
   };
 }): Promise<{ error: string | null }> {
@@ -485,6 +488,11 @@ export async function runVerticalSlideshowGeneration(params: {
     context,
     options,
   } = params;
+
+  const storageNamespace =
+    options?.workspaceContext?.storagePathNamespace?.trim() ||
+    user?.id ||
+    "anonymous";
 
   const promotion = normalizePromotionContext(promotionContext);
   const batchSize = options?.limit ?? 1;
@@ -539,7 +547,7 @@ export async function runVerticalSlideshowGeneration(params: {
   }
 
   const excluded = new Set<string>();
-  if (options?.excludeExistingUserTemplates) {
+  if (options?.excludeExistingUserTemplates && user) {
     const { data: existing, error: exErr } = await supabase
       .from("generated_memes")
       .select("template_id")
@@ -788,6 +796,7 @@ export async function runVerticalSlideshowGeneration(params: {
     const style = buildStyle(template.slideshow_config);
     const slideMeta: SlideshowVariantMetadata["slides"] = [];
     let firstPublicUrl: string | null = null;
+    const usedSlideshowAssetIds = new Set<string>();
 
     try {
       for (let si = 0; si < payload.slides.length; si++) {
@@ -795,11 +804,13 @@ export async function runVerticalSlideshowGeneration(params: {
         const asset = resolveSlideAsset(
           slide.image_selection,
           slide.layout_variant,
-          assets
+          assets,
+          usedSlideshowAssetIds
         );
         if (!asset) {
           throw new Error("no_asset_for_slide");
         }
+        usedSlideshowAssetIds.add(asset.id);
 
         const bg = await downloadAssetBuffer({
           admin: adminSupabase,
@@ -814,7 +825,7 @@ export async function runVerticalSlideshowGeneration(params: {
           style,
         });
 
-        const objectPath = `generated_memes/${user.id}/${template.template_id}/slideshow/${ideaGroupId}/slide-${si + 1}.png`;
+        const objectPath = `generated_memes/${storageNamespace}/${template.template_id}/slideshow/${ideaGroupId}/slide-${si + 1}.png`;
         const { error: upErr } = await adminSupabase.storage
           .from(generatedMemeBucket)
           .upload(objectPath, png, {
@@ -867,7 +878,7 @@ export async function runVerticalSlideshowGeneration(params: {
 
     const title = payload.slideshow_intent.slice(0, TITLE_MAX_CHARS);
     const row = {
-      user_id: user.id,
+      user_id: user?.id ?? null,
       template_id: template.template_id,
       idea_group_id: ideaGroupId,
       title,
@@ -894,7 +905,8 @@ export async function runVerticalSlideshowGeneration(params: {
       },
     };
 
-    const { error: insErr } = await supabase.from("generated_memes").insert(row);
+    const writeClient = user ? supabase : adminSupabase;
+    const { error: insErr } = await writeClient.from("generated_memes").insert(row);
     if (insErr) {
       console.error("[slideshow-gen] insert failed", insErr);
       continue;

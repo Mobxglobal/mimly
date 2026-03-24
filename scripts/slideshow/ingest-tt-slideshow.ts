@@ -1,12 +1,15 @@
 /**
  * Bulk-ingest vertical slideshow background images from a local folder into Supabase.
  *
- * Usage:
- *   pnpm exec tsx scripts/slideshow/ingest-tt-slideshow.ts --dir="/path/to/tt-slideshow" --dry-run=false
+ * Usage (default dir is ~/Desktop/New_templates/tt-slideshow):
+ *   pnpm exec tsx scripts/slideshow/ingest-tt-slideshow.ts --dry-run=false
+ *   pnpm exec tsx scripts/slideshow/ingest-tt-slideshow.ts --dir="/custom/path" --dry-run=false
  *
  * Env: SUPABASE_URL (or NEXT_PUBLIC_SUPABASE_URL), SUPABASE_SERVICE_ROLE_KEY, OPENAI_API_KEY
+ * Optional: SLIDESHOW_INGEST_DIR (overrides default source folder)
  * Optional: SLIDESHOW_ASSETS_BUCKET (default slideshow-assets), SLIDESHOW_STORAGE_PREFIX (default vertical)
  * Optional: --limit=N, --report=./path/to/report.json
+ * Optional: --vision-delay-ms=N (or SLIDESHOW_VISION_DELAY_MS) — pause between vision calls to reduce 429s
  */
 
 import "dotenv/config";
@@ -43,6 +46,34 @@ function parseLimit(v: string | undefined): number | null {
   return Math.floor(n);
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** Parse "Please try again in 344ms" from OpenAI 429 JSON body. */
+function parseRetryAfterMsFromOpenAiBody(bodyText: string): number | null {
+  const msMatch = bodyText.match(/try again in (\d+(?:\.\d+)?)\s*ms/i);
+  if (msMatch) {
+    const n = Number(msMatch[1]);
+    if (Number.isFinite(n)) return Math.ceil(n) + 200;
+  }
+  const sMatch = bodyText.match(/try again in (\d+(?:\.\d+)?)\s*s(?:ec(?:onds?)?)?\b/i);
+  if (sMatch) {
+    const n = Number(sMatch[1]);
+    if (Number.isFinite(n)) return Math.ceil(n * 1000) + 200;
+  }
+  return null;
+}
+
+function parseVisionDelayMs(v: string | undefined): number {
+  if (v == null || v.trim() === "") return 0;
+  const n = Number(v.trim());
+  if (!Number.isFinite(n) || n < 0) {
+    throw new Error(`Invalid vision-delay-ms: ${v}`);
+  }
+  return Math.min(Math.floor(n), 120_000);
+}
+
 /** Same recovery pattern as scripts/templates/enrich-drafts-with-llm.ts */
 function safeJsonParse(s: string): unknown {
   const trimmed = String(s).trim();
@@ -63,9 +94,17 @@ function safeJsonParse(s: string): unknown {
   }
 }
 
-function defaultDesktopFolder(): string {
+/**
+ * Default: `~/Desktop/New_templates/tt-slideshow` (macOS/Linux) or equivalent on Windows.
+ * Override with `--dir=` or `SLIDESHOW_INGEST_DIR`.
+ */
+function defaultSlideshowSourceFolder(): string {
+  const envDir = process.env.SLIDESHOW_INGEST_DIR?.trim();
+  if (envDir) {
+    return path.resolve(envDir);
+  }
   const home = process.env.HOME || process.env.USERPROFILE || "";
-  return path.join(home, "Desktop", "tt-slideshow");
+  return path.join(home, "Desktop", "New_templates", "tt-slideshow");
 }
 
 function getContentTypeForExt(ext: string): string {
@@ -145,6 +184,7 @@ function buildRow(params: {
 async function visionMetadataForImage(params: {
   apiKey: string;
   base64Jpeg: string;
+  maxRetries?: number;
 }): Promise<Record<string, unknown>> {
   const prompt = `Analyze this vertical photo as a slideshow background (dark text will be overlaid). Output practical metadata for deterministic matching — not poetic language.
 
@@ -163,62 +203,100 @@ Return ONLY a JSON object with exactly these keys:
 
 Do not invent new labels outside the lists above. Use the closest allowed value if uncertain.`;
 
-  const res = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${params.apiKey}`,
-    },
-    body: JSON.stringify({
-      model: "gpt-4o-mini",
-      temperature: 0.2,
-      response_format: { type: "json_object" },
-      messages: [
-        {
-          role: "system",
-          content:
-            "You are a strict metadata tagger. Output a single JSON object only. Every enum field must use one of the exact allowed strings from the user message — no synonyms, no extra words. No markdown.",
-        },
-        {
-          role: "user",
-          content: [
-            { type: "text", text: prompt },
-            {
-              type: "image_url",
-              image_url: {
-                url: `data:image/jpeg;base64,${params.base64Jpeg}`,
-              },
+  const requestBody = JSON.stringify({
+    model: "gpt-4o-mini",
+    temperature: 0.2,
+    response_format: { type: "json_object" },
+    messages: [
+      {
+        role: "system",
+        content:
+          "You are a strict metadata tagger. Output a single JSON object only. Every enum field must use one of the exact allowed strings from the user message — no synonyms, no extra words. No markdown.",
+      },
+      {
+        role: "user",
+        content: [
+          { type: "text", text: prompt },
+          {
+            type: "image_url",
+            image_url: {
+              url: `data:image/jpeg;base64,${params.base64Jpeg}`,
             },
-          ],
-        },
-      ],
-    }),
+          },
+        ],
+      },
+    ],
   });
 
-  if (!res.ok) {
-    const t = await res.text();
-    throw new Error(`OpenAI error ${res.status}: ${t}`);
+  const maxRetries = Math.max(1, Math.floor(params.maxRetries ?? 8));
+
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    const res = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${params.apiKey}`,
+      },
+      body: requestBody,
+    });
+
+    const bodyText = await res.text();
+
+    if (res.ok) {
+      let json: { choices?: { message?: { content?: string } }[] };
+      try {
+        json = JSON.parse(bodyText) as {
+          choices?: { message?: { content?: string } }[];
+        };
+      } catch {
+        throw new Error("Vision response was not valid JSON");
+      }
+      const content = json?.choices?.[0]?.message?.content ?? "";
+      const parsed = safeJsonParse(String(content));
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        throw new Error("Vision response was not a JSON object");
+      }
+      return parsed as Record<string, unknown>;
+    }
+
+    const retryable = res.status === 429 || res.status >= 500;
+    if (retryable && attempt < maxRetries - 1) {
+      const headerWait = res.headers.get("retry-after");
+      let waitMs =
+        headerWait != null && /^\d+$/.test(headerWait.trim())
+          ? Number(headerWait.trim()) * 1000
+          : null;
+      if (waitMs == null || !Number.isFinite(waitMs)) {
+        waitMs = parseRetryAfterMsFromOpenAiBody(bodyText);
+      }
+      if (waitMs == null || !Number.isFinite(waitMs)) {
+        waitMs = Math.min(120_000, 2000 * 2 ** attempt);
+      }
+      waitMs = Math.max(500, Math.min(120_000, waitMs));
+      console.warn(
+        `[vision] OpenAI ${res.status}, waiting ${waitMs}ms before retry ${attempt + 2}/${maxRetries}`
+      );
+      await sleep(waitMs);
+      continue;
+    }
+
+    throw new Error(`OpenAI error ${res.status}: ${bodyText}`);
   }
 
-  const json = (await res.json()) as {
-    choices?: { message?: { content?: string } }[];
-  };
-  const content = json?.choices?.[0]?.message?.content ?? "";
-  const parsed = safeJsonParse(String(content));
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-    throw new Error("Vision response was not a JSON object");
-  }
-  return parsed as Record<string, unknown>;
+  throw new Error("OpenAI vision: exhausted retries");
 }
 
 async function main(): Promise<void> {
-  const dir = path.resolve(getArg("dir")?.trim() || defaultDesktopFolder());
+  const dir = path.resolve(getArg("dir")?.trim() || defaultSlideshowSourceFolder());
   const dryRun = parseBool(getArg("dry-run"), false);
   const bucket = getArg("bucket")?.trim() || process.env.SLIDESHOW_ASSETS_BUCKET || "slideshow-assets";
   const storagePrefix = (getArg("storage-prefix")?.trim() || process.env.SLIDESHOW_STORAGE_PREFIX || "vertical")
     .replace(/^\/+|\/+$/g, "");
   const limit = parseLimit(getArg("limit"));
   const reportPath = getArg("report")?.trim() || null;
+  const visionDelayMs = parseVisionDelayMs(
+    getArg("vision-delay-ms")?.trim() || process.env.SLIDESHOW_VISION_DELAY_MS?.trim()
+  );
 
   const supabaseUrl =
     (process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || "").trim();
@@ -266,6 +344,9 @@ async function main(): Promise<void> {
   if (reportPath) {
     console.log(`  report: ${path.resolve(reportPath)}`);
   }
+  if (visionDelayMs > 0) {
+    console.log(`  vision_delay_ms: ${visionDelayMs}`);
+  }
 
   const supabase = createClient(supabaseUrl, serviceKey, {
     auth: { persistSession: false },
@@ -279,6 +360,7 @@ async function main(): Promise<void> {
   let uploaded = 0;
   let upserted = 0;
   let dryRunProcessed = 0;
+  let completedVisionCalls = 0;
 
   for (const file of allFiles) {
     const full = path.join(dir, file);
@@ -321,6 +403,9 @@ async function main(): Promise<void> {
 
     let metaRaw: Record<string, unknown>;
     try {
+      if (visionDelayMs > 0 && completedVisionCalls > 0) {
+        await sleep(visionDelayMs);
+      }
       const jpegBuf = await sharp(buf)
         .rotate()
         .resize(1024, 1536, { fit: "inside", withoutEnlargement: true })
@@ -328,6 +413,7 @@ async function main(): Promise<void> {
         .toBuffer();
       const b64 = jpegBuf.toString("base64");
       metaRaw = await visionMetadataForImage({ apiKey, base64Jpeg: b64 });
+      completedVisionCalls++;
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       console.error(`[fail] ${file} — vision: ${msg}`);

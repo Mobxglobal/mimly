@@ -1,11 +1,22 @@
 "use client";
 
 import { useRef, useState } from "react";
-import type { WorkspaceJob, WorkspaceOutput } from "@/lib/actions/workspace";
+import {
+  createOrGetShareLinkForWorkspaceOutput,
+  type WorkspaceJob,
+  type WorkspaceOutput,
+} from "@/lib/actions/workspace";
+import { getVerticalSlideshowImageUrls } from "@/lib/share/vertical-slideshow-urls";
 import { BlockedAuthCard } from "@/components/workspace/blocked-auth-card";
 import { BlockedPaymentCard } from "@/components/workspace/blocked-payment-card";
 import canvas2Background from "@/assets/canvas2.jpg";
 import pinIcon from "@/assets/icons/pin.png";
+
+type ShareOutputState =
+  | { kind: "idle" }
+  | { kind: "loading" }
+  | { kind: "copied" }
+  | { kind: "error"; message?: string };
 
 function mediaTypeFromUrl(url: string): "video" | "image" {
   return /\.(mp4|webm|m4v)(\?|#|$)/i.test(url) ? "video" : "image";
@@ -25,29 +36,12 @@ function formatDateTime(iso: string | null): string {
   }).format(d);
 }
 
-type SlideshowMetaSlide = {
-  image_url?: unknown;
-};
-
-function getSlideshowSlideUrls(output: WorkspaceOutput): string[] {
+function slideshowUrlsForOutput(output: WorkspaceOutput): string[] {
   const meta =
     output.variant_metadata && typeof output.variant_metadata === "object"
       ? (output.variant_metadata as Record<string, unknown>)
       : null;
-  if (!meta) return [];
-  const outputFormat = String(meta.output_format ?? "").trim().toLowerCase();
-  if (outputFormat !== "vertical_slideshow") return [];
-
-  const slides = Array.isArray(meta.slides)
-    ? (meta.slides as SlideshowMetaSlide[])
-    : [];
-  return slides
-    .map((slide) =>
-      slide && typeof slide === "object"
-        ? String(slide.image_url ?? "").trim()
-        : ""
-    )
-    .filter(Boolean);
+  return getVerticalSlideshowImageUrls(meta);
 }
 
 export function OutputPanel({
@@ -70,6 +64,7 @@ export function OutputPanel({
   onPlanUnlocked?: () => void | Promise<void>;
 }) {
   const [notice, setNotice] = useState<string | null>(null);
+  const [shareByOutput, setShareByOutput] = useState<Record<string, ShareOutputState>>({});
   const slideTrackRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const [zoomedSlideshow, setZoomedSlideshow] = useState<{
     outputId: string;
@@ -81,28 +76,49 @@ export function OutputPanel({
     mediaType: "video" | "image";
   } | null>(null);
 
-  async function copyText(value: string, successText: string) {
-    try {
-      await navigator.clipboard.writeText(value);
-      setNotice(successText);
-      setTimeout(() => setNotice(null), 1600);
-    } catch {
-      setNotice("Could not copy right now.");
-      setTimeout(() => setNotice(null), 1600);
-    }
-  }
+  async function handleShareOutput(output: WorkspaceOutput) {
+    const id = output.id;
+    setShareByOutput((prev) => ({ ...prev, [id]: { kind: "loading" } }));
 
-  async function handleShare(url: string, title: string) {
-    if (!url) return;
-    if (navigator.share) {
-      try {
-        await navigator.share({ title, url });
-        return;
-      } catch {
-        // Fall through to clipboard fallback.
-      }
+    const result = await createOrGetShareLinkForWorkspaceOutput(workspaceId, id);
+    if (result.error) {
+      setShareByOutput((prev) => ({
+        ...prev,
+        [id]: { kind: "error", message: result.error ?? undefined },
+      }));
+      setTimeout(() => {
+        setShareByOutput((prev) => ({ ...prev, [id]: { kind: "idle" } }));
+      }, 2800);
+      return;
     }
-    await copyText(url, "Link copied.");
+
+    const shareUrl = result.url?.trim() ?? "";
+    if (!shareUrl) {
+      setShareByOutput((prev) => ({
+        ...prev,
+        [id]: { kind: "error", message: "Could not create a share link." },
+      }));
+      setTimeout(() => {
+        setShareByOutput((prev) => ({ ...prev, [id]: { kind: "idle" } }));
+      }, 2800);
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setShareByOutput((prev) => ({ ...prev, [id]: { kind: "copied" } }));
+      setTimeout(() => {
+        setShareByOutput((prev) => ({ ...prev, [id]: { kind: "idle" } }));
+      }, 2000);
+    } catch {
+      setShareByOutput((prev) => ({
+        ...prev,
+        [id]: { kind: "error", message: "Could not copy link." },
+      }));
+      setTimeout(() => {
+        setShareByOutput((prev) => ({ ...prev, [id]: { kind: "idle" } }));
+      }, 2800);
+    }
   }
 
   function scrollSlideshow(outputId: string, direction: "prev" | "next") {
@@ -257,9 +273,28 @@ export function OutputPanel({
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {outputs.map((output) => {
           const url = output.image_url?.trim() ?? "";
-          const slideshowSlideUrls = getSlideshowSlideUrls(output);
+          const slideshowSlideUrls = slideshowUrlsForOutput(output);
           const isSlideshow = slideshowSlideUrls.length > 0;
           const mediaType = url ? mediaTypeFromUrl(url) : "image";
+          const shareState = shareByOutput[output.id] ?? { kind: "idle" as const };
+          const shareLabel =
+            shareState.kind === "loading"
+              ? "…"
+              : shareState.kind === "copied"
+                ? "Copied!"
+                : shareState.kind === "error"
+                  ? shareState.message?.toLowerCase().includes("sign in")
+                    ? "Sign in to share"
+                    : "Couldn't share"
+                  : "Share";
+          const shareButtonClass =
+            shareState.kind === "idle"
+              ? "border-stone-200 bg-white text-stone-700 hover:bg-stone-50"
+              : shareState.kind === "loading"
+                ? "cursor-wait border-stone-200 bg-stone-50 text-stone-400"
+                : shareState.kind === "error"
+                  ? "border-rose-200 bg-rose-50 text-rose-800"
+                  : "border-emerald-200 bg-emerald-50 text-emerald-800";
           return (
             <article
               key={output.id}
@@ -397,12 +432,17 @@ export function OutputPanel({
                   )}
                   <button
                     type="button"
-                    onClick={() =>
-                      void handleShare(url, output.title ?? "Mimly output")
+                    disabled={shareState.kind === "loading"}
+                    aria-busy={shareState.kind === "loading"}
+                    title={
+                      shareState.kind === "error" && shareState.message
+                        ? shareState.message
+                        : undefined
                     }
-                    className="rounded-full border border-stone-200 bg-white px-2.5 py-1 text-[11px] font-medium text-stone-700 transition hover:bg-stone-50"
+                    onClick={() => void handleShareOutput(output)}
+                    className={`inline-flex min-w-[5.25rem] items-center justify-center rounded-full border px-2.5 py-1 text-[11px] font-semibold transition ${shareButtonClass}`}
                   >
-                    Share
+                    {shareLabel}
                   </button>
                   <button
                     type="button"

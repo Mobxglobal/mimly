@@ -1,6 +1,8 @@
 "use server";
 
+import { randomBytes } from "node:crypto";
 import { createClient } from "@/lib/supabase/server";
+import { absoluteUrlForSharePath } from "@/lib/share/public-share-url";
 import {
   createWorkspaceAdminClient,
   ensureWorkspaceToken,
@@ -1181,5 +1183,112 @@ export async function unlockWorkspacePlan(
   }
 
   return { error: null };
+}
+
+function shareLinkExpiresAtStillValid(expiresAt: string | null | undefined): boolean {
+  if (expiresAt == null || expiresAt === "") return true;
+  const t = new Date(String(expiresAt)).getTime();
+  return !Number.isNaN(t) && t > Date.now();
+}
+
+export async function createOrGetShareLinkForWorkspaceOutput(
+  workspaceId: string,
+  generatedMemeId: string
+): Promise<{
+  error: string | null;
+  url: string | null;
+  path: string | null;
+}> {
+  const normalizedOutputId = String(generatedMemeId ?? "").trim();
+  const normalizedWorkspaceId = String(workspaceId ?? "").trim();
+  if (!normalizedOutputId || !normalizedWorkspaceId) {
+    return { error: "Invalid output.", url: null, path: null };
+  }
+
+  const loaded = await loadAccessibleWorkspace(normalizedWorkspaceId);
+  if (!loaded.workspace || !loaded.admin) {
+    return { error: loaded.error ?? "Workspace not found.", url: null, path: null };
+  }
+  if (!loaded.currentUserId) {
+    return { error: "Sign in to share.", url: null, path: null };
+  }
+
+  const { admin } = loaded as {
+    admin: ReturnType<typeof createWorkspaceAdminClient>;
+  };
+
+  const { data: workspaceJobs } = await admin
+    .schema("public")
+    .from("generation_jobs")
+    .select("id")
+    .eq("workspace_id", normalizedWorkspaceId)
+    .limit(500);
+  const workspaceJobIds = (workspaceJobs ?? [])
+    .map((job: { id?: unknown }) => String(job.id ?? "").trim())
+    .filter(Boolean);
+  if (workspaceJobIds.length === 0) {
+    return { error: "Output not found in this workspace.", url: null, path: null };
+  }
+
+  const { data: mappedOutput } = await admin
+    .schema("public")
+    .from("generation_job_outputs")
+    .select("generated_meme_id")
+    .eq("generated_meme_id", normalizedOutputId)
+    .in("generation_job_id", workspaceJobIds)
+    .limit(1)
+    .maybeSingle();
+  if (!mappedOutput?.generated_meme_id) {
+    return { error: "Output not found in this workspace.", url: null, path: null };
+  }
+
+  const { data: memeRow } = await admin
+    .schema("public")
+    .from("generated_memes")
+    .select("id")
+    .eq("id", normalizedOutputId)
+    .maybeSingle();
+  if (!memeRow?.id) {
+    return { error: "Output no longer exists.", url: null, path: null };
+  }
+
+  const { data: existingRows } = await admin
+    .schema("public")
+    .from("share_links")
+    .select("token, expires_at")
+    .eq("generated_meme_id", normalizedOutputId)
+    .is("revoked_at", null)
+    .order("created_at", { ascending: false })
+    .limit(8);
+
+  const existingActive = (existingRows ?? []).find((row) =>
+    shareLinkExpiresAtStillValid(row.expires_at as string | null)
+  );
+  if (existingActive?.token) {
+    const path = `/s/${String(existingActive.token)}`;
+    const url = await absoluteUrlForSharePath(path);
+    return { error: null, url, path };
+  }
+
+  let token = randomBytes(32).toString("base64url");
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const { error: insertError } = await admin.schema("public").from("share_links").insert({
+      token,
+      generated_meme_id: normalizedOutputId,
+      created_by_user_id: loaded.currentUserId,
+    });
+    if (!insertError) {
+      const path = `/s/${token}`;
+      const url = await absoluteUrlForSharePath(path);
+      return { error: null, url, path };
+    }
+    if (insertError.code === "23505") {
+      token = randomBytes(32).toString("base64url");
+      continue;
+    }
+    return { error: insertError.message, url: null, path: null };
+  }
+
+  return { error: "Could not create a share link.", url: null, path: null };
 }
 

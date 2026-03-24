@@ -166,7 +166,8 @@ export function WorkspaceShell({
           </span>
         </div>
         <div className="mt-3 flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
-          <div className="min-h-[160px] flex-1 overflow-y-auto pr-1 lg:min-h-[190px]">
+          {/* min-h-0 (not a fixed min-height) so this region can shrink when the processing row is visible; otherwise the help block is clipped in a fixed-height aside. */}
+          <div className="min-h-0 flex-1 overflow-y-auto pr-1">
             <MessageList
               messages={sidebarMessages}
               onPillClick={submitMessage}
@@ -174,8 +175,8 @@ export function WorkspaceShell({
           </div>
 
           {isJobActive ? (
-            <div className="shrink-0 rounded-2xl border border-sky-100 bg-white/80 px-3 py-2">
-              <div className="flex items-center gap-2 text-xs text-sky-700">
+            <div className="shrink-0 rounded-2xl border border-sky-100 bg-white/80 px-2.5 py-1.5">
+              <div className="flex items-center gap-2 text-[11px] leading-tight text-sky-700">
                 <div className="flex items-center gap-1">
                   <span
                     className="h-1.5 w-1.5 rounded-full bg-sky-500 animate-pulse"

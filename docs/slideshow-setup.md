@@ -9,6 +9,7 @@ Short runbook for ingesting slideshow background assets and generating slideshow
   - `SUPABASE_URL` (or `NEXT_PUBLIC_SUPABASE_URL`)
   - `SUPABASE_SERVICE_ROLE_KEY`
 - Optional env vars:
+  - `SLIDESHOW_INGEST_DIR` (override default local source folder for ingestion)
   - `SLIDESHOW_ASSETS_BUCKET` (default: `slideshow-assets`)
   - `SLIDESHOW_STORAGE_PREFIX` (default: `vertical`)
 
@@ -28,8 +29,8 @@ This adds slideshow fields (`template_family`, `slideshow_config`) and the `slid
 
 ## 3) Prepare local source images
 
-- Put vertical images in:
-  - `~/Desktop/tt-slideshow` (default), or use `--dir`.
+- Put vertical images in **`~/Desktop/New_templates/tt-slideshow`** (default path used by the ingest script).
+- Override with `--dir="/path/to/folder"` or `SLIDESHOW_INGEST_DIR`.
 - Supported extensions: `.png`, `.jpg`, `.jpeg`, `.webp`.
 
 ## 4) Run ingestion script
@@ -44,10 +45,18 @@ Script:
 pnpm exec tsx scripts/slideshow/ingest-tt-slideshow.ts --dry-run=true
 ```
 
+Uses default folder `~/Desktop/New_templates/tt-slideshow`.
+
 ### 4b) Real ingestion
 
 ```bash
-pnpm exec tsx scripts/slideshow/ingest-tt-slideshow.ts --dry-run=false --dir="/path/to/tt-slideshow"
+pnpm exec tsx scripts/slideshow/ingest-tt-slideshow.ts --dry-run=false
+```
+
+Optional explicit path (same as default on macOS):
+
+```bash
+pnpm exec tsx scripts/slideshow/ingest-tt-slideshow.ts --dry-run=false --dir="$HOME/Desktop/New_templates/tt-slideshow"
 ```
 
 Useful options:
@@ -55,12 +64,14 @@ Useful options:
 - `--limit=20`
 - `--report=./tmp/slideshow-ingest-report.json`
 - `--storage-prefix=vertical`
+- `--vision-delay-ms=400` (or `SLIDESHOW_VISION_DELAY_MS`) — optional pause between vision API calls to reduce burst rate limits
 
 Notes:
 
 - Ingestion is idempotent by content hash.
 - If a file hash already exists, it is skipped.
 - To force re-processing, change the file or remove the existing DB row.
+- If OpenAI returns **429 (rate limit)**, the script **retries with backoff** (and honors `Retry-After` / “try again in …ms” when present). Re-running the same command is safe: already-ingested files are skipped and only missing ones are processed.
 
 ## 5) Ensure at least one active slideshow template exists
 

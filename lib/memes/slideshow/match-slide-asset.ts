@@ -94,18 +94,38 @@ export function pickBestSlideshowAsset(
   return best;
 }
 
-/** If criteria match nothing well, fall back to best layout-fit then first id. */
+/**
+ * Prefer assets not yet used in this slideshow. If the library is smaller than slide_count,
+ * falls back to the full library so generation can still complete (reuse allowed as last resort).
+ */
 export function resolveSlideAsset(
   criteria: SlideshowImageSelectionCriteria,
   layout: SlideshowLayoutVariant,
-  assets: SlideshowImageAssetRecord[]
+  assets: SlideshowImageAssetRecord[],
+  usedAssetIdsInSlideshow?: ReadonlySet<string>
 ): SlideshowImageAssetRecord | null {
-  const primary = pickBestSlideshowAsset(criteria, layout, assets);
+  const excluded =
+    usedAssetIdsInSlideshow && usedAssetIdsInSlideshow.size > 0
+      ? usedAssetIdsInSlideshow
+      : null;
+  const pool = excluded
+    ? assets.filter((a) => !excluded.has(a.id))
+    : assets;
+  const effectivePool = pool.length > 0 ? pool : assets;
+
+  if (excluded && pool.length === 0 && assets.length > 0) {
+    console.warn("[slideshow-gen] distinct-asset pool exhausted; reusing a library image within this slideshow", {
+      usedDistinct: excluded.size,
+      librarySize: assets.length,
+    });
+  }
+
+  const primary = pickBestSlideshowAsset(criteria, layout, effectivePool);
   if (primary && scoreSlideshowAssetMatch(criteria, layout, primary) >= 0) {
     return primary;
   }
 
-  const byFit = [...assets].sort((a, b) => {
+  const byFit = [...effectivePool].sort((a, b) => {
     const fa = layout === "layout_a" ? a.layout_a_fit : a.layout_b_fit;
     const fb = layout === "layout_a" ? b.layout_a_fit : b.layout_b_fit;
     const na = fa ?? -1;
