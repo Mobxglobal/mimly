@@ -65,7 +65,7 @@ export function MessageList({
             <p className="whitespace-pre-wrap">{getText(message.content)}</p>
             {isAssistant && pillRows.length > 0 ? (
               <div className="mt-3 flex flex-wrap gap-2.5">
-                {pillRows.slice(0, 4).map((pill, index) => (
+                {pillRows.slice(0, 5).map((pill, index) => (
                   <button
                     key={`${message.id}-pill-${index}-${pill.label}`}
                     type="button"
@@ -77,6 +77,10 @@ export function MessageList({
                       pill.kind === "format"
                         ? "border-sky-200 bg-white text-sky-700 hover:bg-sky-50"
                         : "border-stone-200 bg-white text-stone-700 hover:bg-stone-50"
+                    } cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-white ${
+                      pill.kind === "format"
+                        ? "focus-visible:ring-sky-200/70"
+                        : "focus-visible:ring-stone-200/80"
                     }`}
                   >
                     {pill.label}
@@ -97,10 +101,11 @@ export function MessageList({
           <p className="mt-2 text-xs text-stone-500">Choose a format to start:</p>
           <div className="mt-2 flex flex-wrap gap-2">
             {[
-              { label: "Square Image", message: "Create a square image meme for this direction." },
-              { label: "Square Video", message: "Create a square video meme for this direction." },
-              { label: "Square Text", message: "Create a square text meme for this direction." },
-              { label: "Slideshow", message: "Create a vertical slideshow for this direction." },
+              { label: "Square Image", message: "Create image memes for this idea" },
+              { label: "Square Video", message: "Create video memes for this idea" },
+              { label: "Square Text", message: "Create text memes for this idea" },
+              { label: "Engagement post", message: "Create an engagement post for this idea" },
+              { label: "Slideshow", message: "Create a slideshow for this idea" },
             ].map((option) => (
               <button
                 key={option.label}
@@ -109,7 +114,7 @@ export function MessageList({
                   if (!onPillClick) return;
                   void onPillClick(option.message);
                 }}
-                className="rounded-full border border-sky-200 bg-sky-50/70 px-2.5 py-1 text-[11px] font-medium text-sky-700 transition hover:bg-sky-100"
+                className="cursor-pointer rounded-full border border-sky-200 bg-sky-50/70 px-2.5 py-1 text-[11px] font-medium text-sky-700 transition hover:bg-sky-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-200/70 focus-visible:ring-offset-2 focus-visible:ring-offset-white"
               >
                 {option.label}
               </button>

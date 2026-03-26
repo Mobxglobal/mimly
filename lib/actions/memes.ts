@@ -11,6 +11,7 @@ import { randomUUID } from "node:crypto";
 import { renderMemePNGFromTemplate } from "@/renderer/renderMemeTemplate";
 import { renderMemeMP4FromTemplate } from "@/renderer/renderMemeVideoTemplate";
 import { renderSquareTextMemePng } from "@/renderer/renderSquareTextMeme";
+import { renderEngagementTextMemePng } from "@/renderer/renderEngagementTextMeme";
 import type { MemeOutputFormat } from "@/lib/memes/meme-output-formats";
 import { getActiveImportantDay } from "@/lib/memes/variants/get-active-important-day";
 import { runVerticalSlideshowGeneration } from "@/lib/memes/slideshow/generate-vertical-slideshow";
@@ -43,6 +44,12 @@ export async function generateMockMemes(
     explicitPromoContext?: string | null;
     /** Neutral workspace summary from chat/workspace state. */
     workspaceContextSummary?: string | null;
+    /**
+     * Internal routing hint for `template_family` selection.
+     * - When set to "engagement_text", only templates with template_family="engagement_text" are eligible.
+     * - When null/undefined, square_text uses only template_family="square_text".
+     */
+    templateFamilyPreference?: "engagement_text" | null;
   }
 ): Promise<{ error: string | null; generationRunId?: string }> {
   try {
@@ -106,6 +113,7 @@ export async function generateMockMemes(
     | "side_caption"
     | "overlay"
     | "sign_caption";
+  type EngagementValidationMode = "keyword_phrase";
 
   const normalizePromotionContext = (value: unknown): string | null => {
     if (typeof value !== "string") return null;
@@ -145,6 +153,7 @@ export async function generateMockMemes(
   const workspaceContextSummary = normalizeConversationContext(options?.workspaceContextSummary);
   const batchSize = options?.limit ?? INITIAL_TEMPLATE_BATCH_SIZE;
   const outputFormat: MemeOutputFormat = options?.outputFormat ?? "square_image";
+  const templateFamilyPreference = options?.templateFamilyPreference ?? null;
   const targetAssetType = outputFormat === "square_video" ? "video" : "image";
   const forcedTemplateId = String(options?.forcedTemplateId ?? "").trim() || null;
   const forceStandardVariant = Boolean(options?.forceStandardVariant);
@@ -574,6 +583,8 @@ export async function generateMockMemes(
     slug: string;
     /** Drives generation/render routing (square_meme | vertical_slideshow | square_text). */
     template_family: string;
+    /** Raw DB layout key for family-specific behavior (e.g. finish_sentence, birthday_names_list). */
+    text_layout_type: string | null;
     template_type: TemplateType;
     asset_type: "image" | "video";
     media_format: string | null;
@@ -616,6 +627,14 @@ export async function generateMockMemes(
     slot_2_y?: number | null;
     slot_2_width?: number | null;
     slot_2_height?: number | null;
+  };
+
+  type EngagementLayoutConfig = {
+    generationContract: string;
+    slotGuidance: (template: CompatibleTemplate) => string;
+    templateSpecificGuidance?: string;
+    validationMode?: EngagementValidationMode;
+    namesCount?: number;
   };
 
   const toNullableInt = (v: any): number | null => {
@@ -826,6 +845,208 @@ Slot 1:
 - max_lines: ${template.slot_1_max_lines}`;
   };
 
+  const getEngagementLayoutKey = (template: CompatibleTemplate): string => {
+    return String(template.text_layout_type ?? "").trim().toLowerCase();
+  };
+
+  const getFinishSentenceSlotGuidance = (template: CompatibleTemplate): string => {
+    const slot1Role = template.slot_1_role || "keyword";
+    return `Slot behavior for engagement_text.finish_sentence (keyword insert):
+Slot 1:
+- role: ${slot1Role}
+- Generate a niche-specific keyword/phrase for: "I hate [keyword] because".
+- Output must be the keyword/phrase ONLY.
+- Word count: 2–4 words maximum.
+- Must be a concise noun phrase (label-style), not a clause/sentence.
+- Keep total characters comfortably under max_chars.
+- No "I hate" or "because" words.
+- Avoid “people who / clients who / members who / those who” constructions.
+- Prefer concrete, socially recognizable annoyances over abstract categories.
+- Keep it comment-triggering, emotionally recognizable, and tight.
+- Avoid bland internal/admin wording unless transformed into a punchier social phrase.
+- Prefer a fresh angle over the most obvious repeated pain point.
+- max_chars: ${template.slot_1_max_chars}
+- max_lines: ${template.slot_1_max_lines}`;
+  };
+
+  const ENGAGEMENT_LAYOUT_CONFIGS: Record<string, EngagementLayoutConfig> = {
+    finish_sentence: {
+      generationContract: `ENGAGEMENT TEXT MEME FORMAT (layout: finish_sentence):
+- There is NO reaction image or video: this template is a fixed 2-line text layout rendered entirely in code on a white background.
+- The visible structure is:
+  1) "Finish this sentence."
+  2) "I hate [keyword] because"
+- Your job is ONLY to generate the niche-specific keyword/phrase that goes in the brackets.
+
+OUTPUT CONTRACT (STRICT):
+- Output ONLY slot_1 (top_text): the keyword/phrase.
+- Keyword length: 2–4 words maximum.
+- Format: concise noun phrase (label-style), not a sentence.
+- Do not output "I hate" or "because" anywhere.
+- No full clauses; avoid verb-started explanations and avoid trailing punctuation.
+- Avoid “people who”, “members who”, “clients who”, “those who”, “anyone who”, “the ones who”, and similar “who/that/which” constructions.
+- If you drift into a full sentence, shorten to a noun phrase.
+- Prioritize phrases that trigger immediate reactions/comments from people in that niche.
+- Prefer recurring annoyances, behaviours, habits, and socially recognizable frustrations over neutral operational wording.
+- Avoid bland admin/business phrasing (e.g., generic scheduling/cancellation/internal-ops labels) unless phrased in a socially punchy way.
+- Use a vivid, specific angle rather than the safest generic pain point.
+- Repetition control: avoid repeating the most obvious angle if another equally valid niche-specific frustration exists.
+- If recent context suggests a phrase was already used, choose a fresh angle (not a near-duplicate).
+
+Examples:
+Valid (keyword only):
+- leg day excuses
+- no-show bookings
+- client revisions
+- ghosted invoices
+- streaky windows
+- fake "on my way" texts
+Invalid:
+- "I hate leg day because"
+- "people who skip leg day"
+- "members skipping classes"
+- "last-minute cancellations"
+- "I hate how my manager schedules workouts"`,
+      slotGuidance: getFinishSentenceSlotGuidance,
+      templateSpecificGuidance: `Template-specific guidance: finish_sentence (engagement keyword)
+- You are ONLY filling: "I hate [keyword] because".
+- slot_1_text MUST be a keyword/phrase (2–4 words). No sentence-style clauses.
+- Must be a noun phrase (label-style), e.g. "leg day excuses", "ghosted invoices".
+- Hard bans: do not include the words "I hate" or "because" at all.
+- Hard bans: do not use "people who / clients who / members who / those who / anyone who" style constructions.
+- Texture target: socially native, emotionally recognizable, comment-triggering frustrations.
+- Avoid bland operational/admin wording that sounds internal or generic.
+- Repetition control: if one obvious angle already appeared, choose a different but equally niche-specific frustration.
+- Examples:
+  - Valid: "no-show bookings"
+  - Valid: "ghosted invoices"
+  - Valid: "fake \"on my way\" texts"
+  - Invalid: "members skipping classes"
+  - Invalid: "last-minute cancellations"
+  - Invalid: "people who skip workouts"
+  - Invalid: "I hate editing videos because they are annoying"`,
+      validationMode: "keyword_phrase",
+    },
+    birthday_names_list: {
+      generationContract: `ENGAGEMENT TEXT MEME FORMAT (layout: birthday_names_list):
+- Headline format: "These {slot_1} deserve {slot_2} for their birthday".
+- Generate:
+  - top_text = slot_1 (subject group)
+  - bottom_text = slot_2 (gift/reward phrase)
+  - names = first-name list for rendering below headline
+
+OUTPUT CONTRACT (STRICT):
+- top_text and bottom_text must be concise noun-phrase style text.
+- names must be an array of EXACTLY 24 first names.
+- Names rules:
+  - first names only
+  - no surnames
+  - no duplicates
+  - no numbering
+  - no bullets
+  - no commentary
+  - no extra keys
+- Keep names relevant to audience/context where appropriate.
+
+Examples:
+Valid:
+- top_text: "women"
+- bottom_text: "a spa day"
+- names: ["Emma", "Sofia", ... 24 total]
+Invalid:
+- top_text: "people who train at my gym"
+- names with duplicates
+- names with surnames
+- names with numbering like "1. Emma"`,
+      slotGuidance: (template) => `Slot behavior for engagement_text.birthday_names_list:
+Slot 1 (top_text):
+- role: ${template.slot_1_role || "subject group"}
+- Short subject group phrase for: "These {slot_1} deserve..."
+- Keep concise and social-native.
+- max_chars: ${template.slot_1_max_chars}
+- max_lines: ${template.slot_1_max_lines}
+
+Slot 2 (bottom_text):
+- role: ${template.slot_2_role || "gift/reward phrase"}
+- Short gift/reward phrase for: "...deserve {slot_2} for their birthday".
+- Keep concise and natural.
+- max_chars: ${template.slot_2_max_chars}
+- max_lines: ${template.slot_2_max_lines}
+
+Names list:
+- Return names: string[] with exactly 24 first names.
+- No duplicates, no surnames, no numbering, no bullets.`,
+      templateSpecificGuidance: `Template-specific guidance: birthday_names_list
+- Write a socially-native, reaction-friendly birthday claim.
+- top_text should feel like a recognizable cohort (e.g., women, mums, dads, gym girls, barbers).
+- bottom_text should be a concrete reward phrase (e.g., "a spa day", "a new car", "a free holiday").
+- Names should match the implied audience where possible.`,
+      namesCount: 24,
+    },
+  };
+
+  const getEngagementLayoutConfig = (
+    template: CompatibleTemplate
+  ): EngagementLayoutConfig | null => {
+    if (template.template_family !== "engagement_text") return null;
+    return ENGAGEMENT_LAYOUT_CONFIGS[getEngagementLayoutKey(template)] ?? null;
+  };
+
+  const validateFirstNamesList = (
+    value: unknown,
+    expectedCount: number
+  ): { value: string[] | null; failRule: string | null } => {
+    if (!Array.isArray(value)) {
+      return { value: null, failRule: "names_missing_or_invalid" };
+    }
+    const cleaned = value
+      .map((v) => normalizeSingleLine(v))
+      .filter((v): v is string => Boolean(v))
+      .map((v) => v.trim())
+      .filter(Boolean);
+    if (cleaned.length !== expectedCount) {
+      return { value: null, failRule: "names_wrong_count" };
+    }
+    const seen = new Set<string>();
+    for (const name of cleaned) {
+      if (/\d/.test(name)) return { value: null, failRule: "names_contains_numbering" };
+      if (/^\s*[-*]/.test(name)) return { value: null, failRule: "names_contains_bullets" };
+      if (name.split(/\s+/).length > 1) return { value: null, failRule: "names_contains_surname" };
+      const key = name.toLowerCase();
+      if (seen.has(key)) return { value: null, failRule: "names_has_duplicates" };
+      seen.add(key);
+    }
+    return { value: cleaned, failRule: null };
+  };
+
+  /** LLM contract for template_family engagement_text only (keyword in I hate [keyword] because). */
+  const getEngagementTextFamilyPromptSection = (
+    template: CompatibleTemplate
+  ): string => {
+    const layoutConfig = getEngagementLayoutConfig(template);
+    if (layoutConfig) return layoutConfig.generationContract;
+    if (template.template_family !== "engagement_text") return "";
+    return `ENGAGEMENT TEXT MEME FORMAT (generic fallback):
+- This template is in template_family engagement_text.
+- Generate slot_1 keyword/phrase only.
+- Keep wording concise and comment-triggering.
+- Do not include "I hate" or "because".`;
+  };
+
+  const getEngagementTextSlotGuidance = (
+    template: CompatibleTemplate
+  ): string => {
+    const layoutConfig = getEngagementLayoutConfig(template);
+    if (layoutConfig) return layoutConfig.slotGuidance(template);
+    const slot1Role = template.slot_1_role || "keyword";
+    return `Slot behavior for engagement_text:
+Slot 1:
+- role: ${slot1Role}
+- Output slot_1 keyword/phrase only.
+- max_chars: ${template.slot_1_max_chars}
+- max_lines: ${template.slot_1_max_lines}`;
+  };
+
   const getMemeMechanicGuidance = (template: CompatibleTemplate): string => {
     switch (template.meme_mechanic) {
       case "reject_vs_prefer":
@@ -849,6 +1070,11 @@ Slot 1:
   };
 
   const getTemplateSpecificGuidance = (template: CompatibleTemplate): string => {
+    const engagementLayoutConfig = getEngagementLayoutConfig(template);
+    if (engagementLayoutConfig?.templateSpecificGuidance) {
+      return engagementLayoutConfig.templateSpecificGuidance;
+    }
+
     if (template.slug === "drake") {
       return `Template-specific guidance: drake
 - Write this like an instantly recognizable Drake reject-vs-prefer contrast.
@@ -949,6 +1175,16 @@ ${getTemplateTypeRetryShape()}`;
     }
 
     if (previousFailureRule.endsWith("_over_max_chars") && slotLabel && slotMaxChars) {
+      if (getEngagementLayoutConfig(template)?.validationMode === "keyword_phrase") {
+        return `Retry correction:
+- ${slotLabel} should be a keyword/phrase only that fits: "I hate [keyword] because".
+- Do NOT include the words "I hate" or "because" in ${slotLabel}.
+- Keep ${slotLabel} at or under ${slotMaxChars} characters.
+- Prefer 2–4 word niche noun phrases (no clauses).
+- Avoid “people who / clients who / members who / those who” constructions.
+- Prefer shorter, tighter nouns + modifiers (2–4 words total).`;
+      }
+
       const strictTightMode =
         isUltraTightTemplate(template) &&
         (template.template_type === "side_caption" ||
@@ -970,6 +1206,14 @@ ${getTemplateTypeRetryShape()}`;
       slotLabel &&
       slotMaxChars
     ) {
+      if (getEngagementLayoutConfig(template)?.validationMode === "keyword_phrase") {
+        return `Retry correction:
+- ${slotLabel} is allowed to be a short keyword phrase (not a sentence-style caption).
+- ${slotLabel} must fit the "I hate [keyword] because" structure (keyword only).
+- Do NOT include "I hate" or "because" in ${slotLabel}.
+- Keep ${slotLabel} at or under ${slotMaxChars} characters.`;
+      }
+
       return `Retry correction:
 - The previous ${slotLabel} looked cut off or incomplete.
 - Rewrite it as one complete, finishable phrase.
@@ -1032,6 +1276,11 @@ ${getTemplateTypeRetryShape()}`;
   const allowShortLabelValidationMode = (
     template: CompatibleTemplate
   ): boolean => {
+    // Engagement keyword-phrase layouts intentionally bypass sentence-fragment heuristics.
+    if (getEngagementLayoutConfig(template)?.validationMode === "keyword_phrase") {
+      return true;
+    }
+
     return (
       isUltraTightTemplate(template) &&
       (template.template_type === "side_caption" ||
@@ -1085,9 +1334,12 @@ ${getTemplateTypeRetryShape()}`;
         const family = String(t.template_family ?? "square_meme").trim();
         if (family === "vertical_slideshow") return false;
         if (outputFormat === "square_text") {
+          if (templateFamilyPreference === "engagement_text") {
+            return family === "engagement_text";
+          }
           return family === "square_text";
         }
-        if (family === "square_text") return false;
+        if (family === "square_text" || family === "engagement_text") return false;
         const assetType = String(t.asset_type ?? "image").trim().toLowerCase();
         return assetType === targetAssetType;
       })
@@ -1108,6 +1360,9 @@ ${getTemplateTypeRetryShape()}`;
           template_name: String(t.template_name ?? t.name ?? "").trim(),
           slug: String(t.slug ?? "").trim(),
           template_family: String(t.template_family ?? "square_meme").trim(),
+          text_layout_type: t.text_layout_type
+            ? String(t.text_layout_type).trim()
+            : null,
           template_type: templateType,
           asset_type:
             String(t.asset_type ?? "image").trim().toLowerCase() === "video"
@@ -1173,7 +1428,9 @@ ${getTemplateTypeRetryShape()}`;
     console.error("[meme-gen] No compatible templates found after filtering.");
     return {
       error:
-        outputFormat === "square_video"
+        templateFamilyPreference === "engagement_text"
+          ? "No active engagement templates found."
+          : outputFormat === "square_video"
           ? "No active square video templates found."
           : outputFormat === "square_text"
             ? "No active square text templates found."
@@ -1476,6 +1733,7 @@ ${getTemplateTypeRetryShape()}`;
           top_text: string;
           bottom_text: string | null;
           slot_3_text: string | null;
+          names?: string[];
         };
         failureRule: null;
       }
@@ -1527,6 +1785,9 @@ IMPORTANT DAY WRITING RULES
 
     const { topIdeal, bottomIdeal } = getIdealSlotTargets(template, attempt);
     const isThreeSlot = !!template.slot_3_role;
+    const engagementLayout = getEngagementLayoutConfig(template);
+    const namesCount = engagementLayout?.namesCount ?? null;
+    const engagementLayoutKey = getEngagementLayoutKey(template);
 
     const explicitPromoModeInstructions =
       variantContext.variantType !== "promo"
@@ -1580,7 +1841,8 @@ IMPORTANT DAY WRITING RULES
         : `- Do not assume promotional intent when no explicit offer context is provided.`;
 
     const imageVideoAntiGenericRules =
-      template.template_family === "square_text"
+      template.template_family === "square_text" ||
+      template.template_family === "engagement_text"
         ? ""
         : `Anti-generic rules for square_image/square_video:
 - Do not default to "When..." unless the moment is clearly specific and distinctive.
@@ -1643,8 +1905,9 @@ Template behavior:
 - example_output: ${template.example_output}
 
 ${getSquareTextFamilyPromptSection(template)}
-${template.template_family === "square_text" ? "" : getTemplateTypeWritingGuidance(template)}
-${template.template_family === "square_text" ? getSquareTextSlotGuidance(template) : getSlotWritingGuidance(template)}
+${getEngagementTextFamilyPromptSection(template)}
+${template.template_family === "square_text" || template.template_family === "engagement_text" ? "" : getTemplateTypeWritingGuidance(template)}
+${template.template_family === "square_text" ? getSquareTextSlotGuidance(template) : template.template_family === "engagement_text" ? getEngagementTextSlotGuidance(template) : getSlotWritingGuidance(template)}
 ${isThreeSlot
   ? `Three-slot output mapping:
 - slot_1_role ("${template.slot_1_role}") -> slot_1_text
@@ -1666,7 +1929,13 @@ ${
   template.template_family === "square_text"
     ? `- For square_text: top_text must read as a finished standalone thought on a plain text card (not a teaser line for an image). Avoid trailing commas that imply more is coming.
 `
-    : ""
+    : template.template_family === "engagement_text"
+      ? getEngagementLayoutKey(template) === "birthday_names_list"
+        ? `- For engagement_text.birthday_names_list: top_text and bottom_text are required headline slots for "These {top_text} deserve {bottom_text} for their birthday".
+- names MUST be present as an array with EXACTLY ${namesCount ?? 24} first names.
+- names must contain no duplicates, no surnames, no numbering, and no bullets.`
+        : `- For engagement_text.finish_sentence: top_text MUST be ONLY the keyword/phrase inserted into "I hate [keyword] because". It must NOT contain "I hate" or "because". bottom_text MUST be null.`
+      : ""
 }- top_text MUST be <= ${template.slot_1_max_chars} characters and complete (no mid-word cut-offs).
 - top_text should ideally be <= ${topIdeal} characters.
 - bottom_text MUST be <= ${template.slot_2_max_chars} characters when present, and complete.
@@ -1675,12 +1944,18 @@ ${
 - Do not include disallowed/unsafe content (hate, sexual, illegal, harassment, personal data).
 
 Quality gate before return:
-- Is the caption a specific situation rather than a generic statement?
+${template.template_family === "engagement_text" ? getEngagementLayoutKey(template) === "birthday_names_list" ? `- Does the headline read naturally: "These {top_text} deserve {bottom_text} for their birthday"?
+- Is names[] exactly ${namesCount ?? 24} first names, unique, no surnames?
+- Do names match the audience/context where appropriate?
+- If not, rewrite before returning JSON.` : `- Is top_text niche-specific and likely to trigger comments when plugged into: "I hate [keyword] because"?
+- Does top_text avoid generic category words (e.g. marketing, business, fitness, success)?
+- Does top_text NOT include "I hate" or "because"?
+- If not, rewrite before returning JSON.` : `- Is the caption a specific situation rather than a generic statement?
 - Does it include at least one tangible detail from a real moment?
 - Is the emotional mechanic obvious for this template?
 - Does it avoid ad-like or interchangeable business phrasing?
 - Does every field fit constraints without sounding clipped?
-- If not, rewrite before returning JSON.
+- If not, rewrite before returning JSON.`}
 
 ${retryCorrectiveGuidance}
 
@@ -1691,6 +1966,13 @@ ${isThreeSlot
   "slot_2_text": string,
   "slot_3_text": string
 }`
+  : namesCount
+    ? `{
+  "title": string,
+  "top_text": string,
+  "bottom_text": string,
+  "names": string[] // EXACTLY ${namesCount} first names
+}`
   : `{
   "title": string,
   "top_text": string,
@@ -1700,6 +1982,10 @@ ${isThreeSlot
     console.log("[meme-gen] OpenAI prompt", {
       template: template.slug,
       templateType: template.template_type,
+      templateFamily: template.template_family,
+      textLayoutType: template.text_layout_type,
+      engagementLayoutKey,
+      hasEngagementLayoutConfig: Boolean(engagementLayout),
       memeMechanic: template.meme_mechanic,
       hasMechanicSpecificGuidance: Boolean(mechanicSpecificGuidance),
       hasTemplateSpecificGuidance: Boolean(templateSpecificGuidance),
@@ -1744,6 +2030,13 @@ ${isThreeSlot
 
     const json = (await res.json()) as any;
     const content = json?.choices?.[0]?.message?.content ?? "{}";
+    if (template.template_family === "engagement_text") {
+      console.log("[meme-gen] Engagement raw model output", {
+        template: template.slug,
+        textLayoutType: template.text_layout_type,
+        contentPreview: String(content).slice(0, 400),
+      });
+    }
     const parsed = safeJsonParse(String(content));
     if (!parsed || typeof parsed !== "object") {
       console.error("[meme-gen] Validation failed (json_parse_failed)", {
@@ -1756,6 +2049,14 @@ ${isThreeSlot
     }
 
     const p = parsed as any;
+    if (template.template_family === "engagement_text") {
+      console.log("[meme-gen] Engagement parsed payload keys", {
+        template: template.slug,
+        textLayoutType: template.text_layout_type,
+        keys: Object.keys(p ?? {}),
+        hasNamesArray: Array.isArray(p?.names),
+      });
+    }
 
     const slot1ValidationLabel = "slot_1";
     const slot2ValidationLabel = "slot_2";
@@ -1763,6 +2064,9 @@ ${isThreeSlot
     const slot1Value = isThreeSlot ? p.slot_1_text : p.top_text;
     const slot2Value = isThreeSlot ? p.slot_2_text : p.bottom_text;
     const slot3Value = isThreeSlot ? p.slot_3_text : null;
+    const namesValidation = namesCount
+      ? validateFirstNamesList(p.names, namesCount)
+      : { value: null as string[] | null, failRule: null as string | null };
 
     // Validation: avoid inserting broken rows.
     const titleValidation = isThreeSlot
@@ -1869,6 +2173,20 @@ ${isThreeSlot
       };
     }
 
+    if (namesCount && !namesValidation.value) {
+      console.error("[meme-gen] Engagement names validation failed", {
+        template: `${template.template_name} (${template.slug})`,
+        textLayoutType: template.text_layout_type,
+        rule: namesValidation.failRule,
+        expectedCount: namesCount,
+        receivedCount: Array.isArray(p.names) ? p.names.length : null,
+      });
+      return {
+        result: null,
+        failureRule: namesValidation.failRule ?? "names_validation_failed",
+      };
+    }
+
     if (isThreeSlot && !slot3Validation.value) {
       console.error("[meme-gen] Validation failed", {
         template: `${template.template_name} (${template.slug})`,
@@ -1901,6 +2219,7 @@ ${isThreeSlot
         top_text: finalTop,
         bottom_text: finalBottom,
         slot_3_text: finalSlot3,
+        names: namesValidation.value ?? undefined,
       },
       failureRule: null,
     };
@@ -1945,7 +2264,7 @@ ${isThreeSlot
     const explicitPromoMode = deriveExplicitPromoMode(template);
     const fallbackReplacementUsed = failedCount > 0;
     const variantMetadata =
-      template.template_family === "square_text"
+      template.template_family === "square_text" || template.template_family === "engagement_text"
         ? variantType === "important_day"
           ? {
               important_day_key: variantContext.importantDayKey,
@@ -1972,6 +2291,7 @@ ${isThreeSlot
           top_text: string;
           bottom_text: string | null;
           slot_3_text: string | null;
+          names?: string[];
         }
       | null = null;
     let previousFailureRule: string | null = null;
@@ -2061,6 +2381,36 @@ ${isThreeSlot
 
         if (uploadError) {
           throw new Error(uploadError.message || `Failed to upload square text meme`);
+        }
+
+        const publicUrlRes = adminSupabase.storage
+          .from(generatedMemeBucket)
+          .getPublicUrl(objectPath);
+        imageUrl = publicUrlRes.data.publicUrl ?? null;
+      } else if (template.template_family === "engagement_text") {
+        const pngBuffer = await renderEngagementTextMemePng({
+          keyword: generated.top_text,
+          topText: generated.top_text,
+          bottomText: generated.bottom_text,
+          names: generated.names,
+          template,
+        });
+
+        const objectPath = `generated_memes/${
+          workspaceContext?.storagePathNamespace ?? actorUserId ?? "anonymous"
+        }/${template.template_id}/${randomUUID()}.png`;
+
+        const { error: uploadError } = await adminSupabase.storage
+          .from(generatedMemeBucket)
+          .upload(objectPath, pngBuffer, {
+            contentType: "image/png",
+            upsert: true,
+          });
+
+        if (uploadError) {
+          throw new Error(
+            uploadError.message || `Failed to upload engagement text meme`
+          );
         }
 
         const publicUrlRes = adminSupabase.storage
@@ -2182,6 +2532,9 @@ ${isThreeSlot
       ...(variantMetadata as Record<string, unknown>),
       ...(workspaceMeta ?? {}),
       ...(contentPackMeta ?? {}),
+      ...(template.template_family === "engagement_text" && Array.isArray(generated.names)
+        ? { engagement_names: generated.names }
+        : {}),
       selection_strategy:
         outputFormat === "square_text"
           ? "square_text_open_variant"

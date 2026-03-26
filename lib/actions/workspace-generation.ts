@@ -23,6 +23,7 @@ type FollowupPayload = {
   deferred_from_intent?: unknown;
   explicit_promo_intent?: unknown;
   promo_context_excerpt?: unknown;
+  template_family_preference?: unknown;
   workspace_context_summary?: unknown;
 };
 
@@ -78,10 +79,14 @@ export function buildWorkspaceGenerationPlan(params: {
 
 function completionFollowupMessage(
   outputFormat: JobRow["output_format"],
-  outputCount: number
+  outputCount: number,
+  templateFamilyPreference?: "engagement_text" | null
 ): string {
   if (outputCount <= 0) {
     return "I could not map outputs from that pass. I can retry with a tighter brief or switch format.";
+  }
+  if (outputFormat === "square_text" && templateFamilyPreference === "engagement_text") {
+    return "I made an engagement post version. Want another one or a format switch?";
   }
   if (outputFormat === "vertical_slideshow") {
     return "I drafted a slideshow set. Next move: sharpen the hook, or spin this into image memes or text memes.";
@@ -95,12 +100,19 @@ function completionFollowupMessage(
   return "I made an image meme version. Want another one, a funnier pass, or a format switch?";
 }
 
-function completionUiPills(outputFormat: JobRow["output_format"]) {
+function completionUiPills(
+  outputFormat: JobRow["output_format"],
+  templateFamilyPreference?: "engagement_text" | null
+) {
+  const preferEngagement = templateFamilyPreference === "engagement_text";
   return [
-    { label: "Image Meme", message: "Make image memes for this direction.", kind: "format" as const },
-    { label: "Video Meme", message: "Turn this into short square video memes.", kind: "format" as const },
-    { label: "Text Meme", message: "Make text-only meme versions.", kind: "format" as const },
-    { label: "Slideshow", message: "Turn this into a slideshow.", kind: "format" as const },
+    { label: "Image Meme", message: "Generate image memes for this idea", kind: "format" as const },
+    { label: "Video Meme", message: "Turn this idea into video memes", kind: "format" as const },
+    { label: "Text Meme", message: "Generate text memes for this idea", kind: "format" as const },
+    preferEngagement
+      ? { label: "Engagement post", message: "Turn this idea into an engagement post", kind: "format" as const }
+      : { label: "Engagement post", message: "Turn this idea into an engagement post", kind: "format" as const },
+    { label: "Slideshow", message: "Turn this idea into a slideshow", kind: "format" as const },
   ];
 }
 
@@ -196,6 +208,18 @@ export async function runGenerationPlan(params: {
         workspace.initial_prompt ??
         ""
     ).trim() || null;
+  const templateFamilyPreference =
+    metadata.template_family_preference === "engagement_text"
+      ? "engagement_text"
+      : null;
+
+  console.log("[workspace-gen] runGenerationPlan payload", {
+    outputFormat: job.output_format ?? "square_text",
+    templateFamilyPreference,
+    requestedVariantCount: job.requested_variant_count || 1,
+    workspaceId: workspace.id,
+    jobId: job.id,
+  });
 
   return generateMockMemes(job.prompt, {
     limit: job.requested_variant_count || 1,
@@ -203,6 +227,7 @@ export async function runGenerationPlan(params: {
     generationRunIdOverride: generationRunId,
     explicitPromoContext,
     workspaceContextSummary,
+    templateFamilyPreference,
     workspaceContext: {
       allowAnonymousWrite: true,
       actorUserId: workspace.user_id,
@@ -362,14 +387,27 @@ export async function runGenerationJob(
         role: "assistant",
         message_type: "generation_result",
         content: {
-          text: completionFollowupMessage(job.output_format, outputs.length),
+          text: completionFollowupMessage(
+            job.output_format,
+            outputs.length,
+            (job.metadata?.template_family_preference as
+              | "engagement_text"
+              | null
+              | undefined) ?? null
+          ),
           output_count: outputs.length,
           generation_job_id: job.id,
         } as Json,
         metadata: {
           output_format: job.output_format,
           follow_up_hint: true,
-          ui_pills: completionUiPills(job.output_format),
+          ui_pills: completionUiPills(
+            job.output_format,
+            (job.metadata?.template_family_preference as
+              | "engagement_text"
+              | null
+              | undefined) ?? null
+          ),
         } as Json,
       });
 
@@ -517,6 +555,10 @@ export async function runGenerationJob(
       const workspaceContextSummary =
         String(payload.workspace_context_summary ?? ws.business_summary ?? ws.initial_prompt ?? "").trim() ||
         null;
+      const templateFamilyPreference =
+        payload.template_family_preference === "engagement_text"
+          ? ("engagement_text" as const)
+          : null;
 
       await admin
         .schema("public")
@@ -537,8 +579,8 @@ export async function runGenerationJob(
         if (!existingActiveJob?.id) {
           const relationText =
             payload.relation_to_previous_job === "refine_last_generation"
-              ? "Applying that refinement now."
-              : "Running that next request now.";
+              ? "Applying your refinement."
+              : "Running that next.";
 
           await admin.schema("public").from("workspace_messages").insert({
             workspace_id: ws.id,
@@ -568,6 +610,7 @@ export async function runGenerationJob(
                 followupOutputFormat === "square_text"
                   ? "square_text_open_variant"
                   : "random_template",
+              template_family_preference: templateFamilyPreference,
               selected_template_id: null,
               selected_template_slug: null,
               based_on_job_id: basedOnJobId,

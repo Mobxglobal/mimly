@@ -62,6 +62,10 @@ export function HeroSection() {
   const [prompt, setPrompt] = useState("");
   const [promptError, setPromptError] = useState<string | null>(null);
   const [isSubmittingPrompt, setIsSubmittingPrompt] = useState(false);
+  type HomepageFamilyChip = "Image" | "Video" | "Text" | "Slideshow" | "Engagement";
+  const [selectedFamilyChip, setSelectedFamilyChip] = useState<HomepageFamilyChip | null>(
+    null
+  );
   const [placeholderIndex, setPlaceholderIndex] = useState(0);
   const [typedPlaceholder, setTypedPlaceholder] = useState("");
   const [isPromptFocused, setIsPromptFocused] = useState(false);
@@ -257,7 +261,38 @@ export function HeroSection() {
                 }
                 setPromptError(null);
                 setIsSubmittingPrompt(true);
-                const result = await createWorkspaceFromPrompt(nextPrompt);
+                const familyMapping =
+                  selectedFamilyChip === "Image"
+                    ? {
+                        preferredOutputFormat: "square_image" as const,
+                        templateFamilyPreference: null as const,
+                      }
+                    : selectedFamilyChip === "Video"
+                      ? {
+                          preferredOutputFormat: "square_video" as const,
+                          templateFamilyPreference: null as const,
+                        }
+                      : selectedFamilyChip === "Text"
+                        ? {
+                            preferredOutputFormat: "square_text" as const,
+                            templateFamilyPreference: null as const,
+                          }
+                        : selectedFamilyChip === "Slideshow"
+                          ? {
+                              preferredOutputFormat: "vertical_slideshow" as const,
+                              templateFamilyPreference: null as const,
+                            }
+                          : selectedFamilyChip === "Engagement"
+                            ? {
+                                preferredOutputFormat: "square_text" as const,
+                                templateFamilyPreference: "engagement_text" as const,
+                              }
+                            : null;
+
+                const result = await createWorkspaceFromPrompt(
+                  nextPrompt,
+                  familyMapping ?? undefined
+                );
                 setIsSubmittingPrompt(false);
                 if (result.error || !result.workspaceId) {
                   setPromptError(result.error ?? "Failed to start workspace.");
@@ -272,41 +307,113 @@ export function HeroSection() {
                   <label htmlFor="hero-prompt" className="sr-only">
                     Describe what you want to generate
                   </label>
-                  <textarea
-                    id="hero-prompt"
-                    value={prompt}
-                    onChange={(event) => {
-                      setPrompt(event.target.value);
-                      if (promptError) setPromptError(null);
-                    }}
-                    onFocus={() => setIsPromptFocused(true)}
-                    onBlur={() => setIsPromptFocused(false)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter" && !event.shiftKey) {
-                        event.preventDefault();
-                        if (!isSubmittingPrompt) {
-                          promptFormRef.current?.requestSubmit();
+                  <div className="mb-4 flex flex-wrap gap-2">
+                    {(
+                      [
+                        "Image",
+                        "Video",
+                        "Text",
+                        "Slideshow",
+                        "Engagement",
+                      ] as HomepageFamilyChip[]
+                    ).map((label) => {
+                      const isActive = selectedFamilyChip === label;
+                      const chipColor =
+                        label === "Image"
+                          ? {
+                              activeBg: "bg-sky-50/80",
+                              activeBorder: "border-sky-200",
+                              activeText: "text-sky-800",
+                              hoverBg: "hover:bg-sky-50/50",
+                            }
+                          : label === "Video"
+                            ? {
+                                activeBg: "bg-violet-50/80",
+                                activeBorder: "border-violet-200",
+                                activeText: "text-violet-800",
+                                hoverBg: "hover:bg-violet-50/50",
+                              }
+                            : label === "Text"
+                              ? {
+                                  activeBg: "bg-amber-50/90",
+                                  activeBorder: "border-amber-200",
+                                  activeText: "text-amber-900",
+                                  hoverBg: "hover:bg-amber-50/55",
+                                }
+                              : label === "Slideshow"
+                                ? {
+                                    activeBg: "bg-emerald-50/80",
+                                    activeBorder: "border-emerald-200",
+                                    activeText: "text-emerald-800",
+                                    hoverBg: "hover:bg-emerald-50/50",
+                                  }
+                                : {
+                                    activeBg: "bg-rose-50/80",
+                                    activeBorder: "border-rose-200",
+                                    activeText: "text-rose-800",
+                                    hoverBg: "hover:bg-rose-50/50",
+                                  };
+
+                      return (
+                        <button
+                          key={label}
+                          type="button"
+                          onClick={() => {
+                            setSelectedFamilyChip((cur) =>
+                              cur === label ? null : label
+                            );
+                            if (promptError) setPromptError(null);
+                          }}
+                          className={[
+                            "cursor-pointer rounded-full border border-stone-300 bg-stone-50/70 px-2.5 py-1.25 text-[12px] font-semibold shadow-sm ring-1 ring-white/70 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-stone-200/80 focus-visible:ring-offset-2 focus-visible:ring-offset-white",
+                            isActive
+                              ? `${chipColor.activeBg} ${chipColor.activeBorder} ${chipColor.activeText}`
+                              : `text-stone-700 hover:bg-stone-100/70`,
+                            isActive ? "" : chipColor.hoverBg,
+                          ].join(" ")}
+                          aria-pressed={isActive}
+                        >
+                          {label}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <div className="relative">
+                    <textarea
+                      id="hero-prompt"
+                      value={prompt}
+                      onChange={(event) => {
+                        setPrompt(event.target.value);
+                        if (promptError) setPromptError(null);
+                      }}
+                      onFocus={() => setIsPromptFocused(true)}
+                      onBlur={() => setIsPromptFocused(false)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" && !event.shiftKey) {
+                          event.preventDefault();
+                          if (!isSubmittingPrompt) {
+                            promptFormRef.current?.requestSubmit();
+                          }
                         }
-                      }
-                    }}
-                    rows={3}
-                    placeholder=""
-                    className="w-full resize-none border-none bg-transparent text-left text-lg leading-relaxed text-stone-900 placeholder:text-stone-500 focus:outline-none"
-                  />
-                  {!prompt.trim() ? (
-                    <span
-                      className="pointer-events-none absolute left-5 right-5 top-5 text-left text-base leading-relaxed text-stone-500 sm:text-lg"
-                    >
-                      {typedPlaceholder}
-                    </span>
-                  ) : null}
+                      }}
+                      rows={3}
+                      placeholder=""
+                      className="w-full resize-none border-none bg-transparent text-left text-lg leading-relaxed text-stone-900 placeholder:text-stone-500 focus:outline-none"
+                    />
+                    {!prompt.trim() ? (
+                      <span className="pointer-events-none absolute left-0 right-0 top-0 z-0 text-left text-lg leading-relaxed text-stone-500">
+                        {typedPlaceholder}
+                      </span>
+                    ) : null}
+                  </div>
 
                   <div className="mt-4 flex items-center justify-end gap-3">
                     <button
                       type="submit"
                       disabled={isSubmittingPrompt}
                       aria-label={isSubmittingPrompt ? "Starting workspace" : "Start workspace"}
-                      className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-stone-900 text-lg font-semibold text-white shadow-sm transition hover:bg-stone-800 disabled:cursor-not-allowed disabled:opacity-60"
+                      className="cursor-pointer inline-flex h-11 w-11 items-center justify-center rounded-full bg-stone-900 text-lg font-semibold text-white shadow-sm transition hover:bg-stone-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-stone-200/80 focus-visible:ring-offset-2 focus-visible:ring-offset-white disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       {isSubmittingPrompt ? "…" : "↑"}
                     </button>

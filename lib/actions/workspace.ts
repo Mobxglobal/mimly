@@ -48,6 +48,7 @@ export type WorkspaceJob = {
   prompt: string;
   output_format: string | null;
   error_message: string | null;
+  metadata?: Record<string, unknown> | null;
   created_at: string;
   completed_at: string | null;
 };
@@ -110,7 +111,15 @@ async function loadAccessibleWorkspace(workspaceId: string) {
 }
 
 export async function createWorkspaceFromPrompt(
-  prompt: string
+  prompt: string,
+  options?: {
+    preferredOutputFormat?:
+      | "square_image"
+      | "square_video"
+      | "vertical_slideshow"
+      | "square_text";
+    templateFamilyPreference?: "engagement_text" | null;
+  }
 ): Promise<{ workspaceId: string | null; error: string | null }> {
   const normalizedPrompt = normalizePrompt(prompt);
   if (!normalizedPrompt) return { workspaceId: null, error: "Prompt is required." };
@@ -152,10 +161,13 @@ export async function createWorkspaceFromPrompt(
   }
 
   const workspaceId = String(workspace.id);
-  const resolvedOutputFormat = resolveWorkspaceOutputFormat({
-    prompt: normalizedPrompt,
-    businessUrl: tryExtractUrlFromPrompt(normalizedPrompt),
-  });
+  const resolvedOutputFormat =
+    options?.preferredOutputFormat ??
+    resolveWorkspaceOutputFormat({
+      prompt: normalizedPrompt,
+      businessUrl: tryExtractUrlFromPrompt(normalizedPrompt),
+    });
+  const templateFamilyPreference = options?.templateFamilyPreference ?? null;
 
   const { data: firstMessage } = await admin
     .schema("public")
@@ -192,6 +204,7 @@ export async function createWorkspaceFromPrompt(
       explicit_promo_intent: false,
       promo_context_excerpt: null,
       workspace_context_summary: normalizedPrompt,
+      template_family_preference: templateFamilyPreference,
       source: "workspace_initial_prompt",
     } as Json,
   });
@@ -629,7 +642,7 @@ export async function sendWorkspaceMessage(
   const { data: latestJobRow } = await admin
     .schema("public")
     .from("generation_jobs")
-    .select("id, status, prompt, output_format")
+    .select("id, status, prompt, output_format, metadata")
     .eq("workspace_id", workspaceId)
     .order("created_at", { ascending: false })
     .limit(1)
@@ -667,6 +680,13 @@ export async function sendWorkspaceMessage(
             | "blocked_auth"
             | "blocked_payment"
             | "cancelled",
+          template_family_preference:
+            latestJobRow.metadata && typeof latestJobRow.metadata === "object"
+              ? (latestJobRow.metadata.template_family_preference as
+                  | "engagement_text"
+                  | null
+                  | undefined) ?? null
+              : null,
         }
       : null,
     hasLatestCompletedOutputs,
@@ -735,6 +755,7 @@ export async function sendWorkspaceMessage(
     const followupPayload = {
       prompt: resolvedPrompt,
       output_format: resolvedOutputFormat,
+      template_family_preference: plan.template_family_preference ?? null,
       requested_variant_count: requestedVariantCount,
       relation_to_previous_job: plan.relation_to_previous_job,
       trigger_message_id: userMessage?.id ?? null,
@@ -778,17 +799,18 @@ export async function sendWorkspaceMessage(
       message_type: "status",
       content: {
         text:
-          "Finishing this batch first, then applying that next.",
+          "Finishing this batch — applying that next.",
       } as Json,
       metadata: {
         reason: "active_generation_in_progress",
         deferred_intent: plan.intent,
         has_deferred_followup: true,
         ui_pills: [
-          { label: "Image Meme", message: "Make image memes for this direction.", kind: "format" },
-          { label: "Video Meme", message: "Turn this into short square video memes.", kind: "format" },
-          { label: "Text Meme", message: "Make text-only meme versions.", kind: "format" },
-          { label: "Slideshow", message: "Turn this into a slideshow.", kind: "format" },
+          { label: "Image Meme", message: "Generate image memes for this idea", kind: "format" },
+          { label: "Video Meme", message: "Turn this idea into video memes", kind: "format" },
+          { label: "Text Meme", message: "Generate text memes for this idea", kind: "format" },
+          { label: "Engagement post", message: "Turn this idea into an engagement post", kind: "format" },
+          { label: "Slideshow", message: "Turn this idea into a slideshow", kind: "format" },
         ],
       } as Json,
     });
@@ -823,7 +845,7 @@ export async function sendWorkspaceMessage(
       role: "system",
       message_type: "gate_notice",
       content: {
-        text: "You have used your free preview - sign in and I will keep this going.",
+        text: "Free preview used. Sign in to keep going.",
       } as Json,
       metadata: { reason: "blocked_auth" } as Json,
     });
@@ -850,7 +872,7 @@ export async function sendWorkspaceMessage(
         role: "system",
         message_type: "gate_notice",
         content: {
-          text: "Your session expired - sign in and I will continue this thread.",
+          text: "Session expired. Sign in to continue.",
         } as Json,
         metadata: { reason: "blocked_auth" } as Json,
       });
@@ -939,7 +961,7 @@ export async function sendWorkspaceMessage(
         role: "system",
         message_type: "gate_notice",
         content: {
-          text: "Unlock a plan and I will continue this thread instantly.",
+          text: "Unlock a plan to keep generating.",
         } as Json,
         metadata: { reason: "blocked_payment" } as Json,
       });
@@ -954,7 +976,7 @@ export async function sendWorkspaceMessage(
     message_type: "status",
     content: {
       text:
-          "Creating one version for this now.",
+          "Generating a version now.",
     } as Json,
     metadata: {
       stage: "pre_enqueue_generation",
@@ -1002,6 +1024,7 @@ export async function sendWorkspaceMessage(
       deferred_followup: false,
       source: "workspace_send_message",
       intent: plan.intent,
+      template_family_preference: plan.template_family_preference ?? null,
       relation_to_previous_job: plan.relation_to_previous_job,
       explicit_promo_intent: plan.explicit_promo_intent,
       promo_context_excerpt: plan.promo_context_excerpt ?? null,
@@ -1114,6 +1137,10 @@ export async function unlockWorkspacePlan(
     payload.output_format === "square_text"
       ? payload.output_format
       : "square_image";
+  const resumeTemplateFamilyPreference =
+    payload.template_family_preference === "engagement_text"
+      ? "engagement_text"
+      : null;
   const requestedVariantCount = Number(payload.requested_variant_count ?? 1);
   const triggerMessageId = String(payload.trigger_message_id ?? "").trim() || null;
   const { data: existingActiveJob } = await admin
@@ -1133,8 +1160,8 @@ export async function unlockWorkspacePlan(
       content: {
         text:
           planCode === "starter_pack"
-            ? "Starter Pack unlocked — continuing your generation..."
-            : "Unlimited unlocked — continuing your generation...",
+            ? "Starter unlocked — continuing."
+            : "Unlimited unlocked — continuing.",
       } as Json,
       metadata: { reason: "manual_unlock", plan_code: planCode } as Json,
     });
@@ -1163,6 +1190,7 @@ export async function unlockWorkspacePlan(
         deferred_followup: false,
         source: "workspace_unlock_resume",
         resumed_from_pending_action: Boolean(pending?.id),
+        template_family_preference: resumeTemplateFamilyPreference,
       } as Json,
     });
     const queued = await enqueueGenerationJob({

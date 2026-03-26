@@ -145,7 +145,7 @@ export function WorkspaceShell({
       </header>
 
       <div className="grid min-h-[calc(100vh-9.5rem)] gap-4 lg:grid-cols-[340px_1fr] lg:gap-5">
-      <aside className="order-1 flex h-[52vh] min-h-[440px] flex-col overflow-hidden rounded-3xl border border-stone-200/80 bg-stone-50/80 p-3.5 shadow-[0_8px_28px_rgba(10,10,10,0.05)] sm:h-[58vh] sm:p-4 lg:sticky lg:top-[5.5rem] lg:h-[76vh] lg:min-h-[640px] lg:max-h-[760px] lg:self-start">
+      <aside className="order-1 flex h-[64vh] min-h-[440px] flex-col overflow-hidden rounded-3xl border border-stone-200/80 bg-stone-50/80 p-3.5 shadow-[0_8px_28px_rgba(10,10,10,0.05)] sm:h-[68vh] sm:p-4 lg:sticky lg:top-[5.5rem] lg:h-[90vh] lg:min-h-[760px] lg:max-h-[1000px] lg:self-start">
         <div className="flex items-center justify-between gap-2 px-0.5">
           <div
             aria-label="Chat"
@@ -226,6 +226,7 @@ export function WorkspaceShell({
             <p>Image memes (1080x1080)</p>
             <p>Video memes (1080x1080)</p>
             <p>Text memes (1080x1080)</p>
+            <p>Engagement posts (1080x1080)</p>
             <p>Slideshows (1080x1920)</p>
             <p className="mt-2 text-xs font-semibold text-stone-700">Tips for best results</p>
             <p>Be specific if you want high-quality, targeted content.</p>

@@ -10,6 +10,7 @@ type InterpreterMessage = {
 type InterpreterLatestJob = {
   prompt: string;
   output_format: MemeOutputFormat | null;
+  template_family_preference?: "engagement_text" | null;
   status:
     | "queued"
     | "running"
@@ -51,6 +52,7 @@ export type WorkspaceIntentPlan = {
     message: string;
     kind: "format" | "action";
   }>;
+  template_family_preference?: "engagement_text" | null;
 };
 
 export type WorkspaceInterpreterContext = {
@@ -209,6 +211,7 @@ function isGenerate(text: string): boolean {
     "video",
     "post ideas",
     "content ideas",
+    "engagement post",
   ] as const;
   return hasAny(l, generationSignals);
 }
@@ -232,6 +235,11 @@ function detectOutputOverride(text: string): MemeOutputFormat | null {
   if (hasAny(l, ["text only", "quote card", "text meme"])) return "square_text";
   if (hasAny(l, ["image", "static meme"])) return "square_image";
   return null;
+}
+
+function detectEngagementPostOverride(text: string): boolean {
+  const l = lower(text);
+  return l.includes("engagement post");
 }
 
 function detectExplicitPromoIntent(text: string): {
@@ -271,31 +279,37 @@ function formatLabel(format: MemeOutputFormat): string {
 }
 
 function availableFormatsSentence(): string {
-  return "I can help you create: square image memes, square video memes, square text memes, and vertical slideshows.";
+  return "I can help you create: square image memes, square video memes, square text memes, engagement posts, and vertical slideshows.";
 }
 
 function formatPills(
-  preferred: MemeOutputFormat | null
+  preferred: MemeOutputFormat | "engagement_post" | null
 ): Array<{ label: string; message: string; kind: "format" }> {
-  const ordered: MemeOutputFormat[] = [
+  const ordered: Array<MemeOutputFormat | "engagement_post"> = [
     "square_image",
     "square_video",
     "square_text",
+    "engagement_post",
     "vertical_slideshow",
   ];
   const formats = preferred
     ? [preferred, ...ordered.filter((f) => f !== preferred)]
     : ordered;
   return formats.map((format) => ({
-    label: formatLabel(format),
+    label:
+      format === "engagement_post"
+        ? "Engagement post"
+        : formatLabel(format),
     message:
       format === "square_image"
-        ? "Make image memes for this direction."
+        ? "Generate image memes for this idea"
         : format === "square_video"
-          ? "Turn this into short square video memes."
+          ? "Turn this idea into video memes"
           : format === "square_text"
-            ? "Make text-only meme versions."
-            : "Turn this into a slideshow.",
+            ? "Generate text memes for this idea"
+            : format === "engagement_post"
+              ? "Turn this idea into an engagement post"
+              : "Turn this idea into a slideshow",
     kind: "format",
   }));
 }
@@ -320,8 +334,16 @@ export function interpretWorkspaceMessage(
   const variantCount = parseVariantCount(userMessage);
   const recentContext = extractRecentContextSnippets(ctx.recentMessages, userMessage);
   const hasReference = Boolean(ctx.latestJob || ctx.hasLatestCompletedOutputs);
-  const overrideFormat = detectOutputOverride(userMessage);
+  const engagementRequested = detectEngagementPostOverride(userMessage);
+  const overrideFormat = engagementRequested
+    ? ("square_text" as const)
+    : detectOutputOverride(userMessage);
   const preferredFormat = overrideFormat ?? ctx.latestJob?.output_format ?? null;
+  const templateFamilyPreference = engagementRequested
+    ? "engagement_text"
+    : overrideFormat !== null
+      ? null
+      : ctx.latestJob?.template_family_preference ?? null;
   const promoDetection = detectExplicitPromoIntent(userMessage);
 
   if (isMoreIdeasMessage(userMessage) && hasReference) {
@@ -346,9 +368,10 @@ export function interpretWorkspaceMessage(
       intent: "refine_existing",
       should_generate: true,
       assistant_response:
-        "Got it. Making another version in the same direction.",
+        "Running another version of this idea.",
       prompt_for_generation: resolvedPrompt,
       output_format: outputFormat,
+      template_family_preference: templateFamilyPreference,
       variant_count: 1,
       relation_to_previous_job: "refine_last_generation",
       clarification_question: null,
@@ -359,7 +382,11 @@ export function interpretWorkspaceMessage(
         (v, i, arr): v is MemeOutputFormat => arr.indexOf(v) === i
       ),
       suggested_actions: ["more_ideas", "switch_format"],
-      ui_pills: formatPills(outputFormat),
+      ui_pills: formatPills(
+        templateFamilyPreference === "engagement_text"
+          ? "engagement_post"
+          : outputFormat
+      ),
     };
   }
 
@@ -368,7 +395,7 @@ export function interpretWorkspaceMessage(
       intent: "meta_help",
       should_generate: false,
       assistant_response:
-        "Best default move is image memes first - they test angles fastest. Then we can convert winners into video, text-only cards, or a slideshow.",
+        "Start with image memes — fastest way to test angles. We can turn winners into video, text, engagement posts, or slides after.",
       prompt_for_generation: null,
       output_format: null,
       variant_count: variantCount,
@@ -393,7 +420,7 @@ export function interpretWorkspaceMessage(
       intent: "context_update",
       should_generate: false,
       assistant_response:
-        "Perfect - I have locked that context in. Next move: I can generate one image meme, one video meme, one text meme, or one slideshow.",
+        "Context locked. Next move: image meme, video meme, text meme, engagement post, or slideshow.",
       prompt_for_generation: null,
       output_format: null,
       variant_count: variantCount,
@@ -440,9 +467,10 @@ export function interpretWorkspaceMessage(
       intent: "refine_existing",
       should_generate: true,
       assistant_response:
-        "Nice direction - same core idea, updated exactly as requested. I will generate a refined set now.",
+        "Same idea — refined as requested. Generating now.",
       prompt_for_generation: resolvedPrompt,
       output_format: outputFormat,
+      template_family_preference: templateFamilyPreference,
       variant_count: variantCount,
       relation_to_previous_job: "refine_last_generation",
       clarification_question: null,
@@ -453,7 +481,11 @@ export function interpretWorkspaceMessage(
         (v, i, arr): v is MemeOutputFormat => arr.indexOf(v) === i
       ),
       suggested_actions: ["more_ideas", "switch_format"],
-      ui_pills: formatPills(outputFormat),
+      ui_pills: formatPills(
+        templateFamilyPreference === "engagement_text"
+          ? "engagement_post"
+          : outputFormat
+      ),
     };
   }
 
@@ -462,13 +494,13 @@ export function interpretWorkspaceMessage(
       intent: "clarify_needed",
       should_generate: false,
       assistant_response:
-        `Quick check so I can nail this: who is this for, and which format should I start with? ${availableFormatsSentence()}`,
+        "Before I run this — who is this for, and which format should I start with? I can create square image memes, square video memes, square text memes, engagement posts, or vertical slideshows.",
       prompt_for_generation: null,
       output_format: null,
       variant_count: variantCount,
       relation_to_previous_job: "none",
       clarification_question:
-        "Who is this for, and which format do you want first?",
+        "Who is this for, and what format should I start with?",
       confidence: "high",
       explicit_promo_intent: promoDetection.explicitPromoIntent,
       promo_context_excerpt: promoDetection.promoContextExcerpt,
@@ -507,14 +539,17 @@ export function interpretWorkspaceMessage(
       should_generate: true,
       assistant_response:
         outputFormat === "square_image"
-          ? "Great brief. Making one image meme version now."
+          ? "Strong brief. Generating an image meme."
           : outputFormat === "square_video"
-            ? "Great call. Making one square video version now."
+            ? "Generating a square video meme."
             : outputFormat === "square_text"
-              ? "Perfect. Making one text meme version now."
-              : "Nice. Making one slideshow version now.",
+              ? templateFamilyPreference === "engagement_text"
+                ? "Generating an engagement post."
+                : "Generating a text meme."
+              : "Generating a slideshow.",
       prompt_for_generation: resolvedPrompt,
       output_format: outputFormat,
+      template_family_preference: templateFamilyPreference,
       variant_count: variantCount,
       relation_to_previous_job: hasReference ? "follow_up" : "none",
       clarification_question: null,
@@ -525,7 +560,11 @@ export function interpretWorkspaceMessage(
         (v, i, arr): v is MemeOutputFormat => arr.indexOf(v) === i
       ),
       suggested_actions: ["more_ideas", "switch_format"],
-      ui_pills: formatPills(outputFormat),
+      ui_pills: formatPills(
+        templateFamilyPreference === "engagement_text"
+          ? "engagement_post"
+          : outputFormat
+      ),
     };
   }
 
@@ -533,13 +572,13 @@ export function interpretWorkspaceMessage(
     intent: "clarify_needed",
     should_generate: false,
     assistant_response:
-      "Choose a format to start.",
+      "Pick a format to start.",
     prompt_for_generation: null,
     output_format: null,
     variant_count: 1,
     relation_to_previous_job: hasReference ? "follow_up" : "none",
     clarification_question:
-      "Which format should I create first: image meme, video meme, text meme, or slideshow?",
+      "What format should I start with: image, video, text, engagement, or slideshow?",
     confidence: "low",
     explicit_promo_intent: promoDetection.explicitPromoIntent,
     promo_context_excerpt: promoDetection.promoContextExcerpt,
