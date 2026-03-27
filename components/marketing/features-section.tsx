@@ -4,27 +4,26 @@ import { FramedSection } from "./framed-section";
 const STEPS = [
   {
     number: "1",
-    title: "Understand your brand",
-    description:
-      "Mimly learns what you sell, who you want to reach, and what matters most to your business.",
+    title: "Type your idea",
+    description: "Enter a simple prompt describing the content you want.",
     image: "/understand.png",
     rotation: "lg:-rotate-[4deg]",
     desktopOffset: "lg:translate-y-10",
   },
   {
     number: "2",
-    title: "Spot the right meme angle",
+    title: "Mimly creates the concept",
     description:
-      "We connect your brand context with trends, culture, and timely opportunities to find the strongest concept.",
+      "Our AI turns it into meme-ready ideas using proven formats and trends.",
     image: "/context.png",
     rotation: "lg:rotate-0",
     desktopOffset: "lg:-translate-y-2",
   },
   {
     number: "3",
-    title: "Generate ready-to-post memes",
+    title: "Generate and post",
     description:
-      "You get finished memes and captions designed to be shared, downloaded, and published quickly.",
+      "Get fully designed memes and slideshows, ready to share instantly.",
     image: "/post.png",
     rotation: "lg:rotate-[4deg]",
     desktopOffset: "lg:translate-y-8",
@@ -82,10 +81,9 @@ export function FeaturesSection() {
         >
           Behind the memes
         </h2>
-        <p className="mx-auto mt-4 max-w-2xl text-sm leading-relaxed text-stone-400 md:text-base">
-          Mimly turns brand context into social-ready memes in three clear
-          steps, from understanding your business to producing content you can
-          post right away.
+        <p className="mx-auto mt-4 max-w-xl text-sm leading-relaxed text-stone-400 md:text-base">
+          Mimly turns a simple prompt into social-ready memes and slideshows in
+          seconds - just type, generate, and post.
         </p>
       </div>
 

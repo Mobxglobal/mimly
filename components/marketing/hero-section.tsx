@@ -149,16 +149,13 @@ export function HeroSection() {
               <span className="hero-word-grow inline-block">grow</span>{" "}
               <span className="hero-word-online inline-block">online.</span>
             </h1>
-            <p className="marketing-copy mx-auto mt-5 max-w-2xl text-pretty leading-relaxed">
-              While brands plan campaigns, the internet shares memes. Our{" "}
+            <p className="marketing-copy mx-auto mt-5 max-w-xl text-pretty leading-relaxed">
+              Mimly is an{" "}
               <span className="inline-block rounded-md bg-sky-200/70 px-1.5 py-0.5 font-medium text-stone-900 ring-1 ring-sky-300/60 mx-0.5 my-0.5">
                 AI meme generator
-              </span>{" "}
-              helps brands create contextually relevant{" "}
-              <span className="inline-block rounded-md bg-sky-200/70 px-1.5 py-0.5 font-medium text-stone-900 ring-1 ring-sky-300/60 mx-0.5 my-0.5">
-                memes &amp; slideshows
-              </span>{" "}
-              for social media.
+              </span>
+              {" "}that turns simple prompts into context-aware memes and slideshows,
+              ready for social media.
             </p>
             {/* <div className="mt-5 flex items-center justify-center">
               <div className="flex items-start gap-3 sm:gap-4">
