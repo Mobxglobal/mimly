@@ -150,9 +150,7 @@ export function HeroSection() {
               id="hero-heading"
               className="mx-auto max-w-4xl text-pretty text-4xl font-bold tracking-tight leading-tight text-stone-900 sm:text-5xl md:text-6xl"
             >
-              AI{" "}
-              <span className="hero-h1-meme-duotone">meme</span>{" "}
-              generator
+              AI meme generator
               <br />
               for brands on social.
             </h1>
