@@ -7,7 +7,17 @@ function isProtected(pathname: string): boolean {
   return PROTECTED_PREFIXES.some((p) => pathname === p || pathname.startsWith(p + "/"));
 }
 
+function isQaTemplatesAllowed(): boolean {
+  return (
+    process.env.ENABLE_QA_TEMPLATES === "true" || process.env.NODE_ENV !== "production"
+  );
+}
+
 export async function middleware(request: NextRequest) {
+  if (request.nextUrl.pathname.startsWith("/qa") && !isQaTemplatesAllowed()) {
+    return new NextResponse(null, { status: 404 });
+  }
+
   let response = NextResponse.next({ request });
 
   const supabase = createServerClient(

@@ -28,6 +28,17 @@ import {
   validateWowDogePhrases,
 } from "@/lib/memes/wow-doge";
 
+/** Sanitized text fields returned when {@link generateMockMemes} runs with `qaCaptureSanitizedTextOnly`. */
+export type QaCapturedGeneratedFields = {
+  template_slug: string;
+  title: string;
+  top_text: string;
+  bottom_text: string | null;
+  slot_3_text: string | null;
+  names?: string[];
+  wowDogePhrases?: string[];
+};
+
 export async function generateMockMemes(
   generationContextText?: string,
   options?: {
@@ -58,8 +69,17 @@ export async function generateMockMemes(
      * - When null/undefined, square_text uses only template_family="square_text".
      */
     templateFamilyPreference?: "engagement_text" | null;
+    /**
+     * Dev QA only: after successful generation + sanitization, return text fields and skip
+     * render, storage upload, and DB insert.
+     */
+    qaCaptureSanitizedTextOnly?: boolean;
   }
-): Promise<{ error: string | null; generationRunId?: string }> {
+): Promise<{
+  error: string | null;
+  generationRunId?: string;
+  qaSanitizedText?: QaCapturedGeneratedFields | null;
+}> {
   try {
   const supabase = await createClient();
 
@@ -364,7 +384,8 @@ export async function generateMockMemes(
 
   const { data: templatesRaw, error: templatesError } = await adminSupabase
     .from("meme_templates")
-    .select("*");
+    .select("*")
+    .eq("is_active", true);
 
   if (templatesError) {
     console.error("[meme-gen] Failed to fetch meme_templates", templatesError);
@@ -2379,6 +2400,7 @@ ${getTemplateTypeRetryShape()}`;
           template_id,
           template_name: String(t.template_name ?? t.name ?? "").trim(),
           slug: String(t.slug ?? "").trim(),
+          height_bucket: t.height_bucket ? String(t.height_bucket).trim() : null,
           template_family: String(t.template_family ?? "square_meme").trim(),
           text_layout_type: t.text_layout_type
             ? String(t.text_layout_type).trim()
@@ -3430,6 +3452,7 @@ ${isThreeSlot
   let insertedCount = 0;
   let failedCount = 0;
   let attemptedCount = 0;
+  let qaCaptureResult: QaCapturedGeneratedFields | null = null;
 
   for (
     let poolIndex = 0;
@@ -3565,6 +3588,23 @@ ${isThreeSlot
     }
 
     generated = sanitizeGeneratedMemeTextFields(generated);
+
+    if (options?.qaCaptureSanitizedTextOnly) {
+      qaCaptureResult = {
+        template_slug: template.slug,
+        title: generated.title,
+        top_text: generated.top_text,
+        bottom_text: generated.bottom_text,
+        slot_3_text: generated.slot_3_text,
+        ...(Array.isArray(generated.names) && generated.names.length > 0
+          ? { names: generated.names }
+          : {}),
+        ...(Array.isArray(generated.wowDogePhrases) && generated.wowDogePhrases.length > 0
+          ? { wowDogePhrases: generated.wowDogePhrases }
+          : {}),
+      };
+      break;
+    }
 
     let imageUrl: string | null = null;
     try {
@@ -3858,6 +3898,21 @@ ${isThreeSlot
       bottom_len: generated.bottom_text?.length ?? null,
       bottom_max: template.slot_2_max_chars,
     });
+  }
+
+  if (options?.qaCaptureSanitizedTextOnly) {
+    if (!qaCaptureResult) {
+      return {
+        error: "QA capture failed: no generated text after retries.",
+        generationRunId: generationContext.generationRunId,
+        qaSanitizedText: null,
+      };
+    }
+    return {
+      error: null,
+      generationRunId: generationContext.generationRunId,
+      qaSanitizedText: qaCaptureResult,
+    };
   }
 
   console.log("[meme-gen] Generation summary", {

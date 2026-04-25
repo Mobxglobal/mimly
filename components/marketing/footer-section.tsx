@@ -5,7 +5,7 @@ import { FramedSection } from "./framed-section";
 const FOOTER_LINKS = {
   product: [
     { label: "Product", href: "/#features-heading" },
-    { label: "Pricing", href: "/#pricing-heading" },
+    { label: "Pricing", href: "/pricing" },
     { label: "FAQ", href: "/#faq-heading" },
   ],
   company: [

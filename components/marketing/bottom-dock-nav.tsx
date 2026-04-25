@@ -16,7 +16,7 @@ const DOCK_ITEMS = [
   { href: "/", label: "Home", icon: Home },
   { href: "/#gallery", label: "Gallery", icon: Images },
   { href: "/#features-heading", label: "Features", icon: Sparkles },
-  { href: "/#pricing-heading", label: "Pricing", icon: CreditCard },
+  { href: "/pricing", label: "Pricing", icon: CreditCard },
   { href: "/#faq-heading", label: "FAQ", icon: HelpCircle },
   { href: "/login", label: "Login", icon: LogIn },
 ];

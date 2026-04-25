@@ -10,7 +10,8 @@ type Variant =
   | "founder"   // muted peach / warm
   | "pricing"   // soft lavender / neutral
   | "faq"       // very light, quiet
-  | "footer";   // dark charcoal / ink
+  | "footer"    // dark charcoal / ink (site footer)
+  | "showcase"; // softer charcoal (homepage product walkthrough)
 
 interface SectionBackgroundProps {
   variant: Variant;
@@ -55,7 +56,9 @@ export function SectionBackground({
           variant === "founder" && "bg-gradient-to-b from-orange-50/30 via-amber-50/20 to-white/95",
           variant === "pricing" && "bg-gradient-to-b from-amber-100/90 via-yellow-50/90 to-amber-50/85",
           variant === "faq" && "bg-gradient-to-b from-slate-50/50 to-white/98",
-          variant === "footer" && "bg-gradient-to-b from-stone-900 to-stone-950"
+          variant === "footer" && "bg-gradient-to-b from-stone-900 to-stone-950",
+          variant === "showcase" &&
+            "bg-gradient-to-b from-stone-800 via-stone-800 to-stone-900"
         )}
       />
       {/* Decorative blurred shapes */}
@@ -107,6 +110,20 @@ export function SectionBackground({
             style={{
               backgroundImage:
                 "radial-gradient(circle at 1px 1px, rgba(148,163,184,0.5) 1px, transparent 0)",
+              backgroundSize: "6px 6px",
+            }}
+          />
+        </>
+      )}
+      {variant === "showcase" && (
+        <>
+          <div className="absolute left-1/4 top-0 h-80 w-80 rounded-full bg-stone-700/45 blur-3xl" />
+          <div className="absolute bottom-0 right-0 h-64 w-64 rounded-full bg-stone-700/35 blur-3xl" />
+          <div
+            className="pointer-events-none absolute inset-0 opacity-[0.06]"
+            style={{
+              backgroundImage:
+                "radial-gradient(circle at 1px 1px, rgba(148,163,184,0.45) 1px, transparent 0)",
               backgroundSize: "6px 6px",
             }}
           />

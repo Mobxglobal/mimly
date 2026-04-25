@@ -8,3 +8,6 @@ output-*.png
 
 # Local square-text calibration PNGs (npm run calibrate:square-text)
 debug-output/
+
+# Local QA OpenAI output cache (see /qa/templates)
+qa/real-output-cache.json

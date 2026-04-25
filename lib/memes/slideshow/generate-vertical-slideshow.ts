@@ -795,6 +795,7 @@ export async function runVerticalSlideshowGeneration(params: {
     }
 
     const ideaGroupId = randomUUID();
+    const title = payload.slideshow_intent.slice(0, TITLE_MAX_CHARS);
     const style = buildStyle(template.slideshow_config);
     const slideMeta: SlideshowVariantMetadata["slides"] = [];
     let firstPublicUrl: string | null = null;
@@ -884,7 +885,6 @@ export async function runVerticalSlideshowGeneration(params: {
           }
         : null;
 
-    const title = payload.slideshow_intent.slice(0, TITLE_MAX_CHARS);
     const row = {
       user_id: user?.id ?? null,
       template_id: template.template_id,

@@ -17,14 +17,27 @@ function wrapTextGreedy(text: string, maxChars: number, maxLines: number): strin
   const lines: string[] = [];
   let currentLine = "";
 
-  for (const word of words) {
+  for (let i = 0; i < words.length; i++) {
+    const word = words[i] ?? "";
     const testLine = currentLine ? `${currentLine} ${word}` : word;
     if (testLine.length <= maxChars) {
       currentLine = testLine;
     } else {
       if (currentLine) lines.push(currentLine);
+      if (lines.length >= maxLines) {
+        // Never drop words: merge the overflowing word and remaining tail into the final line.
+        const tail = [word, ...words.slice(i + 1)].join(" ").trim();
+        if (tail) {
+          const lastIdx = Math.max(0, maxLines - 1);
+          if (typeof lines[lastIdx] === "string" && lines[lastIdx].length > 0) {
+            lines[lastIdx] = `${lines[lastIdx]} ${tail}`.trim();
+          } else {
+            lines[lastIdx] = tail;
+          }
+        }
+        return lines.slice(0, Math.max(1, maxLines));
+      }
       currentLine = word;
-      if (lines.length >= maxLines) break;
     }
   }
 
@@ -848,7 +861,8 @@ function wrapTextGreedyPixel(
   const lines: string[] = [];
   let currentLine = "";
 
-  for (const word of words) {
+  for (let i = 0; i < words.length; i++) {
+    const word = words[i] ?? "";
     const testLine = currentLine ? `${currentLine} ${word}` : word;
     if (measure(testLine) <= maxWidthPx) {
       currentLine = testLine;
@@ -859,7 +873,17 @@ function wrapTextGreedyPixel(
       lines.push(currentLine);
       currentLine = "";
       if (lines.length >= maxLines) {
-        return lines.slice(0, maxLines);
+        // Match char-wrap behavior: preserve all words by appending overflow tail to the final line.
+        const tail = [word, ...words.slice(i + 1)].join(" ").trim();
+        if (tail) {
+          const lastIdx = Math.max(0, maxLines - 1);
+          if (typeof lines[lastIdx] === "string" && lines[lastIdx].length > 0) {
+            lines[lastIdx] = `${lines[lastIdx]} ${tail}`.trim();
+          } else {
+            lines[lastIdx] = tail;
+          }
+        }
+        return lines.slice(0, Math.max(1, maxLines));
       }
     }
 

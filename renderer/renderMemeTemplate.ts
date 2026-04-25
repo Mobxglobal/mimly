@@ -2,8 +2,10 @@ import sharp from "sharp";
 import { wrapCaptionWithSoftEarlySplit, wrapSquareTopCaptionScoped } from "@/renderer/caption-wrap";
 
 export type MemeTemplateForRender = {
+  slug?: string | null;
   canvas_width: number;
   canvas_height: number;
+  height_bucket?: string | null;
   template_family?: string | null;
   text_layout_type?: string | null;
   font_size?: number | null;
@@ -107,6 +109,71 @@ function renderLines(
     .join("");
 }
 
+function wrapImageSlotText(params: {
+  text: string;
+  maxChars: number;
+  maxLines: number;
+  slotWidth: number;
+  fontSize: number;
+  template: MemeTemplateForRender;
+  slotIndex: number;
+}): string[] {
+  if (!params.text) return [];
+
+  // Keep image slot-1 behavior aligned with video wrapping:
+  // medium + top_caption uses one fixed wrapping strategy for consistency.
+  if (params.slotIndex === 0) {
+    const templateSlug = (params.template as { slug?: string | null }).slug ?? null;
+    const isMediumTopCaption =
+      String(params.template.height_bucket ?? "").trim().toLowerCase() === "medium" &&
+      String(params.template.text_layout_type ?? "").trim().toLowerCase() === "top_caption";
+    if (isMediumTopCaption) {
+      const lines = wrapCaptionWithSoftEarlySplit(params.text, 40, 2);
+      console.log("VIDEO WRAP PATH", {
+        file: "renderer/renderMemeTemplate.ts",
+        function: "wrapImageSlotText",
+        slug: templateSlug,
+        height_bucket: params.template.height_bucket ?? null,
+        layout: params.template.text_layout_type ?? null,
+        family: params.template.template_family ?? null,
+        text: params.text,
+        selectedStrategy: "medium_top_caption_forced_fallback_40x2",
+        lines,
+      });
+      return lines;
+    }
+
+    const scoped = wrapSquareTopCaptionScoped({
+      text: params.text,
+      maxChars: params.maxChars,
+      maxLines: params.maxLines,
+      slotWidthPx: params.slotWidth,
+      fontSize: params.fontSize,
+      fontFamily: params.template.font ?? null,
+      templateFamily: params.template.template_family ?? null,
+      textLayoutType: params.template.text_layout_type ?? null,
+    });
+    const lines =
+      scoped && scoped.length > 0
+        ? scoped
+        : wrapCaptionWithSoftEarlySplit(params.text, params.maxChars, params.maxLines);
+    console.log("VIDEO WRAP PATH", {
+      file: "renderer/renderMemeTemplate.ts",
+      function: "wrapImageSlotText",
+      slug: templateSlug,
+      height_bucket: params.template.height_bucket ?? null,
+      layout: params.template.text_layout_type ?? null,
+      family: params.template.template_family ?? null,
+      text: params.text,
+      selectedStrategy: scoped && scoped.length > 0 ? "scoped" : "fallback",
+      lines,
+    });
+    return lines;
+  }
+
+  return wrapCaptionWithSoftEarlySplit(params.text, params.maxChars, params.maxLines);
+}
+
 function buildSVG(template: MemeTemplateForRender, slotTexts: SlotTexts) {
   const fontSize = template.font_size || 48;
   const alignment = template.alignment || "center";
@@ -175,19 +242,15 @@ function buildSVG(template: MemeTemplateForRender, slotTexts: SlotTexts) {
 
   const renderedText = slots
     .map((slot, slotIndex) => {
-      const lines =
-        slotIndex === 0
-          ? wrapSquareTopCaptionScoped({
-              text: slot.text,
-              maxChars: slot.maxChars,
-              maxLines: slot.maxLines,
-              slotWidthPx: slot.width ?? 0,
-              fontSize: fontSize,
-              fontFamily: template.font ?? null,
-              templateFamily: template.template_family ?? null,
-              textLayoutType: template.text_layout_type ?? null,
-            })
-          : wrapCaptionWithSoftEarlySplit(slot.text, slot.maxChars, slot.maxLines);
+      const lines = wrapImageSlotText({
+        text: slot.text,
+        maxChars: slot.maxChars,
+        maxLines: slot.maxLines,
+        slotWidth: slot.width ?? 0,
+        fontSize,
+        template,
+        slotIndex,
+      });
       return renderLines(lines, slot as any, {
         ...style,
         // Keep existing single-line alignment; force left only after text is truly multi-line.
@@ -217,11 +280,14 @@ export async function renderMemePNGFromTemplate(params: {
   bottomText: string | null;
   slot_3_text?: string;
 }) {
-  const svg = buildSVG(params.template, {
+  const svg = buildSVG(
+    params.template,
+    {
     slot_1_text: params.topText,
     slot_2_text: params.bottomText ?? "",
     slot_3_text: params.slot_3_text ?? "",
-  });
+    }
+  );
 
   const svgBuffer = Buffer.from(svg);
   return sharp(params.baseImageBuffer)
@@ -235,6 +301,12 @@ export async function renderTopCaptionOverlayPng(params: {
   template: MemeTemplateForRender;
   topText: string;
 }): Promise<Buffer> {
+  console.log("VIDEO OVERLAY FALLBACK TEMPLATE", {
+    slug: params.template.slug ?? null,
+    height_bucket: params.template.height_bucket ?? null,
+    layout: params.template.text_layout_type ?? null,
+    family: params.template.template_family ?? null,
+  });
   const svg = buildSVG(params.template, {
     slot_1_text: params.topText,
     slot_2_text: "",

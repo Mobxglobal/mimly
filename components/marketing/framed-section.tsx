@@ -7,7 +7,8 @@ export type FramedSectionVariant =
   | "hero"     // largest frame, nav inside
   | "onboarding" // compact, narrow onboarding/auth card
   | "default"  // mid-width (gallery, features, founder, pricing, faq)
-  | "footer";  // wide, dark
+  | "footer"   // wide, dark (site footer)
+  | "showcase"; // wide, softer charcoal (homepage product walkthrough)
 
 type SectionBackgroundVariant =
   | "hero"
@@ -16,7 +17,8 @@ type SectionBackgroundVariant =
   | "founder"
   | "pricing"
   | "faq"
-  | "footer";
+  | "footer"
+  | "showcase";
 
 interface FramedSectionProps {
   variant: FramedSectionVariant;
@@ -67,6 +69,13 @@ const variantStyles: Record<
     shadow: "shadow-2xl shadow-black/10",
     border: "border border-stone-700/50",
   },
+  showcase: {
+    maxWidth: "max-w-[1600px]",
+    padding: "px-4 pt-6 pb-8 sm:px-6 sm:pt-8 sm:pb-10 md:px-8 md:pt-10 md:pb-12 lg:px-10 lg:pt-12 lg:pb-16",
+    radius: "rounded-3xl sm:rounded-[2rem] md:rounded-[2.25rem]",
+    shadow: "shadow-2xl shadow-black/[0.08]",
+    border: "border border-stone-600/40",
+  },
 };
 
 export function FramedSection({
@@ -80,7 +89,12 @@ export function FramedSection({
 }: FramedSectionProps) {
   const styles = variantStyles[variant];
   const bgVariant: SectionBackgroundVariant =
-    backgroundVariant ?? (variant === "default" ? "gallery" : variant === "onboarding" ? "features" : variant);
+    backgroundVariant ??
+    (variant === "default"
+      ? "gallery"
+      : variant === "onboarding"
+        ? "features"
+        : variant);
 
   return (
     <section
@@ -96,7 +110,8 @@ export function FramedSection({
           styles.shadow,
           styles.border,
           styles.padding,
-          variant === "footer" && "bg-stone-900/95 text-stone-100"
+          variant === "footer" && "bg-stone-900/95 text-stone-100",
+          variant === "showcase" && "bg-stone-800/88 text-stone-100"
         )}
       >
         <SectionBackground variant={bgVariant} heroBackgroundSrc={heroBackgroundSrc} />

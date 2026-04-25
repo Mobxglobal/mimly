@@ -98,8 +98,8 @@ export function ShowcaseBentoSection() {
 
   return (
     <FramedSection
-      variant="footer"
-      backgroundVariant="footer"
+      variant="showcase"
+      backgroundVariant="showcase"
       id="showcase-heading"
       aria-labelledby="showcase-heading"
       className="w-full"

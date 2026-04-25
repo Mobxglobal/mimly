@@ -16,6 +16,7 @@ export function mapMemeTemplateRowForRender(
   return {
     canvas_width: toNullableInt(t.canvas_width) ?? 1080,
     canvas_height: toNullableInt(t.canvas_height) ?? 1080,
+    height_bucket: t.height_bucket ? String(t.height_bucket).trim() : null,
     template_family: t.template_family ? String(t.template_family).trim() : null,
     text_layout_type: t.text_layout_type
       ? String(t.text_layout_type).trim()

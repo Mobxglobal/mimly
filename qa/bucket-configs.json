@@ -1,0 +1,23 @@
+{
+  "unreviewed": {
+    "maxFontSize": 64,
+    "minFontSize": 24,
+    "maxLines": 4,
+    "padding": 20,
+    "scaleStrategy": "wrap-first"
+  },
+  "delete": {
+    "maxFontSize": 64,
+    "minFontSize": 24,
+    "maxLines": 4,
+    "padding": 20,
+    "scaleStrategy": "wrap-first"
+  },
+  "de": {
+    "maxFontSize": 64,
+    "minFontSize": 24,
+    "maxLines": 4,
+    "padding": 20,
+    "scaleStrategy": "wrap-first"
+  }
+}

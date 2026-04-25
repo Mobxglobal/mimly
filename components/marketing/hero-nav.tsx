@@ -10,7 +10,6 @@ import { createClient } from "@/lib/supabase/client";
 
 const NAV_LINKS = [
   { href: "/#showcase-heading", label: "Product" },
-  { href: "/#pricing-heading", label: "Pricing" },
   { href: "/#faq-heading", label: "FAQ" },
 ];
 

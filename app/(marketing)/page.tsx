@@ -2,8 +2,6 @@ import { PageShell } from "@/components/marketing/page-shell";
 import { HeroSection } from "@/components/marketing/hero-section";
 import { OrganicStatsSection } from "@/components/marketing/organic-stats-section";
 import { ShowcaseBentoSection } from "@/components/marketing/showcase-bento-section";
-import { FounderSection } from "@/components/marketing/founder-section";
-import { PricingSection } from "@/components/marketing/pricing-section";
 import { FAQSection } from "@/components/marketing/faq-section";
 import { FooterSection } from "@/components/marketing/footer-section";
 
@@ -12,10 +10,8 @@ import { FooterSection } from "@/components/marketing/footer-section";
  * 1. Hero
  * 2. Organic stats
  * 3. Showcase
- * 4. Founder
- * 5. Pricing
- * 6. FAQ
- * 7. Footer
+ * 4. FAQ
+ * 5. Footer
  */
 export default function MarketingPage() {
   return (
@@ -23,8 +19,6 @@ export default function MarketingPage() {
       <HeroSection />
       <OrganicStatsSection />
       <ShowcaseBentoSection />
-      <FounderSection />
-      <PricingSection />
       <FAQSection />
       <FooterSection />
     </PageShell>

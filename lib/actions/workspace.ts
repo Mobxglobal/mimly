@@ -16,12 +16,7 @@ import {
 } from "@/lib/actions/workspace-generation";
 import { resolveWorkspaceOutputFormat } from "@/lib/workspace/output-format-resolver";
 import { interpretWorkspaceMessage } from "@/lib/workspace/message-interpreter";
-import {
-  getActiveEntitlement,
-  hasActiveEntitlement,
-  hasActiveEntitlementForPlan,
-  type WorkspacePlanCode,
-} from "@/lib/workspace/entitlements";
+import { getActiveEntitlement, hasActiveEntitlementForPlan, type WorkspacePlanCode } from "@/lib/workspace/entitlements";
 import { getOrCreateDefaultWorkspaceForUser } from "@/lib/workspace/default-workspace";
 import { renderEngagementTextMemePng } from "@/renderer/renderEngagementTextMeme";
 import { mapMemeTemplateRowForRender } from "@/lib/memes/map-meme-template-row-for-render";
@@ -376,26 +371,8 @@ export async function getWorkspaceState(
       return 0;
     });
 
-  const isAuthenticated = Boolean(currentUserId || workspace.user_id);
-  const hasEntitlement = currentPlan !== "free_preview";
   const gateState: "anonymous_blocked" | "authenticated_plan_required" | "unlocked" =
-    latestJob?.status === "blocked_auth" && !isAuthenticated
-      ? "anonymous_blocked"
-      : isAuthenticated &&
-          !hasEntitlement &&
-          (latestJob?.status === "blocked_auth" || latestJob?.status === "blocked_payment")
-        ? "authenticated_plan_required"
-        : "unlocked";
-
-  // After auth succeeds on a previously blocked-auth workspace,
-  // force plan-required UX instead of showing sign-in again.
-  if (gateState === "authenticated_plan_required" && latestJob?.status === "blocked_auth") {
-    latestJob = {
-      ...latestJob,
-      status: "blocked_payment",
-      block_reason: "payment_required",
-    };
-  }
+    "unlocked";
 
   return {
     state: {
@@ -842,7 +819,6 @@ export async function sendWorkspaceMessage(
     })
     .eq("id", workspaceId);
 
-  const isAnonymousWorkspace = !workspace.user_id;
   const previewUsed = Number(workspace.preview_generations_used ?? 0);
 
   const { data: recentMessagesRaw } = await admin
@@ -1043,160 +1019,6 @@ export async function sendWorkspaceMessage(
       } as Json,
     });
     return getWorkspaceState(workspaceId);
-  }
-
-  if (isAnonymousWorkspace && previewUsed >= 1) {
-    await admin
-      .schema("public")
-      .from("generation_jobs")
-      .insert({
-        workspace_id: workspaceId,
-        requested_by_user_id: currentUserId,
-        trigger_message_id: userMessage?.id ?? null,
-        status: "blocked_auth",
-        block_reason: "preview_limit",
-        prompt: resolvedPrompt,
-        output_format: resolvedOutputFormat,
-        requested_variant_count: requestedVariantCount,
-        completed_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      });
-
-    await admin.schema("public").from("pending_actions").insert({
-      workspace_id: workspaceId,
-      action_type: "auth_required",
-      payload: { reason: "preview_limit" } as Json,
-    });
-
-    await admin.schema("public").from("workspace_messages").insert({
-      workspace_id: workspaceId,
-      role: "system",
-      message_type: "gate_notice",
-      content: {
-        text: "Free preview used. Sign in to keep going.",
-      } as Json,
-      metadata: { reason: "blocked_auth" } as Json,
-    });
-
-    return getWorkspaceState(workspaceId);
-  }
-
-  if (!isAnonymousWorkspace) {
-    if (!currentUserId) {
-      await admin.schema("public").from("generation_jobs").insert({
-        workspace_id: workspaceId,
-        requested_by_user_id: null,
-        trigger_message_id: userMessage?.id ?? null,
-        status: "blocked_auth",
-        block_reason: "auth_required",
-        prompt: resolvedPrompt,
-        output_format: resolvedOutputFormat,
-        requested_variant_count: requestedVariantCount,
-        completed_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      });
-      await admin.schema("public").from("workspace_messages").insert({
-        workspace_id: workspaceId,
-        role: "system",
-        message_type: "gate_notice",
-        content: {
-          text: "Session expired. Sign in to continue.",
-        } as Json,
-        metadata: { reason: "blocked_auth" } as Json,
-      });
-      return getWorkspaceState(workspaceId);
-    }
-
-    const entitled = await hasActiveEntitlement(currentUserId);
-    if (!entitled) {
-      const { data: blockedJob } = await admin
-        .schema("public")
-        .from("generation_jobs")
-        .insert({
-          workspace_id: workspaceId,
-          requested_by_user_id: currentUserId,
-          trigger_message_id: userMessage?.id ?? null,
-          status: "blocked_payment",
-          block_reason: "payment_required",
-          prompt: resolvedPrompt,
-          output_format: resolvedOutputFormat,
-          requested_variant_count: requestedVariantCount,
-          completed_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        })
-        .select("id")
-        .single();
-
-      const pendingPayload = {
-        reason: "payment_required",
-        blocked_job_id: blockedJob?.id ?? null,
-        trigger_message_id: userMessage?.id ?? null,
-        prompt: resolvedPrompt,
-        output_format: resolvedOutputFormat,
-        requested_variant_count: requestedVariantCount,
-        template_family_preference: resolvedTemplateFamilyPreference,
-      } as Json;
-
-      const { data: existingPending } = await admin
-        .schema("public")
-        .from("pending_actions")
-        .select("id")
-        .eq("workspace_id", workspaceId)
-        .eq("action_type", "payment_required")
-        .is("resolved_at", null)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      if (existingPending?.id) {
-        await admin
-          .schema("public")
-          .from("pending_actions")
-          .update({ payload: pendingPayload })
-          .eq("id", existingPending.id);
-      } else {
-        const { error: pendingInsertError } = await admin
-          .schema("public")
-          .from("pending_actions")
-          .insert({
-            workspace_id: workspaceId,
-            action_type: "payment_required",
-            payload: pendingPayload,
-          });
-
-        if (pendingInsertError?.code === "23505") {
-          const { data: racedPending } = await admin
-            .schema("public")
-            .from("pending_actions")
-            .select("id")
-            .eq("workspace_id", workspaceId)
-            .eq("action_type", "payment_required")
-            .is("resolved_at", null)
-            .order("created_at", { ascending: false })
-            .limit(1)
-            .maybeSingle();
-          if (racedPending?.id) {
-            await admin
-              .schema("public")
-              .from("pending_actions")
-              .update({ payload: pendingPayload })
-              .eq("id", racedPending.id);
-          }
-        }
-      }
-
-      await admin.schema("public").from("workspace_messages").insert({
-        workspace_id: workspaceId,
-        role: "system",
-        message_type: "gate_notice",
-        content: {
-          text: "Unlock a plan to keep generating.",
-        } as Json,
-        metadata: { reason: "blocked_payment" } as Json,
-      });
-
-      return getWorkspaceState(workspaceId);
-    }
   }
 
   await admin.schema("public").from("workspace_messages").insert({

@@ -9,6 +9,8 @@ import {
 import { wrapCaptionWithSoftEarlySplit, wrapSquareTopCaptionScoped } from "@/renderer/caption-wrap";
 
 type MemeVideoTemplateForRender = {
+  slug?: string | null;
+  height_bucket?: string | null;
   template_family?: string | null;
   text_layout_type?: string | null;
   canvas_width?: number | null;
@@ -31,8 +33,12 @@ function toMemeTemplateForRender(
   t: MemeVideoTemplateForRender
 ): MemeTemplateForRender {
   return {
+    slug: t.slug ?? null,
     canvas_width: t.canvas_width ?? 1080,
     canvas_height: t.canvas_height ?? 1080,
+    height_bucket: t.height_bucket ?? null,
+    template_family: t.template_family ?? null,
+    text_layout_type: t.text_layout_type ?? null,
     font_size: t.font_size,
     alignment: t.alignment,
     text_color: t.text_color,
@@ -103,7 +109,10 @@ export async function renderMemeMP4FromTemplate(params: {
   const maxLines = params.template.slot_1_max_lines ?? 2;
   const fontSize = params.template.font_size ?? 46;
   const lineHeight = Math.round(fontSize * 1.2);
-  const lines = wrapSquareTopCaptionScoped({
+  const isMediumTopCaption =
+    String(params.template.height_bucket ?? "").trim().toLowerCase() === "medium" &&
+    String(params.template.text_layout_type ?? "").trim().toLowerCase() === "top_caption";
+  const scoped = wrapSquareTopCaptionScoped({
     text: params.topText,
     maxChars,
     maxLines,
@@ -113,11 +122,30 @@ export async function renderMemeMP4FromTemplate(params: {
     templateFamily: params.template.template_family ?? null,
     textLayoutType: params.template.text_layout_type ?? null,
   });
-  const safeLines =
-    lines.length > 0 ? lines : wrapCaptionWithSoftEarlySplit(params.topText, maxChars, maxLines);
+  const safeLines = isMediumTopCaption
+    ? wrapCaptionWithSoftEarlySplit(params.topText, 40, 2)
+    : scoped.length > 0
+      ? scoped
+      : wrapCaptionWithSoftEarlySplit(params.topText, maxChars, maxLines);
+  console.log("VIDEO WRAP PATH", {
+    file: "renderer/renderMemeVideoTemplate.ts",
+    function: "renderMemeMP4FromTemplate",
+    slug: (params.template as { slug?: string | null }).slug ?? null,
+    height_bucket: params.template.height_bucket ?? null,
+    layout: params.template.text_layout_type ?? null,
+    family: params.template.template_family ?? null,
+    text: params.topText,
+    selectedStrategy: isMediumTopCaption
+      ? "medium_top_caption_forced_fallback_40x2"
+      : scoped.length > 0
+        ? "scoped"
+        : "fallback",
+    lines: safeLines,
+  });
   const alignment =
     safeLines.length > 1 ? "left" : (params.template.alignment ?? "center").toLowerCase();
-  const textValue = safeLines.join("\n");
+  const drawtextText = safeLines.join("\\n");
+  console.log("FFMPEG TEXT INPUT", drawtextText);
   const lineCount = Math.max(1, safeLines.length);
   const totalTextHeight = lineCount * lineHeight;
   const startY = Math.round(slotY + (slotHeight - totalTextHeight) / 2 + fontSize);
@@ -131,7 +159,7 @@ export async function renderMemeMP4FromTemplate(params: {
   const textColor = hexToFfmpegColor(params.template.text_color);
   const strokeColor = hexToFfmpegColor(params.template.stroke_color);
   const strokeWidth = Number(params.template.stroke_width ?? 0);
-  const escapedText = escapeDrawtextText(textValue || " ");
+  const escapedText = escapeDrawtextText(drawtextText || " ");
   const drawtext = [
     `drawtext=text='${escapedText}'`,
     `x=${xExpr}`,
