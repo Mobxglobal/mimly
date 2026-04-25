@@ -92,6 +92,32 @@ small {
   }
 }
 
+/* Hero subheading: rotating word (meme / post / slideshow / carousel) */
+.hero-subheading-rotator-slot {
+  width: 4ch;
+  justify-content: flex-start;
+  line-height: 1.15;
+}
+
+.hero-subheading-rotator-word {
+  white-space: nowrap;
+}
+
+@keyframes hero-subheading-rotator-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .hero-subheading-rotator-word {
+    animation: hero-subheading-rotator-fade 220ms ease-out both;
+  }
+}
+
 /* Hero heading word animations */
 @media (prefers-reduced-motion: no-preference) {
   .hero-word-memes {

@@ -1,8 +1,11 @@
 import sharp from "sharp";
 import { wrapCaptionWithSoftEarlySplit, wrapSquareTopCaptionScoped } from "@/renderer/caption-wrap";
+import { normalizeNobodyMeSetupSlots } from "@/lib/memes/normalize-nobody-me-setup-slots";
 
 export type MemeTemplateForRender = {
   slug?: string | null;
+  /** Present on DB-backed templates; used for mechanic-specific render paths. */
+  meme_mechanic?: string | null;
   canvas_width: number;
   canvas_height: number;
   height_bucket?: string | null;
@@ -208,6 +211,15 @@ function buildSVG(template: MemeTemplateForRender, slotTexts: SlotTexts) {
   const slot2Text = slotTexts.slot_2_text || "";
   const slot3Text = slotTexts.slot_3_text || "";
 
+  const mechanic = String(template.meme_mechanic ?? "").trim().toLowerCase();
+  const slug = String(template.slug ?? "").trim();
+  if (mechanic === "nobody_me_setup" || slug === "victorian-nobody-me") {
+    console.log("NOBODY_ME_RENDER", {
+      slot_1_text: slot1Text,
+      slot_2_text: slot2Text,
+    });
+  }
+
   const slots: Array<{
     text: string;
     maxChars: number;
@@ -304,11 +316,19 @@ export async function renderMemePNGFromTemplate(params: {
   bottomText: string | null;
   slot_3_text?: string;
 }) {
+  const mechanic = String(params.template.meme_mechanic ?? "").trim().toLowerCase();
+  const slug = String(params.template.slug ?? "").trim();
+  const isNobodyMeTemplate =
+    mechanic === "nobody_me_setup" || slug === "victorian-nobody-me";
+  const nobodySlots = isNobodyMeTemplate
+    ? normalizeNobodyMeSetupSlots(params.topText, params.bottomText)
+    : null;
+
   const svg = buildSVG(
     params.template,
     {
-    slot_1_text: params.topText,
-    slot_2_text: params.bottomText ?? "",
+    slot_1_text: nobodySlots?.top ?? params.topText,
+    slot_2_text: nobodySlots?.bottom ?? (params.bottomText ?? ""),
     slot_3_text: params.slot_3_text ?? "",
     }
   );

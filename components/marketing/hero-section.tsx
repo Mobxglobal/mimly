@@ -21,6 +21,9 @@ const PLACEHOLDER_VISIBLE_MS = 1800;
 const PLACEHOLDER_TYPE_MS = 24;
 const PLACEHOLDER_DELETE_MS = 14;
 
+const HERO_SUB_ROTATING_WORDS = ["meme", "post", "slideshow", "carousel"] as const;
+const HERO_SUB_ROTATE_INTERVAL_MS = 700;
+
 /** Single like count that runs from start to end on mount so it clearly increases on load. */
 function LikeCount({
   delayMs = 0,
@@ -72,8 +75,24 @@ export function HeroSection() {
   const [placeholderIndex, setPlaceholderIndex] = useState(0);
   const [typedPlaceholder, setTypedPlaceholder] = useState("");
   const [isPromptFocused, setIsPromptFocused] = useState(false);
+  const [heroSubWordIndex, setHeroSubWordIndex] = useState(0);
   const promptFormRef = useRef<HTMLFormElement | null>(null);
   const router = useRouter();
+
+  useEffect(() => {
+    const sequence = [1, 2, 3, 0];
+    const timeoutIds: number[] = [];
+    sequence.forEach((wordIndex, step) => {
+      const timeoutId = window.setTimeout(() => {
+        setHeroSubWordIndex(wordIndex);
+      }, HERO_SUB_ROTATE_INTERVAL_MS * (step + 1));
+      timeoutIds.push(timeoutId);
+    });
+
+    return () => {
+      timeoutIds.forEach((id) => window.clearTimeout(id));
+    };
+  }, []);
   const chipHoverText: Record<HomepageFamilyChip, string> = {
     Image: "Generate a 1080x1080 image meme designed for social feed posts.",
     Video: "Generate a 1080x1080 video meme designed for social feed posts.",
@@ -157,9 +176,22 @@ export function HeroSection() {
               .
             </h1>
             <p className="marketing-copy mx-auto mt-3 max-w-lg text-pretty text-[11px] !leading-snug sm:text-xs sm:!leading-snug">
-              From prompt to context-aware
-              <br />
-              memes and posts.
+              <span className="inline-flex items-baseline justify-center">
+                From prompt to
+                <span
+                  className="hero-subheading-rotator-slot relative ml-1 inline-flex text-left font-medium text-stone-900"
+                  aria-live="polite"
+                  aria-atomic="true"
+                >
+                  <span
+                    key={heroSubWordIndex}
+                    className="hero-subheading-rotator-word inline-block"
+                  >
+                    {HERO_SUB_ROTATING_WORDS[heroSubWordIndex]}
+                  </span>
+                </span>
+                .
+              </span>
             </p>
             {/* <div className="mt-5 flex items-center justify-center">
               <div className="flex items-start gap-3 sm:gap-4">

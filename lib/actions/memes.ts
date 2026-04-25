@@ -21,6 +21,7 @@ import {
   selectTemplatesFromWorkspaceFamilyCycle,
 } from "@/lib/workspace/template-cycle";
 import { sanitizeGeneratedMemeTextFields } from "@/lib/memes/sanitize-meme-text";
+import { normalizeNobodyMeSetupSlots } from "@/lib/memes/normalize-nobody-me-setup-slots";
 import {
   buildWowDogeUserPromptBlock,
   getWowDogeRetrySupplement,
@@ -1839,6 +1840,13 @@ Slot 1:
 - Make the dilemma obvious from the labels alone.
 - Keep both slots short, parallel, and equally plausible.
 - Avoid weak pairings that do not feel like a real stressful choice.`;
+      case "nobody_me_setup":
+        return `Meme-mechanic guidance: nobody_me_setup
+- This template renders TWO separate text boxes. You MUST fill BOTH JSON fields.
+- top_text must be EXACTLY the setup label: Nobody: (nothing else in this field).
+- bottom_text must be the reaction line ONLY, starting with Me: followed by the specific moment (for example: Me: checking analytics again).
+- Do NOT put "Nobody:" and "Me:" in the same JSON string. Do NOT merge both lines into top_text.
+- Do not repeat the word Nobody inside bottom_text.`;
       default:
         return "";
     }
@@ -3217,8 +3225,17 @@ ${isThreeSlot
     const slot1ValidationLabel = "slot_1";
     const slot2ValidationLabel = "slot_2";
     const slot3ValidationLabel = "slot_3";
-    const slot1Value = isThreeSlot ? p.slot_1_text : p.top_text;
-    const slot2Value = isThreeSlot ? p.slot_2_text : p.bottom_text;
+    let slot1Value = isThreeSlot ? p.slot_1_text : p.top_text;
+    let slot2Value = isThreeSlot ? p.slot_2_text : p.bottom_text;
+    if (
+      !isThreeSlot &&
+      template.isTwoSlot &&
+      template.meme_mechanic === "nobody_me_setup"
+    ) {
+      const fixed = normalizeNobodyMeSetupSlots(slot1Value, slot2Value);
+      slot1Value = fixed.top;
+      slot2Value = fixed.bottom;
+    }
     const slot3Value = isThreeSlot ? p.slot_3_text : null;
     const namesValidation = namesCount
       ? validateFirstNamesList(p.names, namesCount)
