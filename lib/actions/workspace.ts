@@ -19,6 +19,7 @@ import { interpretWorkspaceMessage } from "@/lib/workspace/message-interpreter";
 import { getActiveEntitlement, hasActiveEntitlementForPlan, type WorkspacePlanCode } from "@/lib/workspace/entitlements";
 import { getOrCreateDefaultWorkspaceForUser } from "@/lib/workspace/default-workspace";
 import { renderEngagementTextMemePng } from "@/renderer/renderEngagementTextMeme";
+import { renderSquareTextMemePng } from "@/renderer/renderSquareTextMeme";
 import { mapMemeTemplateRowForRender } from "@/lib/memes/map-meme-template-row-for-render";
 import {
   coerceEngagementVisualStyle,
@@ -587,8 +588,9 @@ export async function updateWorkspaceEngagementOutputStyle(
   }
 
   const t = templateRow as Record<string, unknown>;
-  if (String(t.template_family ?? "").trim() !== "engagement_text") {
-    return { error: "This output is not an engagement post." };
+  const templateFamily = String(t.template_family ?? "").trim();
+  if (templateFamily !== "engagement_text" && templateFamily !== "square_text") {
+    return { error: "This output does not support style toggling." };
   }
 
   const meta =
@@ -618,17 +620,36 @@ export async function updateWorkspaceEngagementOutputStyle(
 
   let png: Buffer;
   try {
-    png = await renderEngagementTextMemePng({
-      template,
-      keyword: String(meme.top_text ?? ""),
-      topText: String(meme.top_text ?? ""),
-      bottomText:
-        meme.bottom_text == null || meme.bottom_text === ""
-          ? null
-          : String(meme.bottom_text),
-      names: layoutKey === "birthday_names_list" ? names : undefined,
-      engagementStyle: engagedStyle,
-    });
+    if (templateFamily === "engagement_text") {
+      png = await renderEngagementTextMemePng({
+        template,
+        keyword: String(meme.top_text ?? ""),
+        topText: String(meme.top_text ?? ""),
+        bottomText:
+          meme.bottom_text == null || meme.bottom_text === ""
+            ? null
+            : String(meme.bottom_text),
+        names: layoutKey === "birthday_names_list" ? names : undefined,
+        engagementStyle: engagedStyle,
+      });
+    } else {
+      png = await renderSquareTextMemePng({
+        topText: String(meme.top_text ?? ""),
+        bottomText:
+          meme.bottom_text == null || meme.bottom_text === ""
+            ? null
+            : String(meme.bottom_text),
+        slot1MaxLines:
+          typeof t.slot_1_max_lines === "number"
+            ? Math.max(1, Math.floor(t.slot_1_max_lines))
+            : 8,
+        slot2MaxLines:
+          typeof t.slot_2_max_lines === "number"
+            ? Math.max(0, Math.floor(t.slot_2_max_lines))
+            : 4,
+        engagementStyle: engagedStyle,
+      });
+    }
   } catch (e) {
     const message = e instanceof Error ? e.message : "Render failed";
     return { error: message };
@@ -663,7 +684,7 @@ export async function updateWorkspaceEngagementOutputStyle(
   const nextMeta: Record<string, unknown> = {
     ...meta,
     engagement_style: engagedStyle,
-    content_template_family: "engagement_text",
+    content_template_family: templateFamily,
   };
 
   const { error: updateError } = await admin

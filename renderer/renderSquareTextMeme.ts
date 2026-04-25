@@ -1,6 +1,10 @@
 import sharp from "sharp";
 import { wrapSquareTextMemeLines } from "@/renderer/caption-wrap";
 import { measureSquareTextLineWidthPx } from "@/renderer/square-text-measure";
+import {
+  resolveEngagementTheme,
+  type EngagementVisualStyle,
+} from "@/lib/memes/engagement-style";
 
 const CANVAS = 1080;
 const MARGIN_X = 96;
@@ -214,6 +218,7 @@ export async function renderSquareTextMemePng(params: {
   bottomText: string | null;
   slot1MaxLines: number;
   slot2MaxLines: number;
+  engagementStyle?: EngagementVisualStyle | null;
   /** When true, overlays margin/center/baseline guides for visual calibration only. */
   debug?: boolean;
 }): Promise<Buffer> {
@@ -228,6 +233,7 @@ export async function renderSquareTextMemePng(params: {
     bottom && params.slot2MaxLines > 0
       ? wrapSquareTextBlock(bottom, maxLines2)
       : [];
+  const theme = resolveEngagementTheme(params.engagementStyle);
 
   const h1 = blockHeight(lines1);
   const h2 = blockHeight(lines2);
@@ -263,10 +269,10 @@ export async function renderSquareTextMemePng(params: {
 
   const svg = `
 <svg xmlns="http://www.w3.org/2000/svg" width="${CANVAS}" height="${CANVAS}" viewBox="0 0 ${CANVAS} ${CANVAS}">
-  <rect width="${CANVAS}" height="${CANVAS}" fill="#ffffff"/>
+  <rect width="${CANVAS}" height="${CANVAS}" fill="${theme.canvasBg}"/>
   <style>
     .caption {
-      fill: #000000;
+      fill: ${theme.textPrimary};
       font-size: ${FONT_SIZE}px;
       font-family: Arial, Helvetica, sans-serif;
     }

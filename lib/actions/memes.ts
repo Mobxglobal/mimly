@@ -3614,6 +3614,7 @@ ${isThreeSlot
           bottomText: generated.bottom_text,
           slot1MaxLines: template.slot_1_max_lines,
           slot2MaxLines: template.isTwoSlot ? template.slot_2_max_lines : 0,
+          engagementStyle: "classic",
         });
 
         const objectPath = `generated_memes/${workspaceContext?.storagePathNamespace ?? actorUserId ?? "anonymous"}/${template.template_id}/${randomUUID()}.png`;
@@ -3794,6 +3795,9 @@ ${isThreeSlot
         : {}),
       ...(outputFormat === "square_text"
         ? { content_template_family: template.template_family }
+        : {}),
+      ...(template.template_family === "square_text"
+        ? { engagement_style: "classic" as const }
         : {}),
       ...(isWowDogeTemplateSlug(template.slug) &&
       Array.isArray(generated.wowDogePhrases) &&

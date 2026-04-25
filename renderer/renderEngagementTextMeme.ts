@@ -1,35 +1,13 @@
 import sharp from "sharp";
 import { measureLineWidthPx } from "@/renderer/square-text-measure";
 import type { MemeTemplateForRender } from "@/renderer/renderMemeTemplate";
-import type { EngagementVisualStyle } from "@/lib/memes/engagement-style";
+import {
+  resolveEngagementTheme,
+  type EngagementTheme,
+  type EngagementVisualStyle,
+} from "@/lib/memes/engagement-style";
 
 const CANVAS = 1080;
-
-type EngagementTheme = {
-  canvasBg: string;
-  textPrimary: string;
-  textMuted: string;
-  lineStroke: string;
-};
-
-function resolveEngagementTheme(
-  style: EngagementVisualStyle | null | undefined
-): EngagementTheme {
-  if (style === "inverse") {
-    return {
-      canvasBg: "#000000",
-      textPrimary: "#FFFFFF",
-      textMuted: "#EDEDED",
-      lineStroke: "#FFFFFF",
-    };
-  }
-  return {
-    canvasBg: "#FFFFFF",
-    textPrimary: "#000000",
-    textMuted: "#111111",
-    lineStroke: "#000000",
-  };
-}
 
 function escapeXML(str: string) {
   return String(str)
