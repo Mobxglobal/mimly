@@ -63,8 +63,8 @@ const variantStyles: Record<
   },
   footer: {
     maxWidth: "max-w-[1600px]",
-    // Slightly more top padding than hero to give footer breathing room
-    padding: "px-4 pt-6 pb-8 sm:px-6 sm:pt-8 sm:pb-10 md:px-8 md:pt-10 md:pb-12 lg:px-10 lg:pt-12 lg:pb-16",
+    // Compact footer shell for a tighter, minimal visual rhythm.
+    padding: "px-4 pt-4 pb-5 sm:px-6 sm:pt-5 sm:pb-6 md:px-8 md:pt-6 md:pb-8 lg:px-10 lg:pt-7 lg:pb-9",
     radius: "rounded-3xl sm:rounded-[2rem] md:rounded-[2.25rem]",
     shadow: "shadow-2xl shadow-black/10",
     border: "border border-stone-700/50",
