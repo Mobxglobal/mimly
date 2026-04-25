@@ -9,8 +9,7 @@ import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 
 const NAV_LINKS = [
-  { href: "/#showcase-heading", label: "Product" },
-  { href: "/#faq-heading", label: "FAQ" },
+  { href: "/faq", label: "FAQ" },
 ];
 
 interface HeroNavProps {
@@ -117,29 +116,29 @@ export function HeroNav({ onFixedChange }: HeroNavProps) {
     >
       <nav
         className={cn(
-          "relative mx-auto flex max-w-4xl items-center justify-between gap-4",
-          "rounded-full border border-white/40 bg-white/40 px-4 py-1.5 shadow-lg shadow-black/5 backdrop-blur-md",
-          "sm:px-5 sm:py-2"
+          "relative mx-auto flex w-[19rem] max-w-[calc(100vw-1.5rem)] items-center justify-between gap-2 sm:w-[21rem] sm:max-w-[21rem]",
+          "rounded-full border border-white/35 bg-white/35 px-2 py-0.5 shadow-md shadow-black/5 backdrop-blur-md",
+          "sm:px-2.5 sm:py-1"
         )}
       >
         <Link href="/" className="shrink-0 hover:opacity-80 transition-opacity">
           <Image
             src="/Mimly.png"
             alt="Mimly"
-            width={80}
-            height={24}
-            className="h-6 w-auto"
+            width={64}
+            height={20}
+            className="h-5 w-auto"
             priority
           />
         </Link>
 
         {/* Desktop links */}
-        <div className="absolute left-1/2 hidden -translate-x-1/2 items-center gap-8 sm:flex">
+        <div className="absolute left-1/2 hidden -translate-x-1/2 items-center gap-4 sm:flex">
           {NAV_LINKS.map((item) => (
             <Link
               key={item.href}
               href={item.href}
-              className="text-sm font-medium text-stone-600 hover:text-stone-900 transition-colors"
+              className="text-xs font-medium text-stone-600 hover:text-stone-900 transition-colors"
             >
               {item.label}
             </Link>
@@ -147,19 +146,19 @@ export function HeroNav({ onFixedChange }: HeroNavProps) {
         </div>
 
         {/* Desktop CTA */}
-        <div className="hidden items-center gap-3 sm:flex">
+        <div className="hidden items-center gap-2 sm:flex">
           {hasSession ? (
             <>
               <button
                 type="button"
                 onClick={handleLogOut}
-                className="rounded-full px-3 py-1.5 text-sm font-medium text-stone-600 hover:bg-stone-100 transition-colors"
+                className="rounded-full px-2.5 py-1 text-xs font-medium text-stone-600 hover:bg-stone-100 transition-colors"
               >
                 Log out
               </button>
               <Link
                 href="/workspace"
-                className="cta-funky rounded-full bg-stone-900 px-3 py-1.5 text-sm font-medium !text-white shadow-sm hover:bg-stone-800 transition-colors font-display"
+                className="cta-funky rounded-full bg-stone-900 px-2.5 py-1 text-xs font-medium !text-white shadow-sm hover:bg-stone-800 transition-colors font-display"
               >
                 Workspace
               </Link>
@@ -168,7 +167,7 @@ export function HeroNav({ onFixedChange }: HeroNavProps) {
             <>
               <Link
                 href="/login"
-                className="cta-funky rounded-full bg-stone-900 px-3 py-1.5 text-sm font-medium !text-white shadow-sm hover:bg-stone-800 transition-colors font-display"
+                className="cta-funky rounded-full bg-stone-900 px-2.5 py-1 text-xs font-medium !text-white shadow-sm hover:bg-stone-800 transition-colors font-display"
               >
                 Log in
               </Link>
@@ -181,7 +180,7 @@ export function HeroNav({ onFixedChange }: HeroNavProps) {
           type="button"
           onClick={() => (mobileOpen ? closeMenu() : setMobileOpen(true))}
           className={cn(
-            "flex h-9 w-9 items-center justify-center rounded-full text-stone-600 transition-colors duration-200 sm:hidden",
+            "flex h-8 w-8 items-center justify-center rounded-full text-stone-600 transition-colors duration-200 sm:hidden",
             "hover:bg-stone-200/60 active:bg-stone-200/80"
           )}
           aria-expanded={mobileOpen}

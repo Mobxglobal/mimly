@@ -144,19 +144,21 @@ export function HeroSection() {
           </div>
 
         {/* Main hero content – stacked on all breakpoints */}
-        <div className="flex w-full flex-1 flex-col items-center justify-center gap-10 px-4 text-center">
-          <div className="relative mt-12 sm:mt-16 md:mt-20">
+        <div className="flex w-full flex-1 flex-col items-center justify-start gap-8 px-4 pt-2 text-center sm:pt-3 md:pt-4">
+          <div className="relative mt-2 sm:mt-3 md:mt-4">
             <h1
               id="hero-heading"
-              className="mx-auto max-w-4xl text-pretty text-4xl font-bold tracking-tight leading-tight text-stone-900 sm:text-5xl md:text-6xl"
+              className="mx-auto max-w-3xl text-pretty text-2xl font-bold tracking-tight leading-tight text-stone-900 sm:text-3xl md:text-4xl"
             >
-              AI meme generator
+              Scroll-stopping memes for
               <br />
-              for brands on social.
+              your brand, in seconds.
             </h1>
-            <p className="marketing-copy mx-auto mt-5 max-w-xl text-pretty leading-relaxed">
-              Mimly turns simple prompts into context-aware memes and engagement posts,
-              ready for social media.
+            <p className="marketing-copy mx-auto mt-3 max-w-lg text-pretty text-[11px] leading-relaxed sm:text-xs">
+              <span className="block whitespace-nowrap">
+                Mimly turns simple prompts into context-aware
+              </span>
+              <span className="block whitespace-nowrap">memes and engagement posts.</span>
             </p>
             {/* <div className="mt-5 flex items-center justify-center">
               <div className="flex items-start gap-3 sm:gap-4">
@@ -310,10 +312,10 @@ export function HeroSection() {
                 }
                 router.push(`/workspace/${result.workspaceId}`);
               }}
-              className="mx-auto mt-10 w-full max-w-4xl"
+              className="mx-auto mt-8 w-full max-w-4xl"
             >
-              <div className="relative overflow-visible rounded-[30px] border border-stone-200/90 bg-gradient-to-b from-white to-stone-50 p-3 shadow-[0_18px_55px_rgba(20,24,40,0.14)] ring-1 ring-white/80">
-                <div className="relative rounded-[24px] border border-stone-200/80 bg-white/95 p-5 sm:p-6">
+              <div className="relative overflow-visible rounded-[30px] border border-stone-200/90 bg-gradient-to-b from-white to-stone-50 p-2 shadow-[0_12px_36px_rgba(20,24,40,0.12)] ring-1 ring-white/80">
+                <div className="relative rounded-[24px] border border-stone-200/80 bg-white/95 p-4 sm:p-5">
                   <label htmlFor="hero-prompt" className="sr-only">
                     Describe what you want to generate
                   </label>
@@ -454,7 +456,7 @@ export function HeroSection() {
                     ) : null}
                   </div>
 
-                  <div className="mt-4 flex items-center justify-end gap-3">
+                  <div className="mt-3 flex items-center justify-end gap-3">
                     <button
                       type="submit"
                       disabled={isSubmittingPrompt}

@@ -115,6 +115,18 @@ export function FramedSection({
         )}
       >
         <SectionBackground variant={bgVariant} heroBackgroundSrc={heroBackgroundSrc} />
+        {variant === "hero" ? (
+          <>
+            <div
+              aria-hidden
+              className="pointer-events-none absolute inset-x-0 -bottom-1 z-[1] h-20 bg-gradient-to-b from-transparent via-stone-100/70 to-stone-100"
+            />
+            <div
+              aria-hidden
+              className="pointer-events-none absolute inset-x-8 -bottom-3 z-[1] h-8 rounded-full bg-stone-200/40 blur-2xl"
+            />
+          </>
+        ) : null}
         <div className="relative z-10">{children}</div>
       </div>
     </section>

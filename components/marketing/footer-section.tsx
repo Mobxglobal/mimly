@@ -1,13 +1,9 @@
 import Link from "next/link";
 import Image from "next/image";
 import { FramedSection } from "./framed-section";
+import { cn } from "@/lib/utils";
 
 const FOOTER_LINKS = {
-  product: [
-    { label: "Product", href: "/#features-heading" },
-    { label: "Pricing", href: "/pricing" },
-    { label: "FAQ", href: "/#faq-heading" },
-  ],
   company: [
     { label: "About", href: "/about" },
     { label: "Contact", href: "/contact" },
@@ -20,13 +16,17 @@ const FOOTER_LINKS = {
   ],
 };
 
-export function FooterSection() {
+interface FooterSectionProps {
+  className?: string;
+}
+
+export function FooterSection({ className }: FooterSectionProps) {
   return (
     <FramedSection
       variant="footer"
       id="footer"
       aria-label="Site footer"
-      className="w-full mt-10 sm:mt-12 md:mt-14"
+      className={cn("w-full mt-10 sm:mt-12 md:mt-14", className)}
     >
       <div className="flex flex-col gap-12 md:flex-row md:items-start md:justify-between md:gap-16">
         <div>
@@ -44,23 +44,6 @@ export function FooterSection() {
           </p>
         </div>
         <div className="flex flex-wrap gap-12 sm:gap-16">
-          <div>
-            <h3 className="text-xs font-semibold uppercase tracking-[0.16em] text-stone-200">
-              Product
-            </h3>
-            <ul className="mt-3 flex flex-col gap-2">
-              {FOOTER_LINKS.product.map((link) => (
-                <li key={link.href}>
-                  <Link
-                    href={link.href}
-                    className="text-sm text-stone-300 hover:text-white transition-colors"
-                  >
-                    {link.label}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </div>
           <div>
             <h3 className="text-xs font-semibold uppercase tracking-[0.16em] text-stone-200">
               Company
@@ -97,28 +80,23 @@ export function FooterSection() {
           </div>
         </div>
       </div>
-      <div className="mt-16 flex flex-col gap-3 border-t border-stone-700/60 pt-8 sm:flex-row sm:items-center sm:justify-between">
-        <p className="text-left text-xs text-stone-500">
+
+      <div className="mt-16 flex min-w-0 flex-row flex-nowrap items-center justify-between gap-2 overflow-x-auto border-t border-stone-700/60 pt-8 [-ms-overflow-style:none] [scrollbar-width:none] sm:gap-4 [&::-webkit-scrollbar]:hidden">
+        <p className="shrink-0 whitespace-nowrap text-left text-xs text-stone-500">
           © {new Date().getFullYear()} Mimly. All rights reserved.
         </p>
-        <div className="flex items-center gap-2 text-left text-xs text-stone-500 sm:justify-end">
-          <span>Built with</span>
-          <Image
-            src="/nextjs.png"
-            alt="Next.js"
-            width={72}
-            height={18}
-            className="h-4 w-auto"
-          />
-          <span>by</span>
-          <a
-            href="https://x.com/alexattinger"
-            target="_blank"
-            rel="noreferrer"
-            className="text-stone-300 transition-colors hover:text-white"
-          >
-            Alex
-          </a>
+        <div className="flex shrink-0 flex-nowrap items-center gap-2">
+          <p className="whitespace-nowrap text-left text-xs text-stone-400">
+            Built by{" "}
+            <a
+              href="https://alexattinger.dev/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-medium text-stone-200 underline-offset-2 transition-colors hover:text-white hover:underline"
+            >
+              Alex
+            </a>
+          </p>
         </div>
       </div>
     </FramedSection>

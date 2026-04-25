@@ -60,10 +60,11 @@ function getTextAnchor(alignment: string | null | undefined) {
 
 function getXPosition(
   slot: { x: number; width: number },
-  alignment: string
+  alignment: string,
+  horizontalInset: number
 ) {
-  if (alignment === "left") return slot.x + 20;
-  if (alignment === "right") return slot.x + slot.width - 20;
+  if (alignment === "left") return slot.x + horizontalInset;
+  if (alignment === "right") return slot.x + slot.width - horizontalInset;
   return slot.x + slot.width / 2;
 }
 
@@ -80,6 +81,7 @@ function renderLines(
   style: {
     fontSize: number;
     alignment: string;
+    horizontalInset: number;
     textColor: string;
     strokeColor: string;
     strokeWidth: number;
@@ -89,8 +91,9 @@ function renderLines(
   if (!lines.length) return "";
 
   const fontSize = style.fontSize;
-  const lineHeight = Math.round(fontSize * 1.2);
-  const x = getXPosition({ x: slot.x, width: slot.width }, style.alignment);
+  const lineHeight = Math.round(fontSize * 1.15);
+  const inset = style.horizontalInset;
+  const x = getXPosition({ x: slot.x, width: slot.width }, style.alignment, inset);
   const textAnchor = getTextAnchor(style.alignment);
   const totalTextHeight = lines.length * lineHeight;
   const startY = slot.y + (slot.height - totalTextHeight) / 2 + fontSize;
@@ -128,7 +131,7 @@ function wrapImageSlotText(params: {
       String(params.template.height_bucket ?? "").trim().toLowerCase() === "medium" &&
       String(params.template.text_layout_type ?? "").trim().toLowerCase() === "top_caption";
     if (isMediumTopCaption) {
-      const lines = wrapCaptionWithSoftEarlySplit(params.text, 40, 2);
+      const lines = wrapCaptionWithSoftEarlySplit(params.text, 37, 2);
       console.log("VIDEO WRAP PATH", {
         file: "renderer/renderMemeTemplate.ts",
         function: "wrapImageSlotText",
@@ -137,7 +140,7 @@ function wrapImageSlotText(params: {
         layout: params.template.text_layout_type ?? null,
         family: params.template.template_family ?? null,
         text: params.text,
-        selectedStrategy: "medium_top_caption_forced_fallback_40x2",
+        selectedStrategy: "medium_top_caption_forced_fallback_37x2",
         lines,
       });
       return lines;
@@ -175,8 +178,17 @@ function wrapImageSlotText(params: {
 }
 
 function buildSVG(template: MemeTemplateForRender, slotTexts: SlotTexts) {
-  const fontSize = template.font_size || 48;
-  const alignment = template.alignment || "center";
+  const fontSize = template.font_size ?? 46;
+  console.log("IMAGE FONT SIZE", {
+    slug: template.slug,
+    fontSize: fontSize,
+  });
+  const isTopCaptionLayout =
+    String(template.text_layout_type ?? "").trim().toLowerCase() === "top_caption";
+  const horizontalInset = isTopCaptionLayout ? 8 : 0;
+  const alignment = isTopCaptionLayout
+    ? "left"
+    : template.alignment || "center";
   const textColor = template.text_color || "#000000";
   const strokeColor = template.stroke_color || "";
   const strokeWidth = template.stroke_width || 0;
@@ -185,6 +197,7 @@ function buildSVG(template: MemeTemplateForRender, slotTexts: SlotTexts) {
   const style = {
     fontSize,
     alignment,
+    horizontalInset,
     textColor,
     strokeColor,
     strokeWidth,
@@ -251,10 +264,21 @@ function buildSVG(template: MemeTemplateForRender, slotTexts: SlotTexts) {
         template,
         slotIndex,
       });
+      if (
+        template.slot_1_x != null &&
+        template.slot_1_y != null &&
+        slot.x === template.slot_1_x &&
+        slot.y === template.slot_1_y
+      ) {
+        console.log("TEXT RENDER TEST", {
+          slug: template.slug,
+          fontSize,
+          lines,
+        });
+      }
       return renderLines(lines, slot as any, {
         ...style,
-        // Keep existing single-line alignment; force left only after text is truly multi-line.
-        alignment: lines.length > 1 ? "left" : style.alignment,
+        alignment: style.alignment,
       });
     })
     .join("");

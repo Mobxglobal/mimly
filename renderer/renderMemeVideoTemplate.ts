@@ -108,7 +108,11 @@ export async function renderMemeMP4FromTemplate(params: {
   const maxChars = params.template.slot_1_max_chars ?? 56;
   const maxLines = params.template.slot_1_max_lines ?? 2;
   const fontSize = params.template.font_size ?? 46;
-  const lineHeight = Math.round(fontSize * 1.2);
+  console.log("VIDEO FONT SIZE", {
+    slug: params.template.slug,
+    fontSize: fontSize,
+  });
+  const lineHeight = Math.round(fontSize * 1.15);
   const isMediumTopCaption =
     String(params.template.height_bucket ?? "").trim().toLowerCase() === "medium" &&
     String(params.template.text_layout_type ?? "").trim().toLowerCase() === "top_caption";
@@ -123,7 +127,7 @@ export async function renderMemeMP4FromTemplate(params: {
     textLayoutType: params.template.text_layout_type ?? null,
   });
   const safeLines = isMediumTopCaption
-    ? wrapCaptionWithSoftEarlySplit(params.topText, 40, 2)
+    ? wrapCaptionWithSoftEarlySplit(params.topText, 37, 2)
     : scoped.length > 0
       ? scoped
       : wrapCaptionWithSoftEarlySplit(params.topText, maxChars, maxLines);
@@ -136,14 +140,23 @@ export async function renderMemeMP4FromTemplate(params: {
     family: params.template.template_family ?? null,
     text: params.topText,
     selectedStrategy: isMediumTopCaption
-      ? "medium_top_caption_forced_fallback_40x2"
+      ? "medium_top_caption_forced_fallback_37x2"
       : scoped.length > 0
         ? "scoped"
         : "fallback",
     lines: safeLines,
   });
-  const alignment =
-    safeLines.length > 1 ? "left" : (params.template.alignment ?? "center").toLowerCase();
+  const isTopCaptionLayout =
+    String(params.template.text_layout_type ?? "").trim().toLowerCase() === "top_caption";
+  const horizontalInset = isTopCaptionLayout ? 8 : 0;
+  const alignment = isTopCaptionLayout
+    ? "left"
+    : (params.template.alignment ?? "center").toLowerCase();
+  console.log("TEXT RENDER TEST", {
+    slug: params.template.slug,
+    fontSize,
+    lines: safeLines,
+  });
   const drawtextText = safeLines.join("\\n");
   console.log("FFMPEG TEXT INPUT", drawtextText);
   const lineCount = Math.max(1, safeLines.length);
@@ -151,9 +164,9 @@ export async function renderMemeMP4FromTemplate(params: {
   const startY = Math.round(slotY + (slotHeight - totalTextHeight) / 2 + fontSize);
   const xExpr =
     alignment === "left"
-      ? `${slotX + 20}`
+      ? `${slotX + horizontalInset}`
       : alignment === "right"
-        ? `${slotX + slotWidth - 20}-text_w`
+        ? `${slotX + slotWidth - horizontalInset}-text_w`
         : `${slotX + slotWidth / 2}-text_w/2`;
 
   const textColor = hexToFfmpegColor(params.template.text_color);
