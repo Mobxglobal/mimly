@@ -185,7 +185,7 @@ export function HeroSection() {
                 >
                   <span
                     key={heroSubWordIndex}
-                    className="hero-subheading-rotator-word inline-block"
+                    className="hero-subheading-rotator-word inline-block italic"
                   >
                     {HERO_SUB_ROTATING_WORDS[heroSubWordIndex]}
                   </span>
