@@ -17,7 +17,7 @@ export function GallerySection() {
       <div className="mx-auto max-w-4xl text-center">
         <h2
           id="why-heading"
-          className="text-3xl font-semibold tracking-tight text-stone-900 sm:text-4xl md:text-5xl"
+          className="text-4xl font-semibold tracking-normal text-stone-900 sm:text-5xl md:text-6xl"
         >
           The internet runs on memes.
           <br />

@@ -282,11 +282,11 @@ h1,
 h2,
 h3 {
   font-family: var(--font-display), Georgia, "Times New Roman", serif;
-  letter-spacing: -0.03em;
+  letter-spacing: 0;
 }
 
 h1 {
-  line-height: 1.05;
+  line-height: 1.1;
 }
 
 h2,

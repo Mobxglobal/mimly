@@ -74,7 +74,7 @@ export function OrganicStatsSection() {
         </span>
         <h2
           id="organic-stats-title"
-          className="mt-5 text-3xl font-bold tracking-tight text-stone-900 md:text-5xl"
+          className="mt-5 text-4xl font-bold tracking-normal text-stone-900 md:text-6xl"
         >
           The internet runs on memes
         </h2>
@@ -120,7 +120,7 @@ export function OrganicStatsSection() {
                 <div className="min-h-[4.75rem] border-b border-stone-200/80 pb-4 transition-colors duration-300 group-hover:border-stone-200/60">
                   <p
                     className={cn(
-                      "font-display text-[2.45rem] font-bold tabular-nums leading-[0.95] tracking-tight transition-transform duration-300 ease-out group-hover:scale-[1.02] md:text-[2.85rem]",
+                      "font-display text-[2.65rem] font-bold tabular-nums leading-[0.95] tracking-normal transition-transform duration-300 ease-out group-hover:scale-[1.02] md:text-[3.1rem]",
                       "bg-gradient-to-br from-stone-900 via-stone-800 to-stone-600 bg-clip-text text-transparent",
                       "[-webkit-background-clip:text] [-webkit-text-fill-color:transparent]"
                     )}
@@ -129,7 +129,7 @@ export function OrganicStatsSection() {
                   </p>
                 </div>
 
-                <h3 className="mt-4 text-[15px] font-semibold leading-snug tracking-tight text-stone-900 transition-colors duration-300 group-hover:text-stone-950 sm:text-base">
+                <h3 className="mt-4 text-[15px] font-semibold leading-snug tracking-normal text-stone-900 transition-colors duration-300 group-hover:text-stone-950 sm:text-base">
                   {stat.label}
                 </h3>
                 <p className="mt-2.5 flex-1 text-[13px] leading-relaxed text-stone-500 sm:text-sm">

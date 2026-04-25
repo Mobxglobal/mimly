@@ -148,17 +148,18 @@ export function HeroSection() {
           <div className="relative mt-2 sm:mt-3 md:mt-4">
             <h1
               id="hero-heading"
-              className="mx-auto max-w-3xl text-pretty text-2xl font-bold tracking-tight leading-tight text-stone-900 sm:text-3xl md:text-4xl"
+              className="mx-auto max-w-3xl text-pretty text-3xl font-[550] tracking-normal leading-tight text-stone-900 sm:text-4xl md:text-5xl"
             >
-              Scroll-stopping memes for
+              Scroll-stopping <em className="italic">memes</em> for
               <br />
-              your brand, in seconds.
+              your brand, in{" "}
+              <span className="underline decoration-stone-900 underline-offset-[0.12em]">seconds</span>
+              .
             </h1>
-            <p className="marketing-copy mx-auto mt-3 max-w-lg text-pretty text-[11px] leading-relaxed sm:text-xs">
-              <span className="block whitespace-nowrap">
-                Mimly turns simple prompts into context-aware
-              </span>
-              <span className="block whitespace-nowrap">memes and engagement posts.</span>
+            <p className="marketing-copy mx-auto mt-3 max-w-lg text-pretty text-[11px] !leading-snug sm:text-xs sm:!leading-snug">
+              From prompt to context-aware
+              <br />
+              memes and posts.
             </p>
             {/* <div className="mt-5 flex items-center justify-center">
               <div className="flex items-start gap-3 sm:gap-4">

@@ -60,7 +60,7 @@ export function PricingMarketingBlock() {
         </p>
         <h2
           id="pricing-title"
-          className="mt-4 text-3xl font-bold tracking-tight text-stone-900 md:text-5xl"
+          className="mt-4 text-4xl font-bold tracking-normal text-stone-900 md:text-6xl"
         >
           Two ways to create
           <br />
@@ -98,7 +98,7 @@ export function PricingMarketingBlock() {
 
               <div className="relative z-10 flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <h3 className="text-2xl font-semibold tracking-tight text-stone-900 sm:text-3xl">
+                  <h3 className="text-2xl font-semibold tracking-normal text-stone-900 sm:text-3xl">
                     {plan.name}
                   </h3>
                   <p className={`mt-2 text-sm font-medium ${isHero ? "text-amber-900/90" : "text-stone-600"}`}>
@@ -121,7 +121,7 @@ export function PricingMarketingBlock() {
               <p className="relative z-10 mt-5 text-sm leading-relaxed text-stone-600">{plan.description}</p>
 
               <div className="relative z-10 mt-8 flex flex-wrap items-end gap-1">
-                <span className="text-5xl font-semibold tracking-tight text-stone-900 sm:text-[3.25rem]">
+                <span className="text-5xl font-semibold tracking-normal text-stone-900 sm:text-[3.25rem]">
                   {plan.price}
                 </span>
               </div>

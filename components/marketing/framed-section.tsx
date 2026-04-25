@@ -28,6 +28,8 @@ interface FramedSectionProps {
   heroBackgroundSrc?: string | null;
   children: React.ReactNode;
   className?: string;
+  /** Merged onto the framed inner container (e.g. override max-width / padding). */
+  frameClassName?: string;
   /** Section id for anchor links */
   id?: string;
   /** Optional aria label */
@@ -84,6 +86,7 @@ export function FramedSection({
   heroBackgroundSrc,
   children,
   className,
+  frameClassName,
   id,
   "aria-labelledby": ariaLabelledby,
 }: FramedSectionProps) {
@@ -111,7 +114,8 @@ export function FramedSection({
           styles.border,
           styles.padding,
           variant === "footer" && "bg-stone-900/95 text-stone-100",
-          variant === "showcase" && "bg-stone-800/88 text-stone-100"
+          variant === "showcase" && "bg-stone-800/88 text-stone-100",
+          frameClassName
         )}
       >
         <SectionBackground variant={bgVariant} heroBackgroundSrc={heroBackgroundSrc} />

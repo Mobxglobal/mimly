@@ -6,7 +6,7 @@ export function MainHeader() {
       <div className="max-w-6xl mx-auto flex h-14 items-center justify-between px-6">
         <Link
           href="/"
-          className="font-semibold text-lg tracking-tight text-[var(--canvas-heading)] hover:opacity-80 transition-opacity"
+          className="font-semibold text-lg tracking-normal text-[var(--canvas-heading)] hover:opacity-80 transition-opacity"
         >
           Meme Builder
         </Link>

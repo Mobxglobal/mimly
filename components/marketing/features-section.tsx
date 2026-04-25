@@ -77,7 +77,7 @@ export function FeaturesSection() {
         </span>
         <h2
           id="features-heading"
-          className="mt-5 text-3xl font-bold tracking-tight text-stone-900 md:text-5xl"
+          className="mt-5 text-4xl font-bold tracking-normal text-stone-900 md:text-6xl"
         >
           Behind the memes
         </h2>

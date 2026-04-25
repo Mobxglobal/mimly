@@ -85,7 +85,7 @@ function DemoCard({ item, className }: { item: BentoItem; className?: string }) 
           <span className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-sky-200/60 bg-sky-300/20 text-[11px] font-semibold text-sky-50">
             {item.step}
           </span>
-          <h3 className="text-lg font-semibold tracking-tight text-white">{item.title}</h3>
+          <h3 className="text-lg font-semibold tracking-normal text-white">{item.title}</h3>
         </div>
         <p className="mt-2 max-w-[62ch] text-sm leading-relaxed text-stone-200">{item.description}</p>
       </div>
@@ -108,7 +108,7 @@ export function ShowcaseBentoSection() {
         <span className="inline-flex rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[11px] font-medium uppercase tracking-[0.18em] text-stone-300">
           Product walkthrough
         </span>
-        <h2 id="showcase-heading" className="mt-5 text-3xl font-bold tracking-tight text-white md:text-5xl">
+        <h2 id="showcase-heading" className="mt-5 text-4xl font-bold tracking-normal text-white md:text-6xl">
           See Mimly in action
         </h2>
         <p className="mx-auto mt-4 max-w-2xl text-sm leading-relaxed text-stone-200 md:text-base">

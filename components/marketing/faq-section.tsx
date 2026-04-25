@@ -52,57 +52,56 @@ const FAQ_ITEMS = [
   },
 ];
 
-export function FAQSection() {
+type FAQSectionProps = Readonly<{
+  "aria-labelledby"?: string;
+}>;
+
+export function FAQSection({ "aria-labelledby": ariaLabelledby }: FAQSectionProps) {
   const [openId, setOpenId] = useState<number | null>(0);
 
   return (
-    <section
-      id="faq-heading"
-      aria-labelledby="faq-heading"
-      className="w-full px-4 pt-16 pb-2 sm:px-6 sm:pt-20 sm:pb-4 md:px-8 md:pt-24 md:pb-6"
+    <div
+      role="region"
+      aria-labelledby={ariaLabelledby}
+      className="w-full"
     >
-      <h2
-        id="faq-heading"
-        className="text-center text-2xl font-bold text-stone-900 md:text-3xl"
-      >
-        Frequently asked questions
-      </h2>
-      <p className="marketing-copy mx-auto mt-2 max-w-xl text-center">
-        Quick answers to common questions.
-      </p>
-      <div className="mx-auto mt-10 max-w-3xl space-y-2">
+      <ul className="space-y-2">
         {FAQ_ITEMS.map((item, i) => (
-          <div
-            key={i}
-            className="rounded-xl border border-stone-200 bg-white/80 shadow-sm"
-          >
-            <button
-              type="button"
-              onClick={() => setOpenId(openId === i ? null : i)}
-              className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left"
-              aria-expanded={openId === i}
-            >
-              <span className="font-medium text-stone-900">{item.question}</span>
-              <ChevronDown
+          <li key={i}>
+            <div className="overflow-hidden rounded-2xl border border-stone-200/80 bg-white/90 shadow-[0_8px_24px_rgba(0,0,0,0.04)]">
+              <button
+                type="button"
+                onClick={() => setOpenId(openId === i ? null : i)}
+                className="flex w-full items-center justify-between gap-3 px-4 py-3.5 text-left sm:gap-4 sm:px-5 sm:py-4"
+                aria-expanded={openId === i}
+              >
+                <span className="text-sm font-semibold leading-snug tracking-normal text-stone-900 sm:text-[15px]">
+                  {item.question}
+                </span>
+                <ChevronDown
+                  className={cn(
+                    "h-4 w-4 shrink-0 text-stone-500 transition-transform sm:h-5 sm:w-5",
+                    openId === i && "rotate-180"
+                  )}
+                  aria-hidden
+                />
+              </button>
+              <div
                 className={cn(
-                  "h-5 w-5 shrink-0 text-stone-500 transition-transform",
-                  openId === i && "rotate-180"
+                  "grid transition-[grid-template-rows] duration-200 ease-out",
+                  openId === i ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
                 )}
-              />
-            </button>
-            <div
-              className={cn(
-                "overflow-hidden transition-all",
-                openId === i ? "max-h-64 opacity-100" : "max-h-0 opacity-0"
-              )}
-            >
-              <p className="marketing-copy border-t border-stone-200 px-5 py-4 text-sm">
-                {item.answer}
-              </p>
+              >
+                <div className="min-h-0 overflow-hidden">
+                  <p className="border-t border-stone-100 px-4 pb-4 pt-3 text-xs leading-relaxed text-stone-600 sm:px-5 sm:pb-4 sm:pt-3.5 sm:text-sm">
+                    {item.answer}
+                  </p>
+                </div>
+              </div>
             </div>
-          </div>
+          </li>
         ))}
-      </div>
-    </section>
+      </ul>
+    </div>
   );
 }

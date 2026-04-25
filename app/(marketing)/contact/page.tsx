@@ -39,7 +39,7 @@ export default function ContactPage() {
               <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-stone-500 sm:text-xs">
                 Contact
               </p>
-              <h1 className="mx-auto mt-3 max-w-3xl text-pretty text-2xl font-bold leading-tight tracking-tight text-stone-900 sm:text-3xl md:text-4xl">
+              <h1 className="mx-auto mt-3 max-w-3xl text-pretty text-3xl font-bold leading-tight tracking-normal text-stone-900 sm:text-4xl md:text-5xl">
                 Let&apos;s talk about
                 <br />
                 your meme engine.

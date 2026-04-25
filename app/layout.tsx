@@ -1,12 +1,12 @@
 import "./globals.css";
 import type { Metadata } from "next";
-import { Courier_Prime, Fraunces, Inter } from "next/font/google";
+import { Courier_Prime, Instrument_Serif, Inter } from "next/font/google";
 
-const fraunces = Fraunces({
+const instrumentSerif = Instrument_Serif({
   subsets: ["latin"],
   display: "swap",
   variable: "--font-display",
-  weight: ["400", "500", "600"],
+  weight: "400",
 });
 
 const inter = Inter({
@@ -33,7 +33,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${fraunces.variable} ${inter.variable} ${courierPrime.variable}`}
+      className={`${instrumentSerif.variable} ${inter.variable} ${courierPrime.variable}`}
     >
       <body>{children}</body>
     </html>
