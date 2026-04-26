@@ -27,7 +27,8 @@ export function WorkspaceShell({
 }) {
   const [state, setState] = useState<WorkspaceState>(initialState);
   const [error, setError] = useState<string | null>(null);
-  const [showNewIdea, setShowNewIdea] = useState(false);
+  /** "thread" = normal send box; "new_idea" = same dock, replace context (prompt or URL). */
+  const [chatInputMode, setChatInputMode] = useState<"thread" | "new_idea">("thread");
   const [newIdeaMode, setNewIdeaMode] = useState<"prompt" | "url">("prompt");
   const [newIdeaPrompt, setNewIdeaPrompt] = useState("");
   const [newIdeaUrl, setNewIdeaUrl] = useState("");
@@ -150,7 +151,7 @@ export function WorkspaceShell({
         setNewIdeaError(data.error ?? "Could not start a new idea.");
         return;
       }
-      setShowNewIdea(false);
+      setChatInputMode("thread");
       setNewIdeaPrompt("");
       setNewIdeaUrl("");
       const next = await getWorkspaceState(workspaceId);
@@ -206,7 +207,7 @@ export function WorkspaceShell({
       </header>
 
       <div className="grid min-h-[calc(100vh-9.5rem)] gap-4 lg:grid-cols-[340px_1fr] lg:gap-5">
-      <aside className="order-1 flex h-[64vh] min-h-[440px] flex-col overflow-hidden rounded-3xl border border-stone-200/80 bg-stone-50/80 p-3.5 shadow-[0_8px_28px_rgba(10,10,10,0.05)] sm:h-[68vh] sm:p-4 lg:sticky lg:top-[5.5rem] lg:h-[90vh] lg:min-h-[760px] lg:max-h-[1000px] lg:self-start">
+      <aside className="order-1 flex h-[64vh] min-h-[440px] flex-col max-lg:overflow-hidden rounded-3xl border border-stone-200/80 bg-stone-50/80 p-3.5 shadow-[0_8px_28px_rgba(10,10,10,0.05)] sm:h-[68vh] sm:p-4 lg:sticky lg:top-[5.5rem] lg:max-h-[min(1000px,calc(100dvh-5.75rem))] lg:min-h-0 lg:h-[min(90vh,calc(100dvh-5.75rem))] lg:overflow-x-hidden lg:overflow-y-auto lg:self-start">
         <div className="flex items-center justify-between gap-2 px-0.5">
           <div
             aria-label="Chat"
@@ -230,26 +231,27 @@ export function WorkspaceShell({
             </span>
           </div>
         </div>
-        <div className="mt-3 grid min-h-0 flex-1 grid-rows-1 gap-3 overflow-hidden lg:grid-rows-[minmax(0,1fr)_minmax(0,1fr)]">
+        <div
+          className={`mt-3 grid min-h-0 flex-1 grid-rows-1 gap-3 overflow-hidden ${
+            chatInputMode === "new_idea"
+              ? "lg:grid-rows-[minmax(0,2fr)_minmax(0,1fr)]"
+              : "lg:grid-rows-[minmax(0,1fr)_minmax(0,1fr)]"
+          }`}
+        >
           {/* Chat zone: ~50% of sidebar on lg; full height when help is hidden */}
           <div className="flex min-h-0 flex-col gap-2 overflow-hidden rounded-2xl border border-stone-200/90 bg-white/85 p-3 shadow-[0_2px_12px_rgba(15,23,42,0.04)] ring-1 ring-stone-200/40 sm:p-3.5">
             <div className="flex shrink-0 items-center justify-between gap-2">
               <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-stone-500">
                 Chat
               </p>
-              <button
-                type="button"
-                onClick={() => {
-                  setShowNewIdea((v) => !v);
-                  setNewIdeaError(null);
-                }}
-                disabled={isAuthLocked || isPlanLocked || isJobActive}
-                className="text-[11px] font-medium text-sky-700 underline decoration-sky-300/80 underline-offset-2 transition hover:text-sky-900 disabled:cursor-not-allowed disabled:text-stone-400 disabled:no-underline"
-              >
-                {showNewIdea ? "Close" : "New idea"}
-              </button>
             </div>
-            <div className="min-h-0 flex-1 overflow-y-auto pr-1">
+            <div
+              className={`min-h-0 flex-1 overflow-y-auto pr-1 ${
+                chatInputMode === "new_idea"
+                  ? "max-h-[min(38vh,15rem)] lg:max-h-[min(42vh,18rem)]"
+                  : ""
+              }`}
+            >
               <MessageList
                 messages={sidebarMessages}
                 onPillClick={submitMessage}
@@ -278,98 +280,151 @@ export function WorkspaceShell({
               </div>
             ) : null}
 
-            {showNewIdea ? (
-              <div className="shrink-0 rounded-xl border border-sky-100/90 bg-sky-50/40 p-2.5 shadow-sm">
-                <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-sky-900/80">
+            <div className="shrink-0 border-t border-stone-200/80 pt-2.5">
+              <p className="mb-2 text-[10px] font-medium uppercase tracking-[0.12em] text-stone-500">
+                {chatInputMode === "new_idea" ? "Replace context" : "Message"}
+              </p>
+              <div className="mb-2 flex gap-1 rounded-full border border-stone-200/80 bg-stone-100/90 p-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setChatInputMode("thread");
+                    setNewIdeaError(null);
+                  }}
+                  className={
+                    chatInputMode === "thread"
+                      ? "flex-1 rounded-full bg-white px-2 py-1.5 text-center text-[11px] font-semibold text-stone-900 shadow-sm ring-1 ring-stone-200/60"
+                      : "flex-1 rounded-full px-2 py-1.5 text-center text-[11px] font-medium text-stone-500 transition hover:text-stone-800"
+                  }
+                >
+                  Chat
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (isAuthLocked || isPlanLocked || isJobActive) return;
+                    setChatInputMode("new_idea");
+                    setNewIdeaError(null);
+                  }}
+                  disabled={isAuthLocked || isPlanLocked || isJobActive}
+                  title={
+                    isJobActive
+                      ? "Wait for the current generation to finish"
+                      : "Replace business context with a new prompt or URL"
+                  }
+                  className={
+                    chatInputMode === "new_idea"
+                      ? "flex-1 rounded-full bg-white px-2 py-1.5 text-center text-[11px] font-semibold text-stone-900 shadow-sm ring-1 ring-stone-200/60"
+                      : "flex-1 rounded-full px-2 py-1.5 text-center text-[11px] font-medium text-stone-500 transition hover:text-stone-800 disabled:cursor-not-allowed disabled:text-stone-400"
+                  }
+                >
                   New idea
-                </p>
-                <div className="mb-2 flex gap-3 text-[11px] font-medium">
-                  <button
-                    type="button"
-                    onClick={() => setNewIdeaMode("prompt")}
-                    className={
-                      newIdeaMode === "prompt"
-                        ? "text-stone-900 underline decoration-stone-400 decoration-2 underline-offset-4"
-                        : "text-stone-500 hover:text-stone-800"
+                </button>
+              </div>
+
+              <div
+                className={`rounded-[24px] border px-3 py-2 shadow-[0_8px_24px_rgba(20,20,20,0.08)] transition focus-within:border-sky-300 focus-within:ring-2 focus-within:ring-inset focus-within:ring-sky-200/70 ${
+                  isAuthLocked || isPlanLocked
+                    ? "border-stone-200 bg-stone-100/85"
+                    : "border-stone-200 bg-white"
+                }`}
+              >
+                {chatInputMode === "thread" ? (
+                  <PromptComposer
+                    embedded
+                    disabled={isAuthLocked || isPlanLocked}
+                    disabledPlaceholder={
+                      isAuthLocked
+                        ? "Sign in to continue this thread"
+                        : isPlanLocked
+                          ? "Choose a plan to continue this thread"
+                          : "What should we create next?"
                     }
-                  >
-                    Prompt
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setNewIdeaMode("url")}
-                    className={
-                      newIdeaMode === "url"
-                        ? "text-stone-900 underline decoration-stone-400 decoration-2 underline-offset-4"
-                        : "text-stone-500 hover:text-stone-800"
-                    }
-                  >
-                    Website
-                  </button>
-                </div>
-                {newIdeaMode === "prompt" ? (
-                  <textarea
-                    value={newIdeaPrompt}
-                    onChange={(e) => setNewIdeaPrompt(e.target.value)}
-                    placeholder="Describe your business or idea…"
-                    rows={3}
-                    className="w-full resize-y rounded-lg border border-stone-200 bg-white px-2.5 py-1.5 text-xs text-stone-800 placeholder:text-stone-400 focus:border-sky-300 focus:outline-none focus:ring-1 focus:ring-sky-200/60"
+                    onSubmit={(prompt) => submitMessage(prompt)}
                   />
                 ) : (
-                  <input
-                    type="url"
-                    value={newIdeaUrl}
-                    onChange={(e) => setNewIdeaUrl(e.target.value)}
-                    placeholder="Paste your website URL…"
-                    className="w-full rounded-lg border border-stone-200 bg-white px-2.5 py-1.5 text-xs text-stone-800 placeholder:text-stone-400 focus:border-sky-300 focus:outline-none focus:ring-1 focus:ring-sky-200/60"
-                  />
+                  <div className="space-y-2">
+                    <p className="text-[11px] leading-snug text-stone-500">
+                      Start fresh with a new prompt or website. This updates your
+                      workspace context; your pinned results stay put.
+                    </p>
+                    <div className="flex gap-3 border-b border-stone-100 pb-2 text-[11px] font-medium">
+                      <button
+                        type="button"
+                        onClick={() => setNewIdeaMode("prompt")}
+                        className={
+                          newIdeaMode === "prompt"
+                            ? "text-stone-900 underline decoration-stone-400 decoration-2 underline-offset-4"
+                            : "text-stone-500 hover:text-stone-800"
+                        }
+                      >
+                        Prompt
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setNewIdeaMode("url")}
+                        className={
+                          newIdeaMode === "url"
+                            ? "text-stone-900 underline decoration-stone-400 decoration-2 underline-offset-4"
+                            : "text-stone-500 hover:text-stone-800"
+                        }
+                      >
+                        Website
+                      </button>
+                    </div>
+                    {newIdeaMode === "prompt" ? (
+                      <textarea
+                        value={newIdeaPrompt}
+                        onChange={(e) => setNewIdeaPrompt(e.target.value)}
+                        placeholder="Describe your business or idea…"
+                        rows={2}
+                        className="max-h-32 min-h-[2.75rem] w-full resize-y rounded-xl border border-stone-200/90 bg-stone-50/50 px-2.5 py-2 text-[13px] leading-snug text-stone-800 placeholder:text-stone-400 focus:border-sky-300 focus:bg-white focus:outline-none focus:ring-1 focus:ring-sky-200/60 lg:max-h-40"
+                      />
+                    ) : (
+                      <input
+                        type="url"
+                        value={newIdeaUrl}
+                        onChange={(e) => setNewIdeaUrl(e.target.value)}
+                        placeholder="https://your-site.com"
+                        className="w-full rounded-xl border border-stone-200/90 bg-stone-50/50 px-2.5 py-2 text-[13px] text-stone-800 placeholder:text-stone-400 focus:border-sky-300 focus:bg-white focus:outline-none focus:ring-1 focus:ring-sky-200/60"
+                      />
+                    )}
+                    {newIdeaError ? (
+                      <p className="text-[11px] text-rose-600">{newIdeaError}</p>
+                    ) : null}
+                    <div className="flex flex-col gap-2 pt-0.5 sm:flex-row sm:items-center sm:justify-end">
+                      <button
+                        type="button"
+                        disabled={
+                          newIdeaSubmitting ||
+                          isJobActive ||
+                          isAuthLocked ||
+                          isPlanLocked ||
+                          (newIdeaMode === "prompt" && !newIdeaPrompt.trim()) ||
+                          (newIdeaMode === "url" && !newIdeaUrl.trim())
+                        }
+                        onClick={() => void handleNewIdeaSubmit()}
+                        className="inline-flex h-10 w-full shrink-0 items-center justify-center rounded-full bg-sky-600 px-3.5 text-xs font-semibold text-white shadow-sm transition hover:bg-sky-700 disabled:cursor-not-allowed disabled:opacity-50 sm:h-9 sm:w-auto"
+                      >
+                        {newIdeaSubmitting ? "Starting…" : "Update context"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setChatInputMode("thread");
+                          setNewIdeaError(null);
+                        }}
+                        className="rounded-full px-2.5 py-2 text-[11px] font-medium text-stone-500 transition hover:bg-stone-100 hover:text-stone-800 sm:py-1.5"
+                      >
+                        Back to chat
+                      </button>
+                    </div>
+                  </div>
                 )}
-                {newIdeaError ? (
-                  <p className="mt-1.5 text-[11px] text-rose-600">{newIdeaError}</p>
-                ) : null}
-                <div className="mt-2 flex justify-end gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowNewIdea(false);
-                      setNewIdeaError(null);
-                    }}
-                    className="rounded-full border border-stone-200 bg-white px-2.5 py-1 text-[11px] font-medium text-stone-600 transition hover:bg-stone-50"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="button"
-                    disabled={
-                      newIdeaSubmitting ||
-                      isJobActive ||
-                      isAuthLocked ||
-                      isPlanLocked ||
-                      (newIdeaMode === "prompt" && !newIdeaPrompt.trim()) ||
-                      (newIdeaMode === "url" && !newIdeaUrl.trim())
-                    }
-                    onClick={() => void handleNewIdeaSubmit()}
-                    className="rounded-full border border-sky-200 bg-sky-600 px-2.5 py-1 text-[11px] font-semibold text-white shadow-sm transition hover:bg-sky-700 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    {newIdeaSubmitting ? "Starting…" : "Generate"}
-                  </button>
-                </div>
               </div>
-            ) : null}
-
-            <div className="shrink-0 border-t border-stone-200/80 pt-2.5">
-              <PromptComposer
-                disabled={isAuthLocked || isPlanLocked}
-                disabledPlaceholder={
-                  isAuthLocked
-                    ? "Sign in to continue this thread"
-                    : isPlanLocked
-                      ? "Choose a plan to continue this thread"
-                      : "What should we create next?"
-                }
-                onSubmit={(prompt) => submitMessage(prompt)}
-              />
-              {error ? <p className="mt-2 text-xs text-rose-600">{error}</p> : null}
+              {error && chatInputMode === "thread" ? (
+                <p className="mt-2 text-xs text-rose-600">{error}</p>
+              ) : null}
             </div>
           </div>
 
@@ -383,9 +438,9 @@ export function WorkspaceShell({
               <p>Each message generates one piece of content.</p>
               <p>Ask for “more ideas” to get another variation in the same format.</p>
               <p className="mt-2">
-                To replace the business context or switch website, open{" "}
-                <strong className="font-semibold text-stone-700">New idea</strong> in the chat
-                panel (next to the Chat label, above the message box).
+                To replace the business context or switch website, use{" "}
+                <strong className="font-semibold text-stone-700">New idea</strong> in the
+                input area below the thread (same box as where you send chat messages).
               </p>
               <p className="mt-2">Pin results you like to keep them at the top of your workspace.</p>
               <p className="mt-2">

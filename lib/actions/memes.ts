@@ -3146,6 +3146,38 @@ ${template.template_family === "engagement_text"
 - Does every field fit constraints without sounding clipped?
 - If not, rewrite before returning JSON.`}
 
+### Meme structure enforcement (critical)
+The output MUST follow a clear meme format. This is not optional.
+
+Each meme must include at least one of the following structures:
+- Setup → Punchline
+- Expectation → Reality
+- Situation → Reaction
+- Customer behaviour → Business reaction
+
+The humour must come from:
+- contrast
+- exaggeration
+- emotional reaction
+
+### Hard constraints — meme-native shape (critical)
+- Do NOT output plain sentences or statements.
+- Do NOT output neutral observations.
+- Do NOT output text that reads like normal conversation or explanation.
+
+If the output could be said in a normal conversation without being funny, it is invalid.
+
+### Internal validation (meme check)
+Before finalising the output, internally validate:
+- Does this clearly look like a meme format?
+- Is there a contrast, tension, or punchline?
+- Would this work when placed on a meme template?
+
+If NOT, the output must be rewritten.
+
+### Tone reinforcement
+The humour should feel like insider knowledge of the industry AND should trigger a recognisable emotional reaction (e.g. frustration, irony, relief, awkwardness).
+
 ${retryCorrectiveGuidance}
 
 Return ONLY valid JSON with this exact shape:
