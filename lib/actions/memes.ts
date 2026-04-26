@@ -1823,33 +1823,81 @@ Slot 1:
 - max_lines: ${template.slot_1_max_lines}`;
   };
 
-  const getMemeMechanicGuidance = (template: CompatibleTemplate): string => {
-    switch (template.meme_mechanic) {
-      case "reject_vs_prefer":
-        return `Meme-mechanic guidance: reject_vs_prefer
-- Slot 1 must clearly feel like the worse, rejected, annoying, outdated, or less satisfying option.
+  /**
+   * Body text only; {@link getMemeMechanicGuidance} wraps it in "Template behaviour" instructions.
+   * Keys must match `meme_templates.meme_mechanic` (snake_case).
+   */
+  const MEME_MECHANIC_GUIDANCE: Record<string, string> = {
+    rejection_reaction: `This meme is about rejecting or distancing from something after disappointment.
+
+The humour should come from:
+- a clear moment of rejection
+- loss of interest
+- realising something is not as good as expected
+
+The punchline should feel like:
+- "I don't want this anymore"
+- "this isn't it"
+- "instant regret"
+
+Avoid neutral descriptions. This meme must express a strong negative reaction.`,
+    reject_vs_prefer: `- Slot 1 must clearly feel like the worse, rejected, annoying, outdated, or less satisfying option.
 - Slot 2 must clearly feel like the better, preferred, smarter, cleaner, or more satisfying option.
 - The contrast should be directional and obvious immediately.
 - Keep both slots short, parallel, and easy to compare at a glance.
 - Avoid generic labels that do not create a strong before-vs-after or bad-vs-better contrast.
-- Prefer concrete behaviors, tools, workflows, or situations over abstract business nouns.`;
-      case "difficult_choice":
-        return `Meme-mechanic guidance: difficult_choice
-- Slot 1 and Slot 2 must both be plausible competing choices.
+- Prefer concrete behaviors, tools, workflows, or situations over abstract business nouns.`,
+    difficult_choice: `- Slot 1 and Slot 2 must both be plausible competing choices.
 - The conflict should feel immediate: both options should pull against each other in a believable way.
 - Make the dilemma obvious from the labels alone.
 - Keep both slots short, parallel, and equally plausible.
-- Avoid weak pairings that do not feel like a real stressful choice.`;
-      case "nobody_me_setup":
-        return `Meme-mechanic guidance: nobody_me_setup
-- This template renders TWO separate text boxes. You MUST fill BOTH JSON fields.
+- Avoid weak pairings that do not feel like a real stressful choice.`,
+    nobody_me_setup: `- This template renders TWO separate text boxes. You MUST fill BOTH JSON fields.
 - top_text must be EXACTLY the setup label: Nobody: (nothing else in this field).
 - bottom_text must be the reaction line ONLY, starting with Me: followed by the specific moment (for example: Me: checking analytics again).
 - Do NOT put "Nobody:" and "Me:" in the same JSON string. Do NOT merge both lines into top_text.
-- Do not repeat the word Nobody inside bottom_text.`;
-      default:
-        return "";
-    }
+- Do not repeat the word Nobody inside bottom_text.`,
+    shock_reaction: `- The joke should land as a sudden realisation or jolt — wide-eyed, visceral surprise.
+- Prefer a sharp beat or twist over a slow explanation; the reader should feel the shock in one beat.`,
+    disbelief_reaction: `- The humour is disbelief: "no way", "you cannot be serious", incredulity at what just happened.
+- Show the gap between what was expected and what occurred; keep it punchy and human.`,
+    confused_reaction: `- The humour is confusion or wrong assumptions — misreading the situation, talking past each other, or "wait, what?".
+- Make the misunderstanding or cognitive whiplash obvious without a lecture.`,
+    dread_reaction: `- The humour is dread, anticipation of something bad, or "I know how this ends".
+- Build tension or fatalism; avoid flat reporting — the reader should feel the sinking feeling.`,
+    overwhelmed_reaction: `- The humour is overload: too much at once, drowning in tasks, notifications, or chaos.
+- Stack or exaggerate pressure so the reaction feels relatable and specific, not a vague "busy".`,
+    smug_reaction: `- The humour is smugness, petty victory, or "told you so" energy — earned or delusional.
+- Let one side clearly relish being right (or think they are); keep it snappy.`,
+    approval_reaction: `- The humour is wholehearted approval, hype, or "finally" relief — enthusiastic yes-energy.
+- Avoid bland praise; make the approval feel specific and meme-native.`,
+    suspicious_thinking: `- The humour is side-eye, distrust, or "something is off here" — scepticism without a full detective monologue.
+- One clear suspicious beat beats a neutral observation.`,
+    awkward_reaction: `- The humour is awkwardness, cringe, or social friction — the silence after the wrong thing was said.
+- Lean into discomfort; do not soften into a polite explanation.`,
+    calm_in_chaos: `- The humour is calm or deadpan in the middle of chaos — contrast between storm and stillness.
+- Make the chaos specific; the calm line should feel like the punchline, not a footnote.`,
+    exhausted_reaction: `- The humour is bone-tired, running on fumes, or "I cannot do this again" energy.
+- Specific fatigue beats generic "long day" wording.`,
+    desperate_reaction: `- The humour is desperation, last-resort, or bargaining — urgency without sounding like ad copy.
+- Make the need or panic legible in one or two beats.`,
+  };
+
+  const getMemeMechanicGuidance = (template: CompatibleTemplate): string => {
+    const mechanic = String(template.meme_mechanic ?? "").trim();
+    if (!mechanic) return "";
+    if (mechanic === "reflective_realization") return "";
+    const body = MEME_MECHANIC_GUIDANCE[mechanic];
+    if (!body) return "";
+
+    return `### Template behaviour (meme mechanic)
+This meme uses the following format:
+
+Mechanic: ${mechanic}
+
+You MUST follow the expected behaviour of this meme type.
+
+${body.trim()}`;
   };
 
   const getTemplateSpecificGuidance = (template: CompatibleTemplate): string => {
@@ -2824,7 +2872,11 @@ ${getTemplateTypeRetryShape()}`;
     const audience = profile.audience ?? "";
     const country = profile.country ?? "";
     const ultraTightPromptMode = isUltraTightTemplate(template);
-    const mechanicSpecificGuidance = getMemeMechanicGuidance(template);
+    const isReflectiveMode =
+      String(template.meme_mechanic ?? "").trim() === "reflective_realization";
+    const mechanicSpecificGuidance = isReflectiveMode
+      ? ""
+      : getMemeMechanicGuidance(template);
     const templateSpecificGuidance = getTemplateSpecificGuidance(template);
     const retryCorrectiveGuidance = getRetryCorrectiveGuidance(
       template,
@@ -3023,6 +3075,7 @@ IMPORTANT DAY WRITING RULES
         : `- Do not assume promotional intent when no explicit offer context is provided.`;
 
     const imageVideoAntiGenericRules =
+      isReflectiveMode ||
       template.template_family === "square_text" ||
       template.template_family === "engagement_text"
         ? ""
@@ -3048,21 +3101,85 @@ ${promoSafetyRules}`;
       (template.template_type === "side_caption" ||
         template.template_type === "overlay");
 
-    const prompt = `Task:
-Generate one meme payload for the given template and return valid JSON only.
-
-Primary creative objective:
+    const primaryCreativeObjectiveBlock = isReflectiveMode
+      ? `Reflective creative objective (this is NOT a punchline meme):
+- Deliver one quiet, emotionally resonant line aligned with the "Template-Specific Writing Rules" and "Emotional Tone" sections below.
+- Ground it in home, life, or gentle observation; wistful or warm is fine; avoid snark, hype, or joke rhythm.
+- Do not force setup→punchline, contrast memes, or slapstick.
+- One concrete sensory or emotional detail is enough; keep the voice sincere and understated.`
+      : `Primary creative objective:
 - Write one specific, lived-in moment (not a category statement).
 - Prefer concrete micro-situations over general truths.
 - Include at least one tangible detail from a real moment (for example: queue, wrong order, sauce, rush hour, closing time, last item).${
-  tightLabelMode
-    ? ` For tight side/overlay templates, a compact concrete cue is enough (no full sentence required).`
-    : ""
-}
+          tightLabelMode
+            ? ` For tight side/overlay templates, a compact concrete cue is enough (no full sentence required).`
+            : ""
+        }
 - Use a clear tension pattern (expectation vs reality, effort vs outcome, confidence vs chaos, or desire vs consequence).
 - Reject generic meme templates without a concrete twist.
 - If the line could apply to any business, rewrite it to be more specific and relatable.
-- Match the template's emotional mechanic on first read.
+- Match the template's emotional mechanic on first read.`;
+
+    const reflectiveModeWritingRulesSection = isReflectiveMode
+      ? `### Template-Specific Writing Rules (CRITICAL)
+You MUST follow these rules exactly:
+
+${template.template_logic}
+
+### Emotional Tone
+
+${template.emotion_style}
+
+### Reflective mode — hard constraints (critical)
+- Output MUST read as a single calm line in the primary caption field (usually top_text); obey the JSON shape for this template (use null for bottom_text when this template is single-line).
+- No punchline or second beat.
+- No "when… and…" or other forced contrast structure.
+- No exaggerated humour, reaction-meme phrasing, or jokey cadence (avoid "POV", "me when", instant-regret beats, snark pile-ons).
+
+If the output reads like a joke or a standard meme punchline, it is invalid.
+`
+      : "";
+
+    const memeStructureEnforcementBlock = isReflectiveMode
+      ? ""
+      : `### Meme structure enforcement (critical)
+The output MUST follow a clear meme format. This is not optional.
+
+Each meme must include at least one of the following structures:
+- Setup → Punchline
+- Expectation → Reality
+- Situation → Reaction
+- Customer behaviour → Business reaction
+
+The humour must come from:
+- contrast
+- exaggeration
+- emotional reaction
+
+### Hard constraints — meme-native shape (critical)
+- Do NOT output plain sentences or statements.
+- Do NOT output neutral observations.
+- Do NOT output text that reads like normal conversation or explanation.
+
+If the output could be said in a normal conversation without being funny, it is invalid.
+
+### Internal validation (meme check)
+Before finalising the output, internally validate:
+- Does this clearly look like a meme format?
+- Is there a contrast, tension, or punchline?
+- Would this work when placed on a meme template?
+
+If NOT, the output must be rewritten.
+
+### Tone reinforcement
+The humour should feel like insider knowledge of the industry AND should trigger a recognisable emotional reaction (e.g. frustration, irony, relief, awkwardness).
+
+`;
+
+    const prompt = `Task:
+Generate one meme payload for the given template and return valid JSON only.
+
+${primaryCreativeObjectiveBlock}
 
 Context:
 ${conversationContextBlock}
@@ -3086,9 +3203,10 @@ Template behavior:
 - promotion_fit: ${template.promotion_fit}
 - example_output: ${template.example_output}
 
+${reflectiveModeWritingRulesSection}
 ${getSquareTextFamilyPromptSection(template)}
 ${getEngagementTextFamilyPromptSection(template)}
-${template.template_family === "square_text" || template.template_family === "engagement_text" ? "" : getTemplateTypeWritingGuidance(template)}
+${template.template_family === "square_text" || template.template_family === "engagement_text" || isReflectiveMode ? "" : getTemplateTypeWritingGuidance(template)}
 ${template.template_family === "square_text" ? getSquareTextSlotGuidance(template) : template.template_family === "engagement_text" ? getEngagementTextSlotGuidance(template) : getSlotWritingGuidance(template)}
 ${isThreeSlot
   ? `Three-slot output mapping:
@@ -3139,45 +3257,17 @@ ${template.template_family === "engagement_text"
 - Do slot_1_text and slot_3_text clearly contrast as two different takes on that subject?
 - Are all slots concise and scannable on-image?
 - Does the output avoid "when you..." style setup lines?
+- If not, rewrite before returning JSON.` : isReflectiveMode ? `- Does the line honour template_logic and emotion_style (quiet, sincere, not a joke)?
+- Is it a single calm line without punchline, "and…" contrast, or reaction-meme beats?
+- Would it feel wrong if read as humour-first viral meme copy? If yes, good; if it sounds jokey, rewrite.
+- Does every field fit constraints without sounding clipped?
 - If not, rewrite before returning JSON.` : `- Is the caption a specific situation rather than a generic statement?
 - Does it include at least one tangible detail from a real moment?
 - Is the emotional mechanic obvious for this template?
 - Does it avoid ad-like or interchangeable business phrasing?
 - Does every field fit constraints without sounding clipped?
 - If not, rewrite before returning JSON.`}
-
-### Meme structure enforcement (critical)
-The output MUST follow a clear meme format. This is not optional.
-
-Each meme must include at least one of the following structures:
-- Setup → Punchline
-- Expectation → Reality
-- Situation → Reaction
-- Customer behaviour → Business reaction
-
-The humour must come from:
-- contrast
-- exaggeration
-- emotional reaction
-
-### Hard constraints — meme-native shape (critical)
-- Do NOT output plain sentences or statements.
-- Do NOT output neutral observations.
-- Do NOT output text that reads like normal conversation or explanation.
-
-If the output could be said in a normal conversation without being funny, it is invalid.
-
-### Internal validation (meme check)
-Before finalising the output, internally validate:
-- Does this clearly look like a meme format?
-- Is there a contrast, tension, or punchline?
-- Would this work when placed on a meme template?
-
-If NOT, the output must be rewritten.
-
-### Tone reinforcement
-The humour should feel like insider knowledge of the industry AND should trigger a recognisable emotional reaction (e.g. frustration, irony, relief, awkwardness).
-
+${memeStructureEnforcementBlock}
 ${retryCorrectiveGuidance}
 
 Return ONLY valid JSON with this exact shape:
@@ -3208,6 +3298,7 @@ ${isThreeSlot
       engagementLayoutKey,
       hasEngagementLayoutConfig: Boolean(engagementLayout),
       memeMechanic: template.meme_mechanic,
+      isReflectiveMode,
       hasMechanicSpecificGuidance: Boolean(mechanicSpecificGuidance),
       hasTemplateSpecificGuidance: Boolean(templateSpecificGuidance),
       hasRetryCorrectiveGuidance: Boolean(retryCorrectiveGuidance),
