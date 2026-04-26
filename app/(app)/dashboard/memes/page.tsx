@@ -11,6 +11,8 @@ type OutputFormat =
   | "vertical_slideshow"
   | "square_text";
 
+type ContinuationFormat = "square_image" | "square_video" | "square_text";
+
 function getFormatFromVariantMetadata(value: unknown): OutputFormat | null {
   if (!value || typeof value !== "object") return null;
   const record = value as {
@@ -50,15 +52,16 @@ function getFormatFromAssetUrl(url: unknown): OutputFormat | null {
   return "square_image";
 }
 
-function inferDefaultContinuationFormat(memes: any[]): OutputFormat {
+function inferDefaultContinuationFormat(memes: any[]): ContinuationFormat {
   const mostRecent = memes[0];
   if (!mostRecent) return "square_image";
 
-  return (
+  const inferred =
     getFormatFromVariantMetadata(mostRecent.variant_metadata) ??
     getFormatFromAssetUrl(mostRecent.image_url) ??
-    "square_image"
-  );
+    "square_image";
+  if (inferred === "vertical_slideshow") return "square_image";
+  return inferred;
 }
 
 export default async function MemesPage() {
@@ -107,16 +110,6 @@ export default async function MemesPage() {
     redirect("/dashboard/memes");
   }
 
-  async function handleGenerateMoreSlideshows() {
-    "use server";
-
-    const { error } = await generateMoreMemes("vertical_slideshow");
-    if (error) {
-      console.error("[memes-page] Generate more failed", { error });
-    }
-    redirect("/dashboard/memes");
-  }
-
   async function handleGenerateMoreSquareText() {
     "use server";
 
@@ -147,7 +140,6 @@ export default async function MemesPage() {
             onGenerateMore={handleGenerateMoreDefault}
             onGenerateMoreImages={handleGenerateMoreImages}
             onGenerateMoreVideos={handleGenerateMoreVideos}
-            onGenerateMoreSlideshows={handleGenerateMoreSlideshows}
             onGenerateMoreSquareText={handleGenerateMoreSquareText}
           />
         )}

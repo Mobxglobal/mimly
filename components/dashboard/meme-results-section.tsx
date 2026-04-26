@@ -19,11 +19,7 @@ type MemeRow = {
   batch_number: number | null;
 };
 
-type ContinuationFormat =
-  | "square_image"
-  | "square_video"
-  | "vertical_slideshow"
-  | "square_text";
+type ContinuationFormat = "square_image" | "square_video" | "square_text";
 
 type Props = {
   memes: MemeRow[];
@@ -31,13 +27,11 @@ type Props = {
   onGenerateMore: () => void;
   onGenerateMoreImages: () => void;
   onGenerateMoreVideos: () => void;
-  onGenerateMoreSlideshows: () => void;
   onGenerateMoreSquareText: () => void;
 };
 
 function defaultFormatLabel(f: ContinuationFormat): string {
   if (f === "square_video") return "videos";
-  if (f === "vertical_slideshow") return "slideshows";
   if (f === "square_text") return "text memes";
   return "images";
 }
@@ -46,13 +40,11 @@ function GenerateMoreButton({
   defaultContinuationFormat,
   onGenerateMoreImages,
   onGenerateMoreVideos,
-  onGenerateMoreSlideshows,
   onGenerateMoreSquareText,
 }: {
   defaultContinuationFormat: ContinuationFormat;
   onGenerateMoreImages: () => void;
   onGenerateMoreVideos: () => void;
-  onGenerateMoreSlideshows: () => void;
   onGenerateMoreSquareText: () => void;
 }) {
   const { pending } = useFormStatus();
@@ -92,14 +84,6 @@ function GenerateMoreButton({
             className="block w-full rounded-lg px-3 py-2 text-left text-sm text-stone-200 transition hover:bg-white/10 disabled:opacity-70"
           >
             Generate more videos
-          </button>
-          <button
-            type="submit"
-            formAction={onGenerateMoreSlideshows}
-            disabled={pending}
-            className="block w-full rounded-lg px-3 py-2 text-left text-sm text-stone-200 transition hover:bg-white/10 disabled:opacity-70"
-          >
-            Generate more slideshows
           </button>
           <button
             type="submit"
@@ -151,7 +135,6 @@ export function MemeResultsSection({
   onGenerateMore,
   onGenerateMoreImages,
   onGenerateMoreVideos,
-  onGenerateMoreSlideshows,
   onGenerateMoreSquareText,
 }: Props) {
   return (
@@ -173,7 +156,6 @@ export function MemeResultsSection({
             defaultContinuationFormat={defaultContinuationFormat}
             onGenerateMoreImages={onGenerateMoreImages}
             onGenerateMoreVideos={onGenerateMoreVideos}
-            onGenerateMoreSlideshows={onGenerateMoreSlideshows}
             onGenerateMoreSquareText={onGenerateMoreSquareText}
           />
         </div>

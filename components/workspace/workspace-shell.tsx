@@ -27,7 +27,12 @@ export function WorkspaceShell({
 }) {
   const [state, setState] = useState<WorkspaceState>(initialState);
   const [error, setError] = useState<string | null>(null);
-  const [startFreshNext, setStartFreshNext] = useState(false);
+  const [showNewIdea, setShowNewIdea] = useState(false);
+  const [newIdeaMode, setNewIdeaMode] = useState<"prompt" | "url">("prompt");
+  const [newIdeaPrompt, setNewIdeaPrompt] = useState("");
+  const [newIdeaUrl, setNewIdeaUrl] = useState("");
+  const [newIdeaSubmitting, setNewIdeaSubmitting] = useState(false);
+  const [newIdeaError, setNewIdeaError] = useState<string | null>(null);
   const bootedQueuedStart = useRef(false);
 
   const latestJob = state.latestJob;
@@ -35,11 +40,14 @@ export function WorkspaceShell({
     latestJob?.status === "queued" || latestJob?.status === "running";
 
   useEffect(() => {
+    if (latestJob?.status !== "queued") {
+      bootedQueuedStart.current = false;
+      return;
+    }
     if (bootedQueuedStart.current) return;
-    if (latestJob?.status !== "queued") return;
     bootedQueuedStart.current = true;
     void startGenerationIfQueued(workspaceId);
-  }, [latestJob?.status, workspaceId]);
+  }, [latestJob?.status, latestJob?.id, workspaceId]);
 
   useEffect(() => {
     if (!isJobActive) return;
@@ -102,18 +110,66 @@ export function WorkspaceShell({
             : "border-stone-200 bg-stone-100 text-stone-600";
   const pinnedCount = state.outputs.filter((output) => output.is_pinned).length;
 
-  const submitMessage = async (prompt: string, resetContext = false) => {
+  const handleNewIdeaSubmit = async () => {
+    if (newIdeaMode === "prompt" && !newIdeaPrompt.trim()) return;
+    if (newIdeaMode === "url" && !newIdeaUrl.trim()) return;
+    if (isJobActive) return;
+
+    setNewIdeaError(null);
+    setNewIdeaSubmitting(true);
+    try {
+      console.log("NEW IDEA SUBMIT", {
+        mode: newIdeaMode,
+        promptValue: newIdeaPrompt,
+        urlValue: newIdeaUrl,
+        workspaceId,
+      });
+      const res = await fetch("/api/workspace/new-idea", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({
+          workspaceId,
+          inputType: newIdeaMode,
+          prompt: newIdeaMode === "prompt" ? newIdeaPrompt : undefined,
+          url: newIdeaMode === "url" ? newIdeaUrl : undefined,
+        }),
+      });
+      console.log("NEW IDEA RESPONSE STATUS", res.status);
+      const responseText = await res.text();
+      console.log("NEW IDEA RESPONSE BODY", responseText);
+      let data: { error?: string } = {};
+      try {
+        data = responseText
+          ? (JSON.parse(responseText) as { error?: string })
+          : {};
+      } catch {
+        data = {};
+      }
+      if (!res.ok) {
+        setNewIdeaError(data.error ?? "Could not start a new idea.");
+        return;
+      }
+      setShowNewIdea(false);
+      setNewIdeaPrompt("");
+      setNewIdeaUrl("");
+      const next = await getWorkspaceState(workspaceId);
+      if (!next.error && next.state) setState(next.state);
+    } catch {
+      setNewIdeaError("Something went wrong. Try again.");
+    } finally {
+      setNewIdeaSubmitting(false);
+    }
+  };
+
+  const submitMessage = async (prompt: string) => {
     setError(null);
-    const result = await sendWorkspaceMessage(workspaceId, prompt, {
-      resetContext,
-    });
+    const result = await sendWorkspaceMessage(workspaceId, prompt, {});
     if (result.error || !result.state) {
       setError(result.error ?? "Failed to send message.");
-      if (resetContext) setStartFreshNext(false);
       return;
     }
     setState(result.state);
-    if (resetContext) setStartFreshNext(false);
   };
 
   return (
@@ -138,17 +194,8 @@ export function WorkspaceShell({
           <span className={`rounded-full border px-2.5 py-1 text-[10px] font-medium sm:text-[11px] ${planChipClass}`}>
             {planLabel}
           </span>
-          <span
-            className={`hidden sm:inline-flex items-center rounded-full border px-2.5 py-1 text-[10px] font-semibold sm:text-[11px] ${
-              startFreshNext
-                ? "border-emerald-200 bg-emerald-50 text-emerald-800"
-                : "border-stone-200 bg-white/60 text-stone-600"
-            }`}
-          >
-            {startFreshNext ? "✓ Start fresh: ignores earlier thread context" : "↺ Start fresh: ignores earlier thread context"}
-          </span>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
           <Link
             href="/"
             className="rounded-full border border-stone-200 bg-white px-3 py-1.5 text-xs font-medium text-stone-700 transition hover:bg-stone-50"
@@ -181,42 +228,27 @@ export function WorkspaceShell({
             >
               {displayStatusLabel.replace("_", " ")}
             </span>
-            <div>
-              <button
-                type="button"
-                disabled={isAuthLocked || isPlanLocked}
-                onClick={() => setStartFreshNext((v) => !v)}
-                className={`inline-flex h-7 w-7 items-center justify-center rounded-full border text-[12px] font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300 focus-visible:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-60 ${
-                  startFreshNext
-                    ? "border-emerald-500 bg-emerald-500 text-white shadow-sm"
-                    : "border-stone-300 bg-white text-stone-600 hover:bg-stone-50"
-                }`}
-                aria-pressed={startFreshNext}
-                aria-label={
-                  startFreshNext
-                    ? "Start fresh enabled for next prompt"
-                    : "Start fresh for next prompt"
-                }
-              >
-                {startFreshNext ? (
-                  <span aria-hidden="true" className="leading-none text-[12px]">
-                    ✓
-                  </span>
-                ) : (
-                  <span aria-hidden="true" className="leading-none text-[13px]">
-                    ↺
-                  </span>
-                )}
-              </button>
-            </div>
           </div>
         </div>
         <div className="mt-3 grid min-h-0 flex-1 grid-rows-1 gap-3 overflow-hidden lg:grid-rows-[minmax(0,1fr)_minmax(0,1fr)]">
           {/* Chat zone: ~50% of sidebar on lg; full height when help is hidden */}
           <div className="flex min-h-0 flex-col gap-2 overflow-hidden rounded-2xl border border-stone-200/90 bg-white/85 p-3 shadow-[0_2px_12px_rgba(15,23,42,0.04)] ring-1 ring-stone-200/40 sm:p-3.5">
-            <p className="shrink-0 text-[10px] font-semibold uppercase tracking-[0.14em] text-stone-500">
-              Chat
-            </p>
+            <div className="flex shrink-0 items-center justify-between gap-2">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-stone-500">
+                Chat
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowNewIdea((v) => !v);
+                  setNewIdeaError(null);
+                }}
+                disabled={isAuthLocked || isPlanLocked || isJobActive}
+                className="text-[11px] font-medium text-sky-700 underline decoration-sky-300/80 underline-offset-2 transition hover:text-sky-900 disabled:cursor-not-allowed disabled:text-stone-400 disabled:no-underline"
+              >
+                {showNewIdea ? "Close" : "New idea"}
+              </button>
+            </div>
             <div className="min-h-0 flex-1 overflow-y-auto pr-1">
               <MessageList
                 messages={sidebarMessages}
@@ -246,6 +278,85 @@ export function WorkspaceShell({
               </div>
             ) : null}
 
+            {showNewIdea ? (
+              <div className="shrink-0 rounded-xl border border-sky-100/90 bg-sky-50/40 p-2.5 shadow-sm">
+                <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-sky-900/80">
+                  New idea
+                </p>
+                <div className="mb-2 flex gap-3 text-[11px] font-medium">
+                  <button
+                    type="button"
+                    onClick={() => setNewIdeaMode("prompt")}
+                    className={
+                      newIdeaMode === "prompt"
+                        ? "text-stone-900 underline decoration-stone-400 decoration-2 underline-offset-4"
+                        : "text-stone-500 hover:text-stone-800"
+                    }
+                  >
+                    Prompt
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setNewIdeaMode("url")}
+                    className={
+                      newIdeaMode === "url"
+                        ? "text-stone-900 underline decoration-stone-400 decoration-2 underline-offset-4"
+                        : "text-stone-500 hover:text-stone-800"
+                    }
+                  >
+                    Website
+                  </button>
+                </div>
+                {newIdeaMode === "prompt" ? (
+                  <textarea
+                    value={newIdeaPrompt}
+                    onChange={(e) => setNewIdeaPrompt(e.target.value)}
+                    placeholder="Describe your business or idea…"
+                    rows={3}
+                    className="w-full resize-y rounded-lg border border-stone-200 bg-white px-2.5 py-1.5 text-xs text-stone-800 placeholder:text-stone-400 focus:border-sky-300 focus:outline-none focus:ring-1 focus:ring-sky-200/60"
+                  />
+                ) : (
+                  <input
+                    type="url"
+                    value={newIdeaUrl}
+                    onChange={(e) => setNewIdeaUrl(e.target.value)}
+                    placeholder="Paste your website URL…"
+                    className="w-full rounded-lg border border-stone-200 bg-white px-2.5 py-1.5 text-xs text-stone-800 placeholder:text-stone-400 focus:border-sky-300 focus:outline-none focus:ring-1 focus:ring-sky-200/60"
+                  />
+                )}
+                {newIdeaError ? (
+                  <p className="mt-1.5 text-[11px] text-rose-600">{newIdeaError}</p>
+                ) : null}
+                <div className="mt-2 flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowNewIdea(false);
+                      setNewIdeaError(null);
+                    }}
+                    className="rounded-full border border-stone-200 bg-white px-2.5 py-1 text-[11px] font-medium text-stone-600 transition hover:bg-stone-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    disabled={
+                      newIdeaSubmitting ||
+                      isJobActive ||
+                      isAuthLocked ||
+                      isPlanLocked ||
+                      (newIdeaMode === "prompt" && !newIdeaPrompt.trim()) ||
+                      (newIdeaMode === "url" && !newIdeaUrl.trim())
+                    }
+                    onClick={() => void handleNewIdeaSubmit()}
+                    className="rounded-full border border-sky-200 bg-sky-600 px-2.5 py-1 text-[11px] font-semibold text-white shadow-sm transition hover:bg-sky-700 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {newIdeaSubmitting ? "Starting…" : "Generate"}
+                  </button>
+                </div>
+              </div>
+            ) : null}
+
             <div className="shrink-0 border-t border-stone-200/80 pt-2.5">
               <PromptComposer
                 disabled={isAuthLocked || isPlanLocked}
@@ -256,7 +367,7 @@ export function WorkspaceShell({
                       ? "Choose a plan to continue this thread"
                       : "What should we create next?"
                 }
-                onSubmit={(prompt) => submitMessage(prompt, startFreshNext)}
+                onSubmit={(prompt) => submitMessage(prompt)}
               />
               {error ? <p className="mt-2 text-xs text-rose-600">{error}</p> : null}
             </div>
@@ -272,8 +383,9 @@ export function WorkspaceShell({
               <p>Each message generates one piece of content.</p>
               <p>Ask for “more ideas” to get another variation in the same format.</p>
               <p className="mt-2">
-                To switch topics, select the Start fresh icon (↺) in the header so your next message
-                ignores earlier thread context.
+                To replace the business context or switch website, open{" "}
+                <strong className="font-semibold text-stone-700">New idea</strong> in the chat
+                panel (next to the Chat label, above the message box).
               </p>
               <p className="mt-2">Pin results you like to keep them at the top of your workspace.</p>
               <p className="mt-2">
@@ -284,7 +396,6 @@ export function WorkspaceShell({
               <p>Video memes (1080x1080)</p>
               <p>Text memes (1080x1080)</p>
               <p>Engagement posts (1080x1080)</p>
-              <p>Slideshows (1080x1920)</p>
               <p className="mt-2 text-xs font-semibold text-stone-700">Tips for best results</p>
               <p>Be specific if you want high-quality, targeted content.</p>
               <p>Keep it broad if you&apos;re exploring ideas.</p>

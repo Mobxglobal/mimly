@@ -403,3 +403,12 @@ h3 {
     filter: none;
   }
 }
+
+@keyframes workspaceUrlStepFade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}

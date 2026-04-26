@@ -3,6 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { FramedSection } from "@/components/marketing/framed-section";
+import { FooterSection } from "@/components/marketing/footer-section";
 import { PageShell } from "@/components/marketing/page-shell";
 import { MARKETING_SECTION_GAP_CLASS } from "@/lib/marketing/marketing-layout";
 
@@ -76,6 +77,7 @@ export function OnboardingShell({ children, heroBackgroundSrc, compactCard }: On
             {card}
           </div>
         </FramedSection>
+        <FooterSection className="!mt-0" />
       </PageShell>
     );
   }

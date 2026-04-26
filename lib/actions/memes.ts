@@ -2518,12 +2518,37 @@ ${getTemplateTypeRetryShape()}`;
   }
 
   const attemptedTemplateIds = new Set<string>(excludedTemplateIds);
-  const templatePool = forcedTemplateId
+  let templatePool = forcedTemplateId
     ? compatibleTemplates.filter(
         (template) =>
           template.template_id === forcedTemplateId || template.slug === forcedTemplateId
       )
     : compatibleTemplates.filter((template) => !attemptedTemplateIds.has(template.template_id));
+
+  /** Full user/model prompt (not {@link conversationContext}, which is capped at 280 chars). */
+  const promptForRichness = String(generationContextText ?? "").trim();
+  /** Workspace pipeline: long directive + business block + angle wording (any case; matches tail + "Content Angle Focus"). */
+  const contextIsRich =
+    promptForRichness.length > 300 &&
+    promptForRichness.includes("Business:") &&
+    /\bcontent angle\b/i.test(promptForRichness);
+  if (
+    contextIsRich &&
+    (!forcedTemplateId || !isWowDogeTemplateSlug(forcedTemplateId))
+  ) {
+    const withoutWowDoge = templatePool.filter((t) => !isWowDogeTemplateSlug(t.slug));
+    if (withoutWowDoge.length !== templatePool.length) {
+      console.log("[meme-gen] Rich business context: excluding wow-doge from template pool", {
+        contextIsRich,
+        poolBefore: templatePool.length,
+        poolAfter: withoutWowDoge.length,
+      });
+    }
+    templatePool =
+      withoutWowDoge.length > 0
+        ? withoutWowDoge
+        : templatePool;
+  }
 
   console.log("[meme-gen] Excluded template ids", {
     excludeExistingUserTemplates: Boolean(options?.excludeExistingUserTemplates),

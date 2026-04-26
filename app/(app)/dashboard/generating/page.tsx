@@ -17,11 +17,7 @@ const inflightContentPackBatches = new Map<
   Promise<{ error: string | null; packRunId?: string }>
 >();
 
-type OutputFormat =
-  | "square_image"
-  | "square_video"
-  | "vertical_slideshow"
-  | "square_text";
+type OutputFormat = "square_image" | "square_video" | "square_text";
 
 function parseContentPackBatch(raw: string | null): 1 | 2 | 3 {
   if (raw === "2") return 2;
@@ -43,11 +39,9 @@ export default function GeneratingPage() {
   const format: OutputFormat =
     formatParam === "square_video"
       ? "square_video"
-      : formatParam === "vertical_slideshow"
-        ? "vertical_slideshow"
-        : formatParam === "square_text"
-          ? "square_text"
-          : "square_image";
+      : formatParam === "square_text"
+        ? "square_text"
+        : "square_image";
   const hasPromotion = Boolean(promotion?.trim());
   const generationKey = `format:${format}|promotion:${promotion?.trim() ?? "__none__"}`;
   const contentPackKey = `batch:${cpBatch}`;
@@ -141,8 +135,8 @@ export default function GeneratingPage() {
                 Creating your content pack
               </h1>
               <p className="mt-3 text-sm text-stone-400 sm:text-base">
-                We&apos;re generating a custom mix of memes, slideshows, videos,
-                and text posts for your brand.
+                We&apos;re generating a custom mix of memes, videos, and text posts
+                for your brand.
               </p>
               <p className="mt-1 text-sm text-stone-500">
                 We&apos;re also preparing caption suggestions so everything is
@@ -196,11 +190,9 @@ export default function GeneratingPage() {
               <p className="mt-8 text-xs text-stone-500">
                 {hasPromotion
                   ? "Using your promotion where it improves the meme."
-                  : format === "vertical_slideshow"
-                    ? "Generating your vertical slideshow set (3–5 slides) now."
-                    : format === "square_text"
-                      ? "Generating your square text meme set now."
-                      : `Generating a ${format === "square_video" ? "video" : "brand-led"} set for you now.`}
+                  : format === "square_text"
+                    ? "Generating your square text meme set now."
+                    : `Generating a ${format === "square_video" ? "video" : "brand-led"} set for you now.`}
               </p>
             </>
           )}

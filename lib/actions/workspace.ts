@@ -25,6 +25,24 @@ import {
   coerceEngagementVisualStyle,
   type EngagementVisualStyle,
 } from "@/lib/memes/engagement-style";
+import { buildPromptFromEnrichment } from "@/lib/url/build-context";
+import { extractMetadata } from "@/lib/url/extract-metadata";
+import { enrichContext, type EnrichedBusinessProfile } from "@/lib/url/enrich-context";
+import {
+  mergeWorkspaceMetadataWithBusinessProfile,
+  parseBusinessProfileFromWorkspaceRow,
+  persistWorkspaceBusinessProfile,
+  resolveBusinessProfileFromUserText,
+  finalizeProfileAfterPromptEnrichment,
+  finalizeProfileAfterUrlEnrichment,
+  isValidBusinessProfile,
+  workspaceContextSummaryForJob,
+} from "@/lib/workspace/business-profile";
+import {
+  extractedMetadataToDebugRecord,
+  mergeDebugIntoMetadata,
+  profileToDebugRecord,
+} from "@/lib/workspace/generation-job-debug";
 
 type Json = string | number | boolean | null | { [key: string]: Json } | Json[];
 type HomepageSubmitOptions = {
@@ -35,6 +53,7 @@ type HomepageSubmitOptions = {
     | "square_text";
   templateFamilyPreference?: "engagement_text" | null;
   resetContext?: boolean;
+  inputType?: "prompt" | "url";
 };
 
 export type WorkspaceMessage = {
@@ -106,6 +125,125 @@ function tryExtractUrlFromPrompt(prompt: string): string | null {
   return match[0].slice(0, 500);
 }
 
+function normalizeHomepageUrl(input: string): string {
+  const trimmed = input.trim();
+  if (!trimmed) return "";
+  if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) return trimmed;
+  return `https://${trimmed}`;
+}
+
+function isAllowedHttpUrl(value: string): boolean {
+  try {
+    const u = new URL(value);
+    return u.protocol === "http:" || u.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+function hasHomepageUrlMetadata(m: {
+  title: string;
+  description: string;
+  ogTitle: string;
+  ogDescription: string;
+  h1?: string;
+}): boolean {
+  return Boolean(
+    m.title.trim() ||
+      m.description.trim() ||
+      m.ogTitle.trim() ||
+      m.ogDescription.trim() ||
+      (typeof m.h1 === "string" && m.h1.trim())
+  );
+}
+
+async function resolveHomepageInputToProfile(
+  rawInput: string,
+  inputType: "prompt" | "url"
+): Promise<{
+  finalProfile: EnrichedBusinessProfile;
+  contextSummary: string;
+  displayText: string;
+  businessUrl: string | null;
+  jobDebug: Record<string, unknown>;
+}> {
+  if (inputType === "url") {
+    const normalizedUrl = normalizeHomepageUrl(rawInput);
+    if (!normalizedUrl) {
+      throw new Error("URL is required.");
+    }
+    if (!isAllowedHttpUrl(normalizedUrl)) {
+      throw new Error("Invalid URL format.");
+    }
+    let pageMetadata;
+    try {
+      pageMetadata = await extractMetadata(normalizedUrl);
+    } catch (e) {
+      throw new Error(e instanceof Error ? e.message : "Failed to fetch URL.");
+    }
+    if (!hasHomepageUrlMetadata(pageMetadata)) {
+      throw new Error("No metadata found for this URL.");
+    }
+    const enriched = await enrichContext(pageMetadata);
+    const finalProfile = finalizeProfileAfterUrlEnrichment(enriched, pageMetadata);
+    const contextSummary = buildPromptFromEnrichment(finalProfile);
+    console.log("ENRICHMENT OUTPUT", {
+      inputType: "url" as const,
+      finalProfile,
+      contextSummary,
+    });
+    return {
+      finalProfile,
+      contextSummary,
+      displayText: normalizedUrl,
+      businessUrl: normalizedUrl,
+      jobDebug: {
+        inputType: "url",
+        rawInput: rawInput.trim(),
+        normalizedUrl,
+        metadataExtracted: extractedMetadataToDebugRecord(pageMetadata),
+        enrichedProfile: profileToDebugRecord(enriched),
+        finalProfile: profileToDebugRecord(finalProfile),
+        contextSummary,
+      },
+    };
+  }
+
+  const normalizedPrompt = normalizePrompt(rawInput);
+  if (!normalizedPrompt) {
+    throw new Error("Prompt is required.");
+  }
+  if (normalizedPrompt.length < 8) {
+    throw new Error("Please enter a longer prompt (at least 8 characters).");
+  }
+  const enriched = await enrichContext({
+    title: normalizedPrompt,
+    description: normalizedPrompt,
+  });
+  const finalProfile = finalizeProfileAfterPromptEnrichment(enriched, normalizedPrompt);
+  const contextSummary = buildPromptFromEnrichment(finalProfile);
+  console.log("ENRICHMENT OUTPUT", {
+    inputType: "prompt" as const,
+    finalProfile,
+    contextSummary,
+  });
+  return {
+    finalProfile,
+    contextSummary,
+    displayText: normalizedPrompt,
+    businessUrl: tryExtractUrlFromPrompt(normalizedPrompt),
+    jobDebug: {
+      inputType: "prompt",
+      rawInput: rawInput.trim(),
+      normalizedUrl: null,
+      metadataExtracted: null,
+      enrichedProfile: profileToDebugRecord(enriched),
+      finalProfile: profileToDebugRecord(finalProfile),
+      contextSummary,
+    },
+  };
+}
+
 async function loadAccessibleWorkspace(workspaceId: string) {
   const admin = createWorkspaceAdminClient();
   const { data: workspace, error } = await admin
@@ -123,11 +261,21 @@ async function loadAccessibleWorkspace(workspaceId: string) {
 }
 
 export async function createWorkspaceFromPrompt(
-  prompt: string,
+  rawInput: string,
   options?: HomepageSubmitOptions
 ): Promise<{ workspaceId: string | null; error: string | null }> {
-  const normalizedPrompt = normalizePrompt(prompt);
-  if (!normalizedPrompt) return { workspaceId: null, error: "Prompt is required." };
+  const inputType = options?.inputType ?? "prompt";
+  console.log("URL SUBMIT START", { input: rawInput, inputType, entry: "createWorkspaceFromPrompt" });
+
+  let pack: Awaited<ReturnType<typeof resolveHomepageInputToProfile>>;
+  try {
+    pack = await resolveHomepageInputToProfile(rawInput, inputType);
+  } catch (e) {
+    return {
+      workspaceId: null,
+      error: e instanceof Error ? e.message : "Could not prepare input.",
+    };
+  }
 
   const token = await ensureWorkspaceToken();
   const tokenHash = hashWorkspaceToken(token);
@@ -145,9 +293,9 @@ export async function createWorkspaceFromPrompt(
     .insert({
       user_id: user?.id ?? null,
       anon_token_hash: tokenHash,
-      initial_prompt: normalizedPrompt,
-      business_url: tryExtractUrlFromPrompt(normalizedPrompt),
-      business_summary: normalizedPrompt,
+      initial_prompt: pack.displayText,
+      business_url: pack.businessUrl,
+      business_summary: pack.displayText,
       detected_content_type: "meme",
       status: "active",
       preview_generations_used: 0,
@@ -166,11 +314,16 @@ export async function createWorkspaceFromPrompt(
   }
 
   const workspaceId = String(workspace.id);
+
+  await persistWorkspaceBusinessProfile(workspaceId, null, pack.finalProfile, {
+    businessSummaryOverride: pack.contextSummary,
+  });
+
   const resolvedOutputFormat =
     options?.preferredOutputFormat ??
     resolveWorkspaceOutputFormat({
-      prompt: normalizedPrompt,
-      businessUrl: tryExtractUrlFromPrompt(normalizedPrompt),
+      prompt: pack.contextSummary,
+      businessUrl: pack.businessUrl ?? "",
     });
   const templateFamilyPreference = options?.templateFamilyPreference ?? null;
 
@@ -181,37 +334,48 @@ export async function createWorkspaceFromPrompt(
       workspace_id: workspaceId,
       role: "user",
       message_type: "text",
-      content: { text: normalizedPrompt } as Json,
+      content: { text: pack.displayText } as Json,
       metadata: {} as Json,
     })
     .select("id")
     .single();
 
+  const sourceMeta = inputType === "url" ? "homepage_url" : "homepage_prompt";
+
+  console.log("BEFORE JOB CREATE", {
+    entry: "createWorkspaceFromPrompt",
+    finalProfile: pack.finalProfile,
+    contextSummary: pack.contextSummary,
+  });
+
   const generationPlan = buildWorkspaceGenerationPlan({
     workspaceId,
-    prompt: normalizedPrompt,
+    prompt: pack.contextSummary,
     requestedByUserId: user?.id ?? null,
     triggerMessageId: firstMessage?.id ?? null,
     outputFormat: resolvedOutputFormat,
     requestedVariantCount: 1,
-    metadata: {
-      workflow_mode: "single_output",
-      output_format: resolvedOutputFormat,
-      selection_strategy:
-        resolvedOutputFormat === "square_text"
-          ? "square_text_open_variant"
-          : "random_template",
-      selected_template_id: null,
-      selected_template_slug: null,
-      based_on_job_id: null,
-      based_on_output_ids: [],
-      deferred_followup: false,
-      explicit_promo_intent: false,
-      promo_context_excerpt: null,
-      workspace_context_summary: normalizedPrompt,
-      template_family_preference: templateFamilyPreference,
-      source: "workspace_initial_prompt",
-    } as Json,
+    metadata: mergeDebugIntoMetadata(
+      {
+        workflow_mode: "single_output",
+        output_format: resolvedOutputFormat,
+        selection_strategy:
+          resolvedOutputFormat === "square_text"
+            ? "square_text_open_variant"
+            : "random_template",
+        selected_template_id: null,
+        selected_template_slug: null,
+        based_on_job_id: null,
+        based_on_output_ids: [],
+        deferred_followup: false,
+        explicit_promo_intent: false,
+        promo_context_excerpt: null,
+        workspace_context_summary: pack.contextSummary,
+        template_family_preference: templateFamilyPreference,
+        source: sourceMeta,
+      },
+      pack.jobDebug
+    ) as Json,
   });
   const initialQueued = await enqueueGenerationJob({
     workspaceId: generationPlan.workspaceId,
@@ -229,21 +393,186 @@ export async function createWorkspaceFromPrompt(
   return { workspaceId, error: null };
 }
 
-export async function submitHomepagePrompt(
-  prompt: string,
+async function queueAuthenticatedHomepageFromUrl(
+  userId: string,
+  rawInput: string,
   options?: HomepageSubmitOptions
 ): Promise<{ workspaceId: string | null; error: string | null }> {
+  console.log("URL SUBMIT START", {
+    input: rawInput,
+    inputType: "url" as const,
+    entry: "queueAuthenticatedHomepageFromUrl",
+  });
+  let pack: Awaited<ReturnType<typeof resolveHomepageInputToProfile>>;
+  try {
+    pack = await resolveHomepageInputToProfile(rawInput, "url");
+  } catch (e) {
+    return {
+      workspaceId: null,
+      error: e instanceof Error ? e.message : "Could not process URL.",
+    };
+  }
+
+  const workspaceId = await getOrCreateDefaultWorkspaceForUser(userId);
+  const admin = createWorkspaceAdminClient();
+
+  const { data: wsRow, error: wsErr } = await admin
+    .schema("public")
+    .from("workspaces")
+    .select("metadata, business_url")
+    .eq("id", workspaceId)
+    .single();
+
+  if (wsErr || !wsRow) {
+    return { workspaceId: null, error: "Workspace not found." };
+  }
+
+  const { data: activeJob } = await admin
+    .schema("public")
+    .from("generation_jobs")
+    .select("id")
+    .eq("workspace_id", workspaceId)
+    .in("status", ["queued", "running"])
+    .limit(1)
+    .maybeSingle();
+
+  if (activeJob?.id) {
+    return {
+      workspaceId: null,
+      error: "A generation is already in progress. Wait for it to finish.",
+    };
+  }
+
+  await persistWorkspaceBusinessProfile(
+    workspaceId,
+    wsRow.metadata ?? {},
+    pack.finalProfile,
+    { businessSummaryOverride: pack.contextSummary }
+  );
+
+  await admin
+    .schema("public")
+    .from("workspaces")
+    .update({
+      business_url: pack.displayText,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", workspaceId);
+
+  const nowIso = new Date().toISOString();
+  const { data: firstMessage } = await admin
+    .schema("public")
+    .from("workspace_messages")
+    .insert({
+      workspace_id: workspaceId,
+      role: "user",
+      message_type: "text",
+      content: { text: pack.displayText } as Json,
+      metadata: {} as Json,
+    })
+    .select("id")
+    .single();
+
+  await admin
+    .schema("public")
+    .from("workspaces")
+    .update({
+      last_message_at: nowIso,
+      updated_at: nowIso,
+    })
+    .eq("id", workspaceId);
+
+  const resolvedOutputFormat =
+    options?.preferredOutputFormat ??
+    resolveWorkspaceOutputFormat({
+      prompt: pack.contextSummary,
+      businessUrl: pack.displayText,
+    });
+  const templateFamilyPreference = options?.templateFamilyPreference ?? null;
+
+  console.log("BEFORE JOB CREATE", {
+    entry: "queueAuthenticatedHomepageFromUrl",
+    finalProfile: pack.finalProfile,
+    contextSummary: pack.contextSummary,
+  });
+
+  const generationPlan = buildWorkspaceGenerationPlan({
+    workspaceId,
+    prompt: pack.contextSummary,
+    requestedByUserId: userId,
+    triggerMessageId: firstMessage?.id ?? null,
+    outputFormat: resolvedOutputFormat,
+    requestedVariantCount: 1,
+    metadata: mergeDebugIntoMetadata(
+      {
+        workflow_mode: "single_output",
+        output_format: resolvedOutputFormat,
+        selection_strategy:
+          resolvedOutputFormat === "square_text"
+            ? "square_text_open_variant"
+            : "random_template",
+        selected_template_id: null,
+        selected_template_slug: null,
+        based_on_job_id: null,
+        based_on_output_ids: [],
+        deferred_followup: false,
+        explicit_promo_intent: false,
+        promo_context_excerpt: null,
+        workspace_context_summary: pack.contextSummary,
+        template_family_preference: templateFamilyPreference,
+        source: "homepage_url",
+      },
+      pack.jobDebug
+    ) as Json,
+  });
+
+  const initialQueued = await enqueueGenerationJob({
+    workspaceId: generationPlan.workspaceId,
+    prompt: generationPlan.prompt,
+    requestedByUserId: generationPlan.requestedByUserId ?? null,
+    triggerMessageId: generationPlan.triggerMessageId ?? null,
+    outputFormat: generationPlan.outputFormat,
+    requestedVariantCount: generationPlan.requestedVariantCount,
+    metadata: generationPlan.metadata as Json,
+  });
+
+  if (initialQueued.error || !initialQueued.jobId) {
+    return {
+      workspaceId: null,
+      error: initialQueued.error ?? "Failed to queue generation.",
+    };
+  }
+
+  void runGenerationJob(initialQueued.jobId);
+
+  return { workspaceId, error: null };
+}
+
+export async function submitHomepagePrompt(
+  input: string,
+  options?: HomepageSubmitOptions
+): Promise<{ workspaceId: string | null; error: string | null }> {
+  console.log("URL SUBMIT START", {
+    input,
+    inputType: options?.inputType ?? "prompt",
+    entry: "submitHomepagePrompt",
+  });
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
   if (!user?.id) {
-    return createWorkspaceFromPrompt(prompt, options);
+    return createWorkspaceFromPrompt(input, options);
+  }
+
+  const inputType = options?.inputType ?? "prompt";
+  if (inputType === "url") {
+    return queueAuthenticatedHomepageFromUrl(user.id, input, options);
   }
 
   const workspaceId = await getOrCreateDefaultWorkspaceForUser(user.id);
-  const sent = await sendWorkspaceMessage(workspaceId, prompt, {
+  const sent = await sendWorkspaceMessage(workspaceId, input, {
     preferredOutputFormat: options?.preferredOutputFormat,
     templateFamilyPreference: options?.templateFamilyPreference ?? null,
   });
@@ -292,7 +621,7 @@ export async function getWorkspaceState(
     .schema("public")
     .from("generation_jobs")
     .select(
-      "id, status, block_reason, prompt, output_format, error_message, created_at, completed_at"
+      "id, status, block_reason, prompt, output_format, error_message, metadata, created_at, completed_at"
     )
     .eq("workspace_id", workspaceId)
     .order("created_at", { ascending: false })
@@ -840,6 +1169,33 @@ export async function sendWorkspaceMessage(
     })
     .eq("id", workspaceId);
 
+  const workingWorkspace: Record<string, unknown> = { ...workspace };
+  let profileForSummary = parseBusinessProfileFromWorkspaceRow(
+    workingWorkspace as { metadata?: unknown }
+  );
+  if (
+    (resetContextTurn || !profileForSummary) &&
+    normalizedPrompt.length >= 8
+  ) {
+    profileForSummary = await resolveBusinessProfileFromUserText(normalizedPrompt);
+    await persistWorkspaceBusinessProfile(
+      workspaceId,
+      workingWorkspace.metadata,
+      profileForSummary
+    );
+    workingWorkspace.metadata = mergeWorkspaceMetadataWithBusinessProfile(
+      workingWorkspace.metadata,
+      profileForSummary
+    );
+    workingWorkspace.business_summary = profileForSummary.businessName;
+  }
+  console.log({
+    businessProfile: profileForSummary,
+    usingEnrichedContext: Boolean(
+      profileForSummary && isValidBusinessProfile(profileForSummary)
+    ),
+  });
+
   const previewUsed = Number(workspace.preview_generations_used ?? 0);
 
   const { data: recentMessagesRaw } = await admin
@@ -907,10 +1263,12 @@ export async function sendWorkspaceMessage(
       : null,
     hasLatestCompletedOutputs,
     workspace: {
-      initial_prompt: String(workspace.initial_prompt ?? ""),
-      business_url: workspace.business_url ? String(workspace.business_url) : null,
-      business_summary: workspace.business_summary
-        ? String(workspace.business_summary)
+      initial_prompt: String(workingWorkspace.initial_prompt ?? ""),
+      business_url: workingWorkspace.business_url
+        ? String(workingWorkspace.business_url)
+        : null,
+      business_summary: workingWorkspace.business_summary
+        ? String(workingWorkspace.business_summary)
         : null,
       preview_generations_used: previewUsed,
     },
@@ -918,6 +1276,11 @@ export async function sendWorkspaceMessage(
   });
 
   const resolvedPrompt = plan.prompt_for_generation?.trim() || normalizedPrompt;
+  const jobContextSummary = workspaceContextSummaryForJob(
+    resetContextTurn,
+    profileForSummary,
+    workingWorkspace as { business_summary?: unknown; initial_prompt?: unknown }
+  );
   const resolvedTemplateFamilyPreference =
     options?.templateFamilyPreference === "engagement_text"
       ? "engagement_text"
@@ -986,9 +1349,7 @@ export async function sendWorkspaceMessage(
       deferred_from_intent: plan.intent,
       explicit_promo_intent: plan.explicit_promo_intent,
       promo_context_excerpt: plan.promo_context_excerpt ?? null,
-      workspace_context_summary: resetContextTurn
-        ? null
-        : String(workspace.business_summary ?? workspace.initial_prompt ?? "").trim() || null,
+      workspace_context_summary: jobContextSummary,
       based_on_job_id: resetContextTurn ? null : latestJobRow?.id ?? null,
       based_on_output_ids: [],
     } as Json;
@@ -1035,7 +1396,6 @@ export async function sendWorkspaceMessage(
           { label: "Video Meme", message: "Turn this idea into video memes", kind: "format" },
           { label: "Text Meme", message: "Generate text memes for this idea", kind: "format" },
           { label: "Engagement post", message: "Turn this idea into an engagement post", kind: "format" },
-          { label: "Slideshow", message: "Turn this idea into a slideshow", kind: "format" },
         ],
       } as Json,
     });
@@ -1075,6 +1435,13 @@ export async function sendWorkspaceMessage(
     } as Json,
   });
 
+  console.log("BEFORE JOB CREATE", {
+    entry: "sendWorkspaceMessage",
+    resolvedPrompt,
+    jobContextSummary,
+    profileForSummary,
+  });
+
   const generationPlan = buildWorkspaceGenerationPlan({
     workspaceId,
     prompt: resolvedPrompt,
@@ -1082,29 +1449,40 @@ export async function sendWorkspaceMessage(
     triggerMessageId: userMessage?.id ?? null,
     outputFormat: resolvedOutputFormat,
     requestedVariantCount,
-    metadata: {
-      workflow_mode: "single_output",
-      output_format: resolvedOutputFormat,
-      selection_strategy:
-        resolvedOutputFormat === "square_text"
-          ? "square_text_open_variant"
-          : "random_template",
-      selected_template_id: null,
-      selected_template_slug: null,
-      based_on_job_id: resetContextTurn ? null : latestJobRow?.id ?? null,
-      based_on_output_ids: [],
-      deferred_followup: false,
-      reset_context: resetContextTurn,
-      source: "workspace_send_message",
-      intent: plan.intent,
-      template_family_preference: resolvedTemplateFamilyPreference,
-      relation_to_previous_job: plan.relation_to_previous_job,
-      explicit_promo_intent: plan.explicit_promo_intent,
-      promo_context_excerpt: plan.promo_context_excerpt ?? null,
-      workspace_context_summary: resetContextTurn
-        ? null
-        : String(workspace.business_summary ?? workspace.initial_prompt ?? "").trim() || null,
-    } as Json,
+    metadata: mergeDebugIntoMetadata(
+      {
+        workflow_mode: "single_output",
+        output_format: resolvedOutputFormat,
+        selection_strategy:
+          resolvedOutputFormat === "square_text"
+            ? "square_text_open_variant"
+            : "random_template",
+        selected_template_id: null,
+        selected_template_slug: null,
+        based_on_job_id: resetContextTurn ? null : latestJobRow?.id ?? null,
+        based_on_output_ids: [],
+        deferred_followup: false,
+        reset_context: resetContextTurn,
+        source: "workspace_send_message",
+        intent: plan.intent,
+        template_family_preference: resolvedTemplateFamilyPreference,
+        relation_to_previous_job: plan.relation_to_previous_job,
+        explicit_promo_intent: plan.explicit_promo_intent,
+        promo_context_excerpt: plan.promo_context_excerpt ?? null,
+        workspace_context_summary: jobContextSummary,
+      },
+      {
+        inputType: "workspace_message",
+        rawInput: normalizedPrompt,
+        normalizedUrl: null,
+        metadataExtracted: null,
+        enrichedProfile: profileToDebugRecord(profileForSummary),
+        finalProfile: profileToDebugRecord(profileForSummary),
+        contextSummary: jobContextSummary,
+        resolvedPrompt,
+        intent: plan.intent,
+      }
+    ) as Json,
   });
   const queued = await enqueueGenerationJob({
     workspaceId: generationPlan.workspaceId,
@@ -1240,6 +1618,12 @@ export async function unlockWorkspacePlan(
       metadata: { reason: "manual_unlock", plan_code: planCode } as Json,
     });
 
+    console.log("BEFORE JOB CREATE", {
+      entry: "unlockWorkspacePlan",
+      resumePrompt,
+      resumeOutputFormat,
+    });
+
     const generationPlan = buildWorkspaceGenerationPlan({
       workspaceId,
       prompt: resumePrompt,
@@ -1250,22 +1634,33 @@ export async function unlockWorkspacePlan(
         Number.isFinite(requestedVariantCount) && requestedVariantCount > 0
           ? requestedVariantCount
           : 1,
-      metadata: {
-        workflow_mode: "single_output",
-        output_format: resumeOutputFormat,
-        selection_strategy:
-          resumeOutputFormat === "square_text"
-            ? "square_text_open_variant"
-            : "random_template",
-        selected_template_id: null,
-        selected_template_slug: null,
-        based_on_job_id: null,
-        based_on_output_ids: [],
-        deferred_followup: false,
-        source: "workspace_unlock_resume",
-        resumed_from_pending_action: Boolean(pending?.id),
-        template_family_preference: resumeTemplateFamilyPreference,
-      } as Json,
+      metadata: mergeDebugIntoMetadata(
+        {
+          workflow_mode: "single_output",
+          output_format: resumeOutputFormat,
+          selection_strategy:
+            resumeOutputFormat === "square_text"
+              ? "square_text_open_variant"
+              : "random_template",
+          selected_template_id: null,
+          selected_template_slug: null,
+          based_on_job_id: null,
+          based_on_output_ids: [],
+          deferred_followup: false,
+          source: "workspace_unlock_resume",
+          resumed_from_pending_action: Boolean(pending?.id),
+          template_family_preference: resumeTemplateFamilyPreference,
+        },
+        {
+          inputType: "unlock_resume",
+          rawInput: resumePrompt,
+          normalizedUrl: null,
+          metadataExtracted: null,
+          enrichedProfile: null,
+          finalProfile: null,
+          contextSummary: null,
+        }
+      ) as Json,
     });
     const queued = await enqueueGenerationJob({
       workspaceId: generationPlan.workspaceId,

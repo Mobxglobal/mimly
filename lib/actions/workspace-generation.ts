@@ -1,6 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { generateMockMemes } from "@/lib/actions/memes";
 import { createWorkspaceAdminClient } from "@/lib/workspace/auth";
+import { buildPromptFromEnrichment } from "@/lib/url/build-context";
+import {
+  getNextAngle,
+  parseBusinessProfileFromWorkspaceRow,
+} from "@/lib/workspace/business-profile";
+import { mergeDebugIntoMetadata } from "@/lib/workspace/generation-job-debug";
 
 type Json = string | number | boolean | null | { [key: string]: Json } | Json[];
 
@@ -10,6 +16,7 @@ type WorkspaceRow = {
   initial_prompt: string;
   business_summary: string | null;
   preview_generations_used: number;
+  metadata?: Record<string, unknown> | null;
 };
 
 type FollowupPayload = {
@@ -90,7 +97,7 @@ function completionFollowupMessage(
     return "I made an engagement post version. Want another one or a format switch?";
   }
   if (outputFormat === "vertical_slideshow") {
-    return "I drafted a slideshow set. Next move: sharpen the hook, or spin this into image memes or text memes.";
+    return "I drafted this multi-slide set. Next move: sharpen the hook, or spin this into image memes or text memes.";
   }
   if (outputFormat === "square_video") {
     return "I made a square video version. Want a funnier pass or a format switch?";
@@ -101,19 +108,12 @@ function completionFollowupMessage(
   return "I made an image meme version. Want another one, a funnier pass, or a format switch?";
 }
 
-function completionUiPills(
-  outputFormat: JobRow["output_format"],
-  templateFamilyPreference?: "engagement_text" | null
-) {
-  const preferEngagement = templateFamilyPreference === "engagement_text";
+function completionUiPills() {
   return [
     { label: "Image Meme", message: "Generate image memes for this idea", kind: "format" as const },
     { label: "Video Meme", message: "Turn this idea into video memes", kind: "format" as const },
     { label: "Text Meme", message: "Generate text memes for this idea", kind: "format" as const },
-    preferEngagement
-      ? { label: "Engagement post", message: "Turn this idea into an engagement post", kind: "format" as const }
-      : { label: "Engagement post", message: "Turn this idea into an engagement post", kind: "format" as const },
-    { label: "Slideshow", message: "Turn this idea into a slideshow", kind: "format" as const },
+    { label: "Engagement post", message: "Turn this idea into an engagement post", kind: "format" as const },
   ];
 }
 
@@ -150,6 +150,8 @@ export async function enqueueGenerationJob(params: {
 
   const normalizedPrompt = String(prompt ?? "").trim();
   if (!normalizedPrompt) return { jobId: null, error: "Prompt is required." };
+
+  console.log("JOB METADATA", { workspaceId, prompt: normalizedPrompt, metadata });
 
   const { data: existing } = await admin
     .schema("public")
@@ -192,25 +194,72 @@ export async function runGenerationPlan(params: {
   job: JobRow;
   workspace: WorkspaceRow;
   generationRunId: string;
-}) {
+}): Promise<{
+  result: Awaited<ReturnType<typeof generateMockMemes>>;
+  runtimeDebug: { angleUsed: string | null; finalPrompt: string };
+}> {
   const { job, workspace, generationRunId } = params;
   const metadata =
     job.metadata && typeof job.metadata === "object"
       ? (job.metadata as Record<string, unknown>)
       : {};
+  console.log("RUN GENERATION INPUT", {
+    jobId: job.id,
+    jobPrompt: job.prompt,
+    metadata: job.metadata,
+  });
   const explicitPromoIntent = Boolean(metadata.explicit_promo_intent);
   const resetContext = Boolean(metadata.reset_context);
   const explicitPromoContext = explicitPromoIntent
     ? String(metadata.promo_context_excerpt ?? "").trim() || null
     : null;
-  const workspaceContextSummary = resetContext
-    ? null
-    : String(
-        metadata.workspace_context_summary ??
-          workspace.business_summary ??
-          workspace.initial_prompt ??
-          ""
-      ).trim() || null;
+  const profile = parseBusinessProfileFromWorkspaceRow(workspace);
+  const rawBp =
+    workspace.metadata &&
+    typeof workspace.metadata === "object" &&
+    !Array.isArray(workspace.metadata)
+      ? (workspace.metadata as Record<string, unknown>).businessProfile
+      : null;
+  const rawBusinessName =
+    rawBp &&
+    typeof rawBp === "object" &&
+    !Array.isArray(rawBp) &&
+    "businessName" in rawBp
+      ? String((rawBp as Record<string, unknown>).businessName ?? "")
+      : undefined;
+  console.log("RUN GENERATION PLAN INPUT:", {
+    workspaceId: workspace.id,
+    hasProfile: Boolean(rawBp),
+    businessName: rawBusinessName,
+  });
+  const explicitJobSummary =
+    !resetContext && typeof metadata.workspace_context_summary === "string"
+      ? String(metadata.workspace_context_summary).trim()
+      : "";
+  let workspaceContextSummary: string | null = null;
+  if (!resetContext) {
+    if (explicitJobSummary) {
+      workspaceContextSummary = explicitJobSummary;
+    } else if (profile) {
+      workspaceContextSummary = buildPromptFromEnrichment(profile);
+    } else {
+      workspaceContextSummary =
+        String(workspace.business_summary ?? workspace.initial_prompt ?? "").trim() ||
+        null;
+    }
+  }
+  const { angle, nextState: nextAngleState } = profile
+    ? getNextAngle(profile, workspace.metadata)
+    : { angle: null, nextState: null };
+  const angleUsed =
+    angle && String(angle).trim() ? String(angle).trim() : null;
+
+  console.log({
+    businessProfile: profile,
+    usingEnrichedContext: Boolean(profile),
+    angle,
+    nextAngleState,
+  });
   const templateFamilyPreference =
     metadata.template_family_preference === "engagement_text"
       ? "engagement_text"
@@ -224,7 +273,86 @@ export async function runGenerationPlan(params: {
     jobId: job.id,
   });
 
-  return generateMockMemes(job.prompt, {
+  const context = String(job.prompt ?? "").trim();
+
+  const angleDirective = angleUsed
+    ? `
+
+---
+
+Content Angle Focus:
+
+You must base this content on the following specific scenario:
+
+${angleUsed}
+
+Expand this into a clear, real-world situation that would happen in this industry.
+
+The idea should strongly reflect this angle and not drift into generic humour.
+`
+    : "";
+
+  const enrichedPrompt = context + angleDirective;
+
+  const finalPrompt =
+    enrichedPrompt +
+    `
+
+Final requirement:
+
+The output MUST clearly reflect both:
+1. The business context
+2. The selected content angle
+
+If it could apply to any business, it is not specific enough.
+
+---
+
+Process:
+
+1. First, identify a specific situation that directly involves:
+   - the business
+   - its customers or clients
+   - or the service it provides
+
+2. The scenario MUST be clearly connected to the industry or audience.
+   It should involve:
+   - client behaviour
+   - customer expectations
+   - real interactions
+   - or industry-specific frustrations
+
+3. Then create a meme based on that situation.
+
+The scenario should be:
+- realistic
+- specific to the industry
+- immediately recognisable to the target audience
+
+Avoid:
+- generic life situations (e.g. forgetting lunch, waking up late)
+- scenarios that could apply to anyone regardless of business
+
+Critical constraint:
+
+If the scenario does not directly involve the business, its customers, or its services, it is invalid.
+You must choose a different scenario.
+
+Angle enforcement:
+
+The scenario must clearly reflect the selected content angle.
+Do not drift away from the angle into general humour.
+
+Tone requirement:
+
+The humour should feel like insider knowledge of the industry.
+It should make the audience feel "this is so accurate".
+`;
+
+  console.log("ANGLE USED:", angle);
+  console.log("FINAL PROMPT:", finalPrompt);
+
+  const result = await generateMockMemes(finalPrompt, {
     limit: job.requested_variant_count || 1,
     outputFormat: job.output_format ?? "square_text",
     generationRunIdOverride: generationRunId,
@@ -243,13 +371,38 @@ export async function runGenerationPlan(params: {
           ? (String(job.prompt ?? "").trim() ||
               workspace.business_summary ||
               workspace.initial_prompt)
-          : workspace.business_summary ?? workspace.initial_prompt,
+          : workspaceContextSummary ||
+            workspace.business_summary ||
+            workspace.initial_prompt,
         audience: "social media audience",
         country: null,
         english_variant: "en-GB",
       },
     },
   });
+
+  if (!result.error && nextAngleState !== null) {
+    const admin = createWorkspaceAdminClient();
+    const baseMeta =
+      workspace.metadata &&
+      typeof workspace.metadata === "object" &&
+      !Array.isArray(workspace.metadata)
+        ? { ...(workspace.metadata as Record<string, unknown>) }
+        : {};
+    await admin
+      .schema("public")
+      .from("workspaces")
+      .update({
+        metadata: { ...baseMeta, angleState: nextAngleState } as Json,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", workspace.id);
+  }
+
+  return {
+    result,
+    runtimeDebug: { angleUsed, finalPrompt },
+  };
 }
 
 export async function runGenerationJob(
@@ -279,7 +432,9 @@ export async function runGenerationJob(
   const { data: workspace, error: workspaceError } = await admin
     .schema("public")
     .from("workspaces")
-    .select("id, user_id, initial_prompt, business_summary, preview_generations_used")
+    .select(
+      "id, user_id, initial_prompt, business_summary, preview_generations_used, metadata"
+    )
     .eq("id", job.workspace_id)
     .single();
 
@@ -300,13 +455,21 @@ export async function runGenerationJob(
   const ws = workspace as WorkspaceRow;
   const generationRunId = randomUUID();
   const startedAt = (job.started_at ?? new Date().toISOString()).toString();
+  const jobMetaBase =
+    job.metadata && typeof job.metadata === "object"
+      ? { ...(job.metadata as Record<string, unknown>) }
+      : {};
+
+  let runtimeDebug: { angleUsed: string | null; finalPrompt: string } | null = null;
 
   try {
-    const result = await runGenerationPlan({
+    const planOutcome = await runGenerationPlan({
       job,
       workspace: ws,
       generationRunId,
     });
+    runtimeDebug = planOutcome.runtimeDebug;
+    const result = planOutcome.result;
 
     if (result.error) {
       await admin
@@ -316,6 +479,10 @@ export async function runGenerationJob(
           status: "failed",
           error_message: result.error,
           generation_run_id: generationRunId,
+          metadata: mergeDebugIntoMetadata(jobMetaBase, {
+            angleUsed: runtimeDebug.angleUsed,
+            finalPrompt: runtimeDebug.finalPrompt,
+          }) as Json,
           completed_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         })
@@ -351,6 +518,10 @@ export async function runGenerationJob(
           status: "failed",
           error_message: runRowsError.message,
           generation_run_id: generationRunId,
+          metadata: mergeDebugIntoMetadata(jobMetaBase, {
+            angleUsed: runtimeDebug.angleUsed,
+            finalPrompt: runtimeDebug.finalPrompt,
+          }) as Json,
           completed_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         })
@@ -408,13 +579,7 @@ export async function runGenerationJob(
         metadata: {
           output_format: job.output_format,
           follow_up_hint: true,
-          ui_pills: completionUiPills(
-            job.output_format,
-            (job.metadata?.template_family_preference as
-              | "engagement_text"
-              | null
-              | undefined) ?? null
-          ),
+          ui_pills: completionUiPills(),
         } as Json,
       });
 
@@ -467,51 +632,68 @@ export async function runGenerationJob(
         ? (job.metadata as Record<string, unknown>)
         : {};
 
+    const completedMetadataBase = {
+      ...existingJobMetadata,
+      workflow_mode:
+        String(existingJobMetadata.workflow_mode ?? "") ||
+        workflowMode ||
+        "single_output",
+      output_format: job.output_format,
+      selection_strategy:
+        String(existingJobMetadata.selection_strategy ?? "") ||
+        selectionStrategy ||
+        (job.output_format === "square_text"
+          ? "square_text_open_variant"
+          : "random_template"),
+      selection_scope:
+        String(existingJobMetadata.selection_scope ?? "") ||
+        selectionScope ||
+        "workspace_family_cycle",
+      cycle_exhausted:
+        typeof existingJobMetadata.cycle_exhausted === "boolean"
+          ? existingJobMetadata.cycle_exhausted
+          : cycleExhausted,
+      cycle_reset_applied:
+        typeof existingJobMetadata.cycle_reset_applied === "boolean"
+          ? existingJobMetadata.cycle_reset_applied
+          : cycleResetApplied,
+      selection_stage:
+        String(existingJobMetadata.selection_stage ?? "") ||
+        selectionStage ||
+        null,
+      selected_template_id: selectedTemplateId,
+      selected_template_slug: selectedTemplateSlug || null,
+      based_on_job_id: existingJobMetadata.based_on_job_id ?? null,
+      based_on_output_ids: Array.isArray(existingJobMetadata.based_on_output_ids)
+        ? existingJobMetadata.based_on_output_ids
+        : [],
+      deferred_followup: Boolean(existingJobMetadata.deferred_followup) || false,
+    };
+
+    const completedJobMetadata = mergeDebugIntoMetadata(completedMetadataBase, {
+      angleUsed: runtimeDebug.angleUsed,
+      finalPrompt: runtimeDebug.finalPrompt,
+    }) as Json;
+
+    const priorMeta = job.metadata && typeof job.metadata === "object" ? job.metadata : null;
+    const priorDebug =
+      priorMeta && "debug" in priorMeta && priorMeta.debug && typeof priorMeta.debug === "object"
+        ? (priorMeta.debug as Record<string, unknown>)
+        : null;
+
+    console.log("WRITING DEBUG TO DB", {
+      jobId: job.id,
+      finalProfile: priorDebug?.finalProfile,
+      finalPrompt: runtimeDebug.finalPrompt,
+    });
+
     await admin
       .schema("public")
       .from("generation_jobs")
       .update({
         status: "completed",
         generation_run_id: generationRunId,
-        metadata: {
-          ...existingJobMetadata,
-          workflow_mode:
-            String(existingJobMetadata.workflow_mode ?? "") ||
-            workflowMode ||
-            "single_output",
-          output_format: job.output_format,
-          selection_strategy:
-            String(existingJobMetadata.selection_strategy ?? "") ||
-            selectionStrategy ||
-            (job.output_format === "square_text"
-              ? "square_text_open_variant"
-              : "random_template"),
-          selection_scope:
-            String(existingJobMetadata.selection_scope ?? "") ||
-            selectionScope ||
-            "workspace_family_cycle",
-          cycle_exhausted:
-            typeof existingJobMetadata.cycle_exhausted === "boolean"
-              ? existingJobMetadata.cycle_exhausted
-              : cycleExhausted,
-          cycle_reset_applied:
-            typeof existingJobMetadata.cycle_reset_applied === "boolean"
-              ? existingJobMetadata.cycle_reset_applied
-              : cycleResetApplied,
-          selection_stage:
-            String(existingJobMetadata.selection_stage ?? "") ||
-            selectionStage ||
-            null,
-          selected_template_id: selectedTemplateId,
-          selected_template_slug: selectedTemplateSlug || null,
-          based_on_job_id:
-            existingJobMetadata.based_on_job_id ?? null,
-          based_on_output_ids: Array.isArray(existingJobMetadata.based_on_output_ids)
-            ? existingJobMetadata.based_on_output_ids
-            : [],
-          deferred_followup:
-            Boolean(existingJobMetadata.deferred_followup) || false,
-        } as Json,
+        metadata: completedJobMetadata,
         completed_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       })
@@ -611,25 +793,36 @@ export async function runGenerationJob(
               Number.isFinite(followupVariantCount) && followupVariantCount > 0
                 ? Math.min(9, Math.max(1, Math.floor(followupVariantCount)))
                 : 1,
-            metadata: {
-              workflow_mode: "single_output",
-              output_format: followupOutputFormat,
-              selection_strategy:
-                followupOutputFormat === "square_text"
-                  ? "square_text_open_variant"
-                  : "random_template",
-              template_family_preference: templateFamilyPreference,
-              reset_context: resetContext,
-              selected_template_id: null,
-              selected_template_slug: null,
-              based_on_job_id: resetContext ? null : basedOnJobId,
-              based_on_output_ids: basedOnOutputIds,
-              deferred_followup: true,
-              deferred_from_intent: deferredFromIntent,
-              explicit_promo_intent: explicitPromoIntent,
-              promo_context_excerpt: promoContextExcerpt,
-              workspace_context_summary: resetContext ? null : workspaceContextSummary,
-            } as Json,
+            metadata: mergeDebugIntoMetadata(
+              {
+                workflow_mode: "single_output",
+                output_format: followupOutputFormat,
+                selection_strategy:
+                  followupOutputFormat === "square_text"
+                    ? "square_text_open_variant"
+                    : "random_template",
+                template_family_preference: templateFamilyPreference,
+                reset_context: resetContext,
+                selected_template_id: null,
+                selected_template_slug: null,
+                based_on_job_id: resetContext ? null : basedOnJobId,
+                based_on_output_ids: basedOnOutputIds,
+                deferred_followup: true,
+                deferred_from_intent: deferredFromIntent,
+                explicit_promo_intent: explicitPromoIntent,
+                promo_context_excerpt: promoContextExcerpt,
+                workspace_context_summary: resetContext ? null : workspaceContextSummary,
+              },
+              {
+                inputType: "deferred_followup",
+                rawInput: followupPrompt,
+                normalizedUrl: null,
+                metadataExtracted: null,
+                enrichedProfile: null,
+                finalProfile: null,
+                contextSummary: resetContext ? null : workspaceContextSummary,
+              }
+            ) as Json,
           });
           const queuedFollowup = await enqueueGenerationJob({
             workspaceId: deferredPlan.workspaceId,
@@ -658,6 +851,14 @@ export async function runGenerationJob(
         status: "failed",
         error_message: message,
         generation_run_id: generationRunId,
+        ...(runtimeDebug
+          ? {
+              metadata: mergeDebugIntoMetadata(jobMetaBase, {
+                angleUsed: runtimeDebug.angleUsed,
+                finalPrompt: runtimeDebug.finalPrompt,
+              }) as Json,
+            }
+          : {}),
         completed_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       })

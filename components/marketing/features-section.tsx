@@ -23,7 +23,7 @@ const STEPS = [
     number: "3",
     title: "Generate and post",
     description:
-      "Get fully designed memes and slideshows, ready to share instantly.",
+      "Get fully designed memes and posts, ready to share instantly.",
     image: "/post2.png",
     rotation: "lg:rotate-[4deg]",
     desktopOffset: "lg:translate-y-8",
@@ -82,8 +82,8 @@ export function FeaturesSection() {
           Behind the memes
         </h2>
         <p className="mx-auto mt-4 max-w-xl text-sm leading-relaxed text-stone-600 md:text-base">
-          Mimly turns a simple prompt into social-ready memes and slideshows in
-          seconds - just type, generate, and post.
+          Mimly turns a simple prompt into social-ready memes in seconds — just
+          type, generate, and post.
         </p>
       </div>
 

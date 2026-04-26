@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useLayoutEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
+import { Globe, Link as LinkIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { FramedSection } from "./framed-section";
 import { HeroNav } from "./hero-nav";
@@ -14,14 +15,14 @@ const HERO_PROMPT_EXAMPLES = [
   "Create memes for my plumbing business to post on Instagram",
   "Make a funny video meme about running a small business",
   "Generate engagement posts for a fitness coach audience",
-  "Create a slideshow about marketing mistakes for TikTok",
+  "Create a funny carousel about marketing mistakes for Instagram",
 ] as const;
 const PLACEHOLDER_INITIAL_DELAY_MS = 400;
 const PLACEHOLDER_VISIBLE_MS = 1800;
 const PLACEHOLDER_TYPE_MS = 24;
 const PLACEHOLDER_DELETE_MS = 14;
 
-const HERO_SUB_ROTATING_WORDS = ["meme", "post", "slideshow", "carousel"] as const;
+const HERO_SUB_ROTATING_WORDS = ["meme", "post", "carousel"] as const;
 const HERO_SUB_ROTATE_INTERVAL_MS = 700;
 
 /** Single like count that runs from start to end on mount so it clearly increases on load. */
@@ -62,10 +63,12 @@ function LikeCount({
 
 export function HeroSection() {
   const [navFixed, setNavFixed] = useState(false);
-  const [prompt, setPrompt] = useState("");
+  const [mode, setMode] = useState<"prompt" | "url">("prompt");
+  const [promptText, setPromptText] = useState("");
+  const [urlValue, setUrlValue] = useState("");
   const [promptError, setPromptError] = useState<string | null>(null);
   const [isSubmittingPrompt, setIsSubmittingPrompt] = useState(false);
-  type HomepageFamilyChip = "Image" | "Video" | "Text" | "Slideshow" | "Engagement";
+  type HomepageFamilyChip = "Image" | "Video" | "Text" | "Engagement";
   const [selectedFamilyChip, setSelectedFamilyChip] = useState<HomepageFamilyChip | null>(
     null
   );
@@ -76,11 +79,28 @@ export function HeroSection() {
   const [typedPlaceholder, setTypedPlaceholder] = useState("");
   const [isPromptFocused, setIsPromptFocused] = useState(false);
   const [heroSubWordIndex, setHeroSubWordIndex] = useState(0);
+  const [heroPromptRows, setHeroPromptRows] = useState(3);
   const promptFormRef = useRef<HTMLFormElement | null>(null);
   const router = useRouter();
 
+  useLayoutEffect(() => {
+    const mq = window.matchMedia("(min-width: 768px)");
+    const sync = () => setHeroPromptRows(mq.matches ? 3 : 2);
+    sync();
+    mq.addEventListener("change", sync);
+    return () => mq.removeEventListener("change", sync);
+  }, []);
+
   useEffect(() => {
-    const sequence = [1, 2, 3, 0];
+    if (mode !== "url") return;
+    const id = window.requestAnimationFrame(() => {
+      document.getElementById("hero-site-url")?.focus();
+    });
+    return () => cancelAnimationFrame(id);
+  }, [mode]);
+
+  useEffect(() => {
+    const sequence = [1, 2, 0];
     const timeoutIds: number[] = [];
     sequence.forEach((wordIndex, step) => {
       const timeoutId = window.setTimeout(() => {
@@ -97,14 +117,12 @@ export function HeroSection() {
     Image: "Generate a 1080x1080 image meme designed for social feed posts.",
     Video: "Generate a 1080x1080 video meme designed for social feed posts.",
     Text: "Generate a 1080x1080 text-only meme designed for social feed posts.",
-    Slideshow:
-      "Generate a 1080x1920 slideshow designed for Instagram Reels and TikTok.",
     Engagement:
       "Generate a post designed to boost engagement on Facebook, Instagram, or LinkedIn.",
   };
 
   useEffect(() => {
-    const isInteracting = isPromptFocused || prompt.trim().length > 0;
+    const isInteracting = isPromptFocused || promptText.trim().length > 0;
     if (isInteracting) {
       setTypedPlaceholder("");
       return;
@@ -145,7 +163,7 @@ export function HeroSection() {
       clearTimeout(startTimer);
       if (timer) clearTimeout(timer);
     };
-  }, [isPromptFocused, prompt, placeholderIndex]);
+  }, [isPromptFocused, promptText, placeholderIndex]);
 
   return (
     <div className={cn("w-full", navFixed && "relative z-[100]")}>
@@ -298,52 +316,65 @@ export function HeroSection() {
               ref={promptFormRef}
               onSubmit={async (event) => {
                 event.preventDefault();
-                const nextPrompt = prompt.trim();
                 if (isSubmittingPrompt) return;
-                if (!nextPrompt || nextPrompt.length < 8) {
-                  setPromptError("Please enter a longer prompt so we can generate better results.");
+
+                const input =
+                  mode === "prompt" ? promptText.trim() : urlValue.trim();
+                if (!input) {
+                  setPromptError(
+                    mode === "prompt"
+                      ? "Please enter a prompt."
+                      : "Please paste your website URL."
+                  );
                   return;
                 }
+                if (mode === "prompt" && input.length < 8) {
+                  setPromptError(
+                    "Please enter a longer prompt so we can generate better results."
+                  );
+                  return;
+                }
+
                 setPromptError(null);
                 setIsSubmittingPrompt(true);
                 const familyMapping =
                   selectedFamilyChip === "Image"
                     ? {
                         preferredOutputFormat: "square_image" as const,
-                        templateFamilyPreference: null as const,
+                        templateFamilyPreference: null,
                       }
                     : selectedFamilyChip === "Video"
                       ? {
                           preferredOutputFormat: "square_video" as const,
-                          templateFamilyPreference: null as const,
+                          templateFamilyPreference: null,
                         }
                       : selectedFamilyChip === "Text"
                         ? {
                             preferredOutputFormat: "square_text" as const,
-                            templateFamilyPreference: null as const,
+                            templateFamilyPreference: null,
                           }
-                        : selectedFamilyChip === "Slideshow"
+                        : selectedFamilyChip === "Engagement"
                           ? {
-                              preferredOutputFormat: "vertical_slideshow" as const,
-                              templateFamilyPreference: null as const,
+                              preferredOutputFormat: "square_text" as const,
+                              templateFamilyPreference: "engagement_text" as const,
                             }
-                          : selectedFamilyChip === "Engagement"
-                            ? {
-                                preferredOutputFormat: "square_text" as const,
-                                templateFamilyPreference: "engagement_text" as const,
-                              }
-                            : null;
+                          : null;
 
-                const result = await submitHomepagePrompt(
-                  nextPrompt,
-                  familyMapping ?? undefined
-                );
-                setIsSubmittingPrompt(false);
-                if (result.error || !result.workspaceId) {
-                  setPromptError(result.error ?? "Failed to start workspace.");
-                  return;
+                try {
+                  const result = await submitHomepagePrompt(input, {
+                    inputType: mode,
+                    ...(familyMapping ?? {}),
+                  });
+                  if (result.error || !result.workspaceId) {
+                    setPromptError(result.error ?? "Failed to start workspace.");
+                    return;
+                  }
+                  router.push(`/workspace/${result.workspaceId}`);
+                } catch {
+                  setPromptError("Something went wrong. Try again.");
+                } finally {
+                  setIsSubmittingPrompt(false);
                 }
-                router.push(`/workspace/${result.workspaceId}`);
               }}
               className="mx-auto mt-8 w-full max-w-4xl"
             >
@@ -359,15 +390,8 @@ export function HeroSection() {
                       </div>
                     ) : null}
                     <div className="flex flex-wrap gap-2">
-                    {(
-                      [
-                        "Image",
-                        "Video",
-                        "Text",
-                        "Slideshow",
-                        "Engagement",
-                      ] as HomepageFamilyChip[]
-                    ).map((label) => {
+                    {(["Image", "Video", "Text", "Engagement"] as HomepageFamilyChip[]).map(
+                      (label) => {
                       const isActive = selectedFamilyChip === label;
                       const hasAnySelection = selectedFamilyChip !== null;
                       const chipColor =
@@ -401,25 +425,15 @@ export function HeroSection() {
                                   activeText: "text-amber-900",
                                   hoverBg: "hover:bg-amber-50/55",
                                 }
-                              : label === "Slideshow"
-                                ? {
-                                    baseBg: "bg-emerald-50/60",
-                                    baseBorder: "border-emerald-200/70",
-                                    baseText: "text-emerald-800",
-                                    activeBg: "bg-emerald-100",
-                                    activeBorder: "border-emerald-400",
-                                    activeText: "text-emerald-900",
-                                    hoverBg: "hover:bg-emerald-50/50",
-                                  }
-                                : {
-                                    baseBg: "bg-rose-50/60",
-                                    baseBorder: "border-rose-200/70",
-                                    baseText: "text-rose-800",
-                                    activeBg: "bg-rose-100",
-                                    activeBorder: "border-rose-400",
-                                    activeText: "text-rose-900",
-                                    hoverBg: "hover:bg-rose-50/50",
-                                  };
+                              : {
+                                  baseBg: "bg-rose-50/60",
+                                  baseBorder: "border-rose-200/70",
+                                  baseText: "text-rose-800",
+                                  activeBg: "bg-rose-100",
+                                  activeBorder: "border-rose-400",
+                                  activeText: "text-rose-900",
+                                  hoverBg: "hover:bg-rose-50/50",
+                                };
 
                       const tooltipText = chipHoverText[label];
                       return (
@@ -460,41 +474,118 @@ export function HeroSection() {
                     </div>
                   </div>
 
-                  <div className="relative">
-                    <textarea
-                      id="hero-prompt"
-                      value={prompt}
-                      onChange={(event) => {
-                        setPrompt(event.target.value);
-                        if (promptError) setPromptError(null);
-                      }}
-                      onFocus={() => setIsPromptFocused(true)}
-                      onBlur={() => setIsPromptFocused(false)}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter" && !event.shiftKey) {
-                          event.preventDefault();
-                          if (!isSubmittingPrompt) {
-                            promptFormRef.current?.requestSubmit();
-                          }
-                        }
-                      }}
-                      rows={3}
-                      placeholder=""
-                      className="w-full resize-none border-none bg-transparent text-left text-lg leading-relaxed text-stone-900 placeholder:text-stone-500 focus:outline-none"
-                    />
-                    {!prompt.trim() ? (
-                      <span className="pointer-events-none absolute left-0 right-0 top-0 z-0 text-left text-lg leading-relaxed text-stone-500">
-                        {typedPlaceholder}
-                      </span>
-                    ) : null}
+                  <div className="relative grid transition-all duration-200 ease-in-out [&>*]:col-start-1 [&>*]:row-start-1">
+                    <div
+                      className={cn(
+                        "min-w-0 transition-opacity duration-200 ease-in-out",
+                        mode === "prompt"
+                          ? "visible opacity-100"
+                          : "invisible pointer-events-none opacity-0"
+                      )}
+                      aria-hidden={mode !== "prompt"}
+                    >
+                      <div className="relative">
+                        <textarea
+                          id="hero-prompt"
+                          tabIndex={mode === "prompt" ? 0 : -1}
+                          value={promptText}
+                          onChange={(event) => {
+                            setPromptText(event.target.value);
+                            if (promptError) setPromptError(null);
+                          }}
+                          onFocus={() => setIsPromptFocused(true)}
+                          onBlur={() => setIsPromptFocused(false)}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter" && !event.shiftKey) {
+                              event.preventDefault();
+                              if (!isSubmittingPrompt) {
+                                promptFormRef.current?.requestSubmit();
+                              }
+                            }
+                          }}
+                          rows={heroPromptRows}
+                          placeholder=""
+                          className="w-full resize-none border-none bg-transparent text-left text-base leading-[1.4625] text-stone-900 placeholder:text-stone-500 focus:outline-none md:text-lg"
+                        />
+                        {!promptText.trim() ? (
+                          <span className="pointer-events-none absolute left-0 right-0 top-0 z-0 text-left text-base leading-[1.4625] text-stone-500 md:text-lg">
+                            {typedPlaceholder}
+                          </span>
+                        ) : null}
+                      </div>
+                    </div>
+
+                    <div
+                      className={cn(
+                        "min-w-0 transition-opacity duration-200 ease-in-out",
+                        mode === "url"
+                          ? "visible opacity-100"
+                          : "invisible pointer-events-none opacity-0"
+                      )}
+                      aria-hidden={mode !== "url"}
+                    >
+                      <div className="flex flex-col gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setMode("prompt")}
+                          className="w-fit text-xs text-stone-400 transition-colors hover:text-stone-700"
+                        >
+                          ← Back to prompt
+                        </button>
+
+                        <div className="relative">
+                          <Globe
+                            className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-400"
+                            aria-hidden
+                          />
+
+                          <label htmlFor="hero-site-url" className="sr-only">
+                            Website URL
+                          </label>
+
+                          <input
+                            id="hero-site-url"
+                            type="url"
+                            tabIndex={mode === "url" ? 0 : -1}
+                            value={urlValue}
+                            onChange={(e) => {
+                              setUrlValue(e.target.value);
+                              if (promptError) setPromptError(null);
+                            }}
+                            onKeyDown={(event) => {
+                              if (event.key === "Enter") {
+                                event.preventDefault();
+                                if (!isSubmittingPrompt) {
+                                  promptFormRef.current?.requestSubmit();
+                                }
+                              }
+                            }}
+                            placeholder="Paste your website URL..."
+                            className="w-full rounded-lg border border-stone-300 py-3 pr-4 pl-10 focus:outline-none focus:ring-2 focus:ring-black/80"
+                          />
+                        </div>
+                      </div>
+                    </div>
                   </div>
 
-                  <div className="mt-3 flex items-center justify-end gap-3">
+                  <div className="-mx-4 mt-3 flex items-center justify-between gap-3 border-t border-stone-200/70 px-4 pt-3 sm:-mx-5 sm:px-5 sm:pt-3.5">
+                    <div className="min-w-0 flex-1">
+                      {mode === "prompt" ? (
+                        <button
+                          type="button"
+                          onClick={() => setMode("url")}
+                          className="flex items-center gap-2 text-sm text-stone-500 transition-colors hover:text-stone-800"
+                        >
+                          <LinkIcon className="h-4 w-4 shrink-0" aria-hidden />
+                          Build from site
+                        </button>
+                      ) : null}
+                    </div>
                     <button
                       type="submit"
                       disabled={isSubmittingPrompt}
                       aria-label={isSubmittingPrompt ? "Starting workspace" : "Start workspace"}
-                      className="cursor-pointer inline-flex h-11 w-11 items-center justify-center rounded-full bg-stone-900 text-lg font-semibold text-white shadow-sm transition hover:bg-stone-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-stone-200/80 focus-visible:ring-offset-2 focus-visible:ring-offset-white disabled:cursor-not-allowed disabled:opacity-60"
+                      className="cursor-pointer inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-stone-900 text-lg font-semibold text-white shadow-sm transition hover:bg-stone-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-stone-200/80 focus-visible:ring-offset-2 focus-visible:ring-offset-white disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       {isSubmittingPrompt ? "…" : "↑"}
                     </button>

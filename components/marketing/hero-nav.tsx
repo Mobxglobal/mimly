@@ -8,10 +8,6 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 
-const NAV_LINKS = [
-  { href: "/faq", label: "FAQ" },
-];
-
 interface HeroNavProps {
   onFixedChange?: (fixed: boolean) => void;
 }
@@ -132,19 +128,6 @@ export function HeroNav({ onFixedChange }: HeroNavProps) {
           />
         </Link>
 
-        {/* Desktop links */}
-        <div className="absolute left-1/2 hidden -translate-x-1/2 items-center gap-4 sm:flex">
-          {NAV_LINKS.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              className="text-xs font-medium text-stone-600 hover:text-stone-900 transition-colors"
-            >
-              {item.label}
-            </Link>
-          ))}
-        </div>
-
         {/* Desktop CTA */}
         <div className="hidden items-center gap-2 sm:flex">
           {hasSession ? (
@@ -231,22 +214,7 @@ export function HeroNav({ onFixedChange }: HeroNavProps) {
             data-opening={!closing}
             onTransitionEnd={handleMenuTransitionEnd}
           >
-            <div className="flex flex-col gap-1">
-              {NAV_LINKS.map((item, i) => (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  onClick={closeMenu}
-                  className="hero-mobile-link rounded-full px-4 py-2.5 text-sm font-medium text-stone-700 hover:bg-stone-100 active:bg-stone-200/80 transition-colors duration-150"
-                  style={{
-                    animationDelay: closing ? "0ms" : `${60 + i * 45}ms`,
-                  }}
-                >
-                  {item.label}
-                </Link>
-              ))}
-            </div>
-            <div className="mt-3 flex gap-2 border-t border-stone-200/80 pt-3">
+            <div className="flex gap-2">
               {hasSession ? (
                 <>
                   <button

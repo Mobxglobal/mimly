@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   createOrGetShareLinkForWorkspaceOutput,
   updateWorkspaceEngagementOutputStyle,
@@ -39,6 +39,15 @@ function formatDateTime(iso: string | null): string {
     timeZone: "UTC",
   }).format(d);
 }
+
+const URL_GEN_LOADING_STEPS = [
+  "Analysing your website…",
+  "Understanding your business…",
+  "Identifying content opportunities…",
+  "Creating tailored content…",
+] as const;
+
+const URL_GEN_STEP_INTERVAL_MS = 1200;
 
 function slideshowUrlsForOutput(output: WorkspaceOutput): string[] {
   const meta =
@@ -90,6 +99,29 @@ export function OutputPanel({
   const [engagementStyleBusyId, setEngagementStyleBusyId] = useState<
     string | null
   >(null);
+  const [urlGenStepIndex, setUrlGenStepIndex] = useState(0);
+
+  const latestJobMeta =
+    latestJob?.metadata && typeof latestJob.metadata === "object"
+      ? (latestJob.metadata as Record<string, unknown>)
+      : null;
+  const isUrlSourceJob = latestJobMeta?.source === "generate_from_url";
+  const isInitialGeneratingNoOutputs =
+    Boolean(latestJob) &&
+    (latestJob!.status === "queued" || latestJob!.status === "running") &&
+    outputs.length === 0;
+  const isUrlBasedInitialLoad = isInitialGeneratingNoOutputs && isUrlSourceJob;
+
+  useEffect(() => {
+    if (!isUrlBasedInitialLoad) {
+      setUrlGenStepIndex(0);
+      return;
+    }
+    const id = window.setInterval(() => {
+      setUrlGenStepIndex((i) => (i + 1) % URL_GEN_LOADING_STEPS.length);
+    }, URL_GEN_STEP_INTERVAL_MS);
+    return () => clearInterval(id);
+  }, [isUrlBasedInitialLoad]);
 
   async function handleShareOutput(output: WorkspaceOutput) {
     const id = output.id;
@@ -200,12 +232,34 @@ export function OutputPanel({
             <div className="absolute inset-1 rounded-full border border-sky-300/80 bg-white/80" />
             <div className="absolute inset-[14px] rounded-full bg-gradient-to-b from-sky-400 to-indigo-400 opacity-90 animate-pulse" />
           </div>
-          <p className="text-2xl font-semibold tracking-tight text-stone-800">
-            I&apos;m generating some ideas for you.
-          </p>
-          <p className="mt-2 text-stone-500">
-            Once they&apos;re in, we can refine the tone and generate more formats.
-          </p>
+          {isUrlBasedInitialLoad ? (
+            <>
+              <div
+                className="min-h-[4.5rem] sm:min-h-[5rem]"
+                aria-live="polite"
+                aria-atomic="true"
+              >
+                <p
+                  key={urlGenStepIndex}
+                  className="text-2xl font-semibold tracking-tight text-stone-800 motion-safe:animate-[workspaceUrlStepFade_0.35s_ease-out_both]"
+                >
+                  {URL_GEN_LOADING_STEPS[urlGenStepIndex]}
+                </p>
+              </div>
+              <p className="mt-2 text-stone-500">
+                Once they&apos;re in, we can refine the tone and generate more formats.
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="text-2xl font-semibold tracking-tight text-stone-800">
+                I&apos;m generating some ideas for you.
+              </p>
+              <p className="mt-2 text-stone-500">
+                Once they&apos;re in, we can refine the tone and generate more formats.
+              </p>
+            </>
+          )}
         </div>
       </div>
     );

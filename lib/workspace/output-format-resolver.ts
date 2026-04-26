@@ -13,15 +13,6 @@ export function resolveWorkspaceOutputFormat(params: {
 
   if (
     hasAny(withUrlHint, [
-      /\b(slideshow|slides|carousel)\b/,
-      /\b(tiktok\s*slides|instagram\s*carousel)\b/,
-    ])
-  ) {
-    return "vertical_slideshow";
-  }
-
-  if (
-    hasAny(withUrlHint, [
       /\b(video|videos|reel|reels|shorts)\b/,
       /\bmp4\b/,
     ])

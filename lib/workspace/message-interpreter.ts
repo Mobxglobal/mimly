@@ -343,7 +343,6 @@ function isTooAmbiguous(text: string): boolean {
 
 function detectOutputOverride(text: string): MemeOutputFormat | null {
   const l = lower(text);
-  if (hasAny(l, ["slideshow", "carousel", "slides"])) return "vertical_slideshow";
   if (hasAny(l, ["video", "reel", "short"])) return "square_video";
   if (hasAny(l, ["text only", "quote card", "text meme"])) return "square_text";
   if (hasAny(l, ["image", "static meme"])) return "square_image";
@@ -388,11 +387,11 @@ function formatLabel(format: MemeOutputFormat): string {
   if (format === "square_image") return "Image Meme";
   if (format === "square_video") return "Video Meme";
   if (format === "square_text") return "Text Meme";
-  return "Slideshow";
+  return "Image Meme";
 }
 
 function availableFormatsSentence(): string {
-  return "I can help you create: square image memes, square video memes, square text memes, engagement posts, and vertical slideshows.";
+  return "I can help you create: square image memes, square video memes, square text memes, and engagement posts.";
 }
 
 function formatPills(
@@ -403,7 +402,6 @@ function formatPills(
     "square_video",
     "square_text",
     "engagement_post",
-    "vertical_slideshow",
   ];
   const formats = preferred
     ? [preferred, ...ordered.filter((f) => f !== preferred)]
@@ -422,7 +420,7 @@ function formatPills(
             ? "Generate text memes for this idea"
             : format === "engagement_post"
               ? "Turn this idea into an engagement post"
-              : "Turn this idea into a slideshow",
+              : "Turn this idea into an image meme",
     kind: "format",
   }));
 }
@@ -499,7 +497,7 @@ export function interpretWorkspaceMessage(
       confidence: "high",
       explicit_promo_intent: promoDetection.explicitPromoIntent,
       promo_context_excerpt: promoDetection.promoContextExcerpt,
-      suggested_formats: [outputFormat, "square_video", "square_text", "vertical_slideshow"].filter(
+      suggested_formats: [outputFormat, "square_video", "square_text"].filter(
         (v, i, arr): v is MemeOutputFormat => arr.indexOf(v) === i
       ),
       suggested_actions: ["more_ideas", "switch_format"],
@@ -516,7 +514,7 @@ export function interpretWorkspaceMessage(
       intent: "meta_help",
       should_generate: false,
       assistant_response:
-        "Start with image memes — fastest way to test angles. We can turn winners into video, text, engagement posts, or slides after.",
+        "Start with image memes — fastest way to test angles. We can turn winners into video, text, or engagement posts after.",
       prompt_for_generation: null,
       output_format: null,
       variant_count: variantCount,
@@ -525,12 +523,7 @@ export function interpretWorkspaceMessage(
       confidence: "high",
       explicit_promo_intent: promoDetection.explicitPromoIntent,
       promo_context_excerpt: promoDetection.promoContextExcerpt,
-      suggested_formats: [
-        "square_image",
-        "square_video",
-        "square_text",
-        "vertical_slideshow",
-      ],
+      suggested_formats: ["square_image", "square_video", "square_text"],
       suggested_actions: ["more_ideas", "switch_format"],
       ui_pills: formatPills("square_image"),
     };
@@ -541,7 +534,7 @@ export function interpretWorkspaceMessage(
       intent: "context_update",
       should_generate: false,
       assistant_response:
-        "Context locked. Next move: image meme, video meme, text meme, engagement post, or slideshow.",
+        "Context locked. Next move: image meme, video meme, text meme, or engagement post.",
       prompt_for_generation: null,
       output_format: null,
       variant_count: variantCount,
@@ -553,12 +546,7 @@ export function interpretWorkspaceMessage(
       context_patch: {
         noted_user_context: userMessage,
       },
-      suggested_formats: [
-        "square_image",
-        "square_video",
-        "square_text",
-        "vertical_slideshow",
-      ],
+      suggested_formats: ["square_image", "square_video", "square_text"],
       suggested_actions: ["more_ideas", "switch_format"],
       ui_pills: formatPills("square_image"),
     };
@@ -602,7 +590,7 @@ export function interpretWorkspaceMessage(
       confidence: "high",
       explicit_promo_intent: promoDetection.explicitPromoIntent,
       promo_context_excerpt: promoDetection.promoContextExcerpt,
-      suggested_formats: [outputFormat, "square_video", "square_text", "vertical_slideshow"].filter(
+      suggested_formats: [outputFormat, "square_video", "square_text"].filter(
         (v, i, arr): v is MemeOutputFormat => arr.indexOf(v) === i
       ),
       suggested_actions: ["more_ideas", "switch_format"],
@@ -619,7 +607,7 @@ export function interpretWorkspaceMessage(
       intent: "clarify_needed",
       should_generate: false,
       assistant_response:
-        "Before I run this — who is this for, and which format should I start with? I can create square image memes, square video memes, square text memes, engagement posts, or vertical slideshows.",
+        "Before I run this — who is this for, and which format should I start with? I can create square image memes, square video memes, square text memes, and engagement posts.",
       prompt_for_generation: null,
       output_format: null,
       variant_count: variantCount,
@@ -629,12 +617,7 @@ export function interpretWorkspaceMessage(
       confidence: "high",
       explicit_promo_intent: promoDetection.explicitPromoIntent,
       promo_context_excerpt: promoDetection.promoContextExcerpt,
-      suggested_formats: [
-        "square_image",
-        "square_video",
-        "square_text",
-        "vertical_slideshow",
-      ],
+      suggested_formats: ["square_image", "square_video", "square_text"],
       suggested_actions: ["switch_format"],
       ui_pills: formatPills(null),
     };
@@ -672,7 +655,7 @@ export function interpretWorkspaceMessage(
                 ? templateFamilyPreference === "engagement_text"
                   ? "Fresh context noted. Generating an engagement post from this new prompt."
                   : "Fresh context noted. Generating a text meme from this new prompt."
-                : "Fresh context noted. Generating a slideshow from this new prompt."
+                : "Fresh context noted. Generating from this new prompt."
           : topicShiftDetected
           ? outputFormat === "square_image"
             ? "Topic shift noted. Generating for the new topic."
@@ -682,7 +665,7 @@ export function interpretWorkspaceMessage(
                 ? templateFamilyPreference === "engagement_text"
                   ? "Topic shift noted. Generating an engagement post for the new topic."
                   : "Topic shift noted. Generating a text meme for the new topic."
-                : "Topic shift noted. Generating a slideshow for the new topic."
+                : "Topic shift noted. Generating for the new topic."
           : outputFormat === "square_image"
             ? "Strong brief. Generating an image meme."
             : outputFormat === "square_video"
@@ -691,7 +674,7 @@ export function interpretWorkspaceMessage(
                 ? templateFamilyPreference === "engagement_text"
                   ? "Generating an engagement post."
                   : "Generating a text meme."
-                : "Generating a slideshow.",
+                : "Strong brief. Generating an image meme.",
       prompt_for_generation: resolvedPrompt,
       output_format: outputFormat,
       template_family_preference: templateFamilyPreference,
@@ -702,7 +685,7 @@ export function interpretWorkspaceMessage(
       confidence: "medium",
       explicit_promo_intent: promoDetection.explicitPromoIntent,
       promo_context_excerpt: promoDetection.promoContextExcerpt,
-      suggested_formats: [outputFormat, "square_video", "square_text", "vertical_slideshow"].filter(
+      suggested_formats: [outputFormat, "square_video", "square_text"].filter(
         (v, i, arr): v is MemeOutputFormat => arr.indexOf(v) === i
       ),
       suggested_actions: ["more_ideas", "switch_format"],
@@ -724,16 +707,11 @@ export function interpretWorkspaceMessage(
     variant_count: 1,
     relation_to_previous_job: hasReference ? "follow_up" : "none",
     clarification_question:
-      "What format should I start with: image, video, text, engagement, or slideshow?",
+      "What format should I start with: image, video, text, or engagement?",
     confidence: "low",
     explicit_promo_intent: promoDetection.explicitPromoIntent,
     promo_context_excerpt: promoDetection.promoContextExcerpt,
-    suggested_formats: [
-      "square_image",
-      "square_video",
-      "square_text",
-      "vertical_slideshow",
-    ],
+    suggested_formats: ["square_image", "square_video", "square_text"],
     suggested_actions: ["switch_format"],
     ui_pills: formatPills(null),
   };

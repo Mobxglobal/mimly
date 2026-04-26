@@ -22,7 +22,7 @@ export function DashboardHome() {
           <p className="mt-2 text-sm text-stone-400 sm:text-base">
             {isPack
               ? "Generate a batch of posts tailored to your brand, ready to publish."
-              : "Start a new meme or slideshow, or pick up where you left off."}
+              : "Start a new meme set, or pick up where you left off."}
           </p>
         </div>
 

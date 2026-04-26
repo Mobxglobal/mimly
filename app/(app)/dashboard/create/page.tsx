@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowRight, Clapperboard, ImageIcon, Smartphone, Type } from "lucide-react";
+import { ArrowRight, Clapperboard, ImageIcon, Type } from "lucide-react";
 import { DashboardShell } from "@/components/dashboard/dashboard-shell";
 import { useDashboardGenerationMode } from "@/components/dashboard/dashboard-generation-context";
 import { PlatformIconsRow } from "@/components/dashboard/platform-icons-row";
@@ -25,15 +25,6 @@ const FORMAT_OPTIONS = [
     showPlatformIcons: false,
     available: true,
     Icon: Clapperboard,
-  },
-  {
-    id: "vertical_slideshow",
-    label: "Vertical Slideshow",
-    subtitle: "1080×1920",
-    helper: "3–5 PNG slides (curated images)",
-    showPlatformIcons: false,
-    available: true,
-    Icon: Smartphone,
   },
   {
     id: "square_text",
@@ -65,7 +56,7 @@ export default function CreatePage() {
             </h1>
             <p className="mt-2 text-sm text-stone-400">
               {isContentPack
-                ? "We'll create a custom mix of memes and slideshows with caption suggestions, ready for you to post on social media"
+                ? "We'll create a custom mix of memes and posts with caption suggestions, ready for you to post on social media"
                 : "Pick an output format, optionally add a promotion, then generate."}
             </p>
           </div>
@@ -76,12 +67,12 @@ export default function CreatePage() {
                 <div>
                   <p className="text-sm font-medium text-white">Choose format</p>
                   <p className="mt-1 text-xs text-stone-500">
-                    Square Image, Square Video, and Vertical Slideshow are live now.
+                    Square Image, Square Video, and Square Text are live now.
                   </p>
                 </div>
               </div>
 
-              <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {FORMAT_OPTIONS.map((option) => {
                   const isSelected = format === option.id;
                   const isDisabled = !option.available;

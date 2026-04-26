@@ -105,7 +105,6 @@ export function MessageList({
               { label: "Square Video", message: "Create video memes for this idea" },
               { label: "Square Text", message: "Create text memes for this idea" },
               { label: "Engagement post", message: "Create an engagement post for this idea" },
-              { label: "Slideshow", message: "Create a slideshow for this idea" },
             ].map((option) => (
               <button
                 key={option.label}
