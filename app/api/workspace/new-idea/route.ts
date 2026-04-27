@@ -84,9 +84,15 @@ export async function POST(request: Request) {
     body = {};
   }
 
+  const workspaceIdEarly = pickWorkspaceId(body);
+  console.log("[new-idea] request received", {
+    workspaceId: workspaceIdEarly || null,
+    timestamp: Date.now(),
+  });
+
   console.log("[new-idea] raw body:", JSON.stringify(body));
 
-  const workspaceId = pickWorkspaceId(body);
+  const workspaceId = workspaceIdEarly;
   let inputType = inferInputType(body);
   let value = resolveValue(inputType, body);
 

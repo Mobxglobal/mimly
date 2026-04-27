@@ -55,6 +55,8 @@ type HomepageSubmitOptions = {
   templateFamilyPreference?: "engagement_text" | null;
   resetContext?: boolean;
   inputType?: "prompt" | "url";
+  /** Browser session id (sessionStorage); scopes workspace reuse per session. */
+  sessionId?: string | null;
 };
 
 type HomepageIntentOptions = {
@@ -297,12 +299,16 @@ export async function createWorkspaceFromPrompt(
 
   const admin = createWorkspaceAdminClient();
   const nowIso = new Date().toISOString();
+  const sessionId =
+    typeof options?.sessionId === "string" ? options.sessionId.trim() : "";
+
   const { data: workspace, error: workspaceError } = await admin
     .schema("public")
     .from("workspaces")
     .insert({
       user_id: user?.id ?? null,
       anon_token_hash: tokenHash,
+      session_id: sessionId || null,
       initial_prompt: pack.displayText,
       business_url: pack.businessUrl,
       business_summary: pack.displayText,
@@ -423,7 +429,10 @@ async function queueAuthenticatedHomepageFromUrl(
     };
   }
 
-  const workspaceId = await getOrCreateDefaultWorkspaceForUser(userId);
+  const workspaceId = await getOrCreateDefaultWorkspaceForUser(
+    userId,
+    options?.sessionId ?? null
+  );
   const admin = createWorkspaceAdminClient();
 
   const { data: wsRow, error: wsErr } = await admin
@@ -581,7 +590,10 @@ export async function submitHomepagePrompt(
     return queueAuthenticatedHomepageFromUrl(user.id, input, options);
   }
 
-  const workspaceId = await getOrCreateDefaultWorkspaceForUser(user.id);
+  const workspaceId = await getOrCreateDefaultWorkspaceForUser(
+    user.id,
+    options?.sessionId ?? null
+  );
   const sent = await sendWorkspaceMessage(workspaceId, input, {
     preferredOutputFormat: options?.preferredOutputFormat,
     templateFamilyPreference: options?.templateFamilyPreference ?? null,
@@ -594,7 +606,9 @@ export async function submitHomepagePrompt(
   return { workspaceId, error: null };
 }
 
-export async function bootstrapHomepageWorkspace(): Promise<{
+export async function bootstrapHomepageWorkspace(
+  sessionId?: string | null
+): Promise<{
   workspaceId: string | null;
   error: string | null;
   reused: boolean;
@@ -609,34 +623,41 @@ export async function bootstrapHomepageWorkspace(): Promise<{
     data: { user },
   } = await supabase.auth.getUser();
 
+  const sid = typeof sessionId === "string" ? sessionId.trim() : "";
+
   if (user?.id) {
-    const workspaceId = await getOrCreateDefaultWorkspaceForUser(user.id);
+    const workspaceId = await getOrCreateDefaultWorkspaceForUser(user.id, sid || null);
     console.log("[bootstrap] workspace created/reused", {
       workspaceId,
       reused: true,
       actor: "authenticated",
+      sessionId: sid || null,
     });
     return { workspaceId, error: null, reused: true };
   }
 
-  const { data: latestWorkspace } = await admin
-    .schema("public")
-    .from("workspaces")
-    .select("id")
-    .eq("anon_token_hash", tokenHash)
-    .eq("status", "active")
-    .order("updated_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  if (sid) {
+    const { data: sessionWorkspace } = await admin
+      .schema("public")
+      .from("workspaces")
+      .select("id")
+      .eq("anon_token_hash", tokenHash)
+      .eq("session_id", sid)
+      .eq("status", "active")
+      .order("updated_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
 
-  if (latestWorkspace?.id) {
-    const workspaceId = String(latestWorkspace.id);
-    console.log("[bootstrap] workspace created/reused", {
-      workspaceId,
-      reused: true,
-      actor: "anonymous",
-    });
-    return { workspaceId, error: null, reused: true };
+    if (sessionWorkspace?.id) {
+      const workspaceId = String(sessionWorkspace.id);
+      console.log("[bootstrap] workspace created/reused", {
+        workspaceId,
+        reused: true,
+        actor: "anonymous",
+        sessionId: sid,
+      });
+      return { workspaceId, error: null, reused: true };
+    }
   }
 
   const { data: createdWorkspace, error } = await admin
@@ -645,6 +666,7 @@ export async function bootstrapHomepageWorkspace(): Promise<{
     .insert({
       user_id: null,
       anon_token_hash: tokenHash,
+      session_id: sid || null,
       initial_prompt: "",
       business_url: null,
       business_summary: "",
@@ -671,6 +693,7 @@ export async function bootstrapHomepageWorkspace(): Promise<{
     workspaceId,
     reused: false,
     actor: "anonymous",
+    sessionId: sid || null,
   });
   return { workspaceId, error: null, reused: false };
 }

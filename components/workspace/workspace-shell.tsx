@@ -50,7 +50,7 @@ export function WorkspaceShell({
   const processedCompletedJobIdsRef = useRef<Set<string>>(new Set());
   const bootedQueuedStart = useRef(false);
   const homepageIntentProcessedRef = useRef(false);
-  const clientGenerationKickoffRef = useRef(false);
+  const hasTriggeredRef = useRef(false);
 
   const latestJob = state.latestJob;
   const isJobActive =
@@ -67,15 +67,16 @@ export function WorkspaceShell({
   }, [latestJob?.status, latestJob?.id, workspaceId]);
 
   useEffect(() => {
-    clientGenerationKickoffRef.current = false;
+    hasTriggeredRef.current = false;
   }, [workspaceId]);
 
   useEffect(() => {
     if (!workspaceId) return;
-    if (clientGenerationKickoffRef.current) return;
+    if (hasTriggeredRef.current) return;
     if (typeof window === "undefined") return;
-    if (latestJob?.status === "queued" || latestJob?.status === "running") {
-      clientGenerationKickoffRef.current = true;
+
+    if (latestJob?.status === "running") {
+      console.log("[workspace] skipping generation — job already running");
       return;
     }
 
@@ -86,7 +87,7 @@ export function WorkspaceShell({
         const v =
           parsed?.value != null ? String(parsed.value).trim() : "";
         if (v) {
-          clientGenerationKickoffRef.current = true;
+          hasTriggeredRef.current = true;
           return;
         }
       } catch {
@@ -94,8 +95,11 @@ export function WorkspaceShell({
       }
     }
 
-    clientGenerationKickoffRef.current = true;
-    console.log("[workspace] triggering generation");
+    hasTriggeredRef.current = true;
+    console.log("[workspace] triggering generation", {
+      workspaceId,
+      latestJobStatus: latestJob?.status ?? null,
+    });
     void fetch("/api/workspace/new-idea", {
       method: "POST",
       headers: {
@@ -118,7 +122,7 @@ export function WorkspaceShell({
       .catch((err) => {
         console.error("[workspace] generation error:", err);
       });
-  }, [workspaceId, latestJob?.status, latestJob?.id]);
+  }, [workspaceId, latestJob?.status]);
 
   useEffect(() => {
     if (homepageIntentProcessedRef.current) return;

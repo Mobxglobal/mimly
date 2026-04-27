@@ -2,15 +2,27 @@ import { createWorkspaceAdminClient } from "@/lib/workspace/auth";
 
 const DEFAULT_WORKSPACE_PROMPT = "Help me create memes for my business.";
 
-export async function getOrCreateDefaultWorkspaceForUser(userId: string): Promise<string> {
+export async function getOrCreateDefaultWorkspaceForUser(
+  userId: string,
+  sessionId?: string | null
+): Promise<string> {
   const admin = createWorkspaceAdminClient();
+  const sid = typeof sessionId === "string" ? sessionId.trim() : "";
 
-  const { data: existing } = await admin
+  let existingQuery = admin
     .schema("public")
     .from("workspaces")
     .select("id")
     .eq("user_id", userId)
-    .eq("status", "active")
+    .eq("status", "active");
+
+  if (sid) {
+    existingQuery = existingQuery.eq("session_id", sid);
+  } else {
+    existingQuery = existingQuery.is("session_id", null);
+  }
+
+  const { data: existing } = await existingQuery
     .order("last_message_at", { ascending: false, nullsFirst: false })
     .order("created_at", { ascending: false })
     .limit(1)
@@ -25,6 +37,7 @@ export async function getOrCreateDefaultWorkspaceForUser(userId: string): Promis
     .insert({
       user_id: userId,
       anon_token_hash: null,
+      session_id: sid || null,
       initial_prompt: DEFAULT_WORKSPACE_PROMPT,
       business_summary: DEFAULT_WORKSPACE_PROMPT,
       detected_content_type: "meme",

@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { FramedSection } from "./framed-section";
 import { HeroNav } from "./hero-nav";
 import { HERO_BACKGROUND_IMAGE_SRC } from "@/lib/marketing/hero-background";
+import { getOrCreateSessionId } from "@/lib/session/client-session";
 
 const COUNT_START = 24;
 const COUNT_DURATION_MS = 2500;
@@ -345,10 +346,14 @@ export function HeroSection() {
                     });
                   }
 
+                  const sessionId = getOrCreateSessionId();
+                  console.log("[session] id:", sessionId);
+
                   const bootstrapRes = await fetch("/api/workspace/bootstrap", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     credentials: "same-origin",
+                    body: JSON.stringify({ session_id: sessionId }),
                   });
                   const bootstrapData = (await bootstrapRes.json().catch(() => ({}))) as {
                     workspaceId?: string;
