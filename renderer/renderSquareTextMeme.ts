@@ -3,7 +3,7 @@ import { wrapSquareTextMemeLines } from "@/renderer/caption-wrap";
 import { measureSquareTextLineWidthPx } from "@/renderer/square-text-measure";
 import {
   getSvgDocumentFontStyleBlock,
-  SVG_SAFE_FONT_STACK,
+  SHARP_SVG_FONT_FAMILY,
 } from "@/lib/rendering/fonts";
 import {
   resolveEngagementTheme,
@@ -206,12 +206,12 @@ function buildSquareTextDebugGuidesSvg(layoutRows: TextLineLayoutRow[]): string 
   ${vertical(multiX, "#2563eb", "5 5", 1.5)}
   ${vertical(cx, "#c026d3", "10 8", 2)}
   ${rowGuides}
-  <text x="${safeL + 4}" y="28" fill="#7c3aed" font-size="18" font-family="${SVG_SAFE_FONT_STACK}">DEBUG square_text guides: red=safe verticals (96/984), blue dashed=multi-line anchor (112), magenta=center (540), orange=top/bottom margin (96), cyan=baseline, blue fill=row band</text>
+  <text x="${safeL + 4}" y="28" fill="#7c3aed" font-size="18" font-family="${SHARP_SVG_FONT_FAMILY}">DEBUG square_text guides: red=safe verticals (96/984), blue dashed=multi-line anchor (112), magenta=center (540), orange=top/bottom margin (96), cyan=baseline, blue fill=row band</text>
 </g>`.trim();
 }
 
 /**
- * Plain 1080×1080 PNG: white background, Inter; wide wrap + phrase scoring; single line
+ * Plain 1080×1080 PNG: white background, generic sans-serif (Sharp); wide wrap + phrase scoring; single line
  * centered, multi-line left-aligned in the full margin band.
  *
  * @param params.debug — TEMPORARY: draws calibration guides (safe margins, center, baselines).
@@ -279,7 +279,7 @@ export async function renderSquareTextMemePng(params: {
     .caption {
       fill: ${theme.textPrimary};
       font-size: ${FONT_SIZE}px;
-      font-family: Arial, Helvetica, sans-serif;
+      font-family: sans-serif;
     }
   </style>
   ${textElements.join("\n")}

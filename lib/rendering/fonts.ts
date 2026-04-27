@@ -1,13 +1,13 @@
 import path from "path";
 
 let canvasGuardDone = false;
-let renderFontStackLogDone = false;
+let renderSharpFontLogDone = false;
 
 /**
- * Stack for Sharp/librsvg SVG text: Arial is often missing on Linux/serverless;
- * Helvetica and generic sans-serif give Pango usable fallbacks.
+ * Generic family for Sharp/librsvg SVG text — avoids named faces (Arial, Helvetica, Inter)
+ * that may be missing or mis-resolve on serverless; fontconfig maps `sans-serif` to a real face.
  */
-export const SVG_SAFE_FONT_STACK = "Arial, Helvetica, sans-serif";
+export const SHARP_SVG_FONT_FAMILY = "sans-serif";
 
 /**
  * One-time check: if `canvas` is not resolvable (typical on Vercel), log SVG-only path.
@@ -29,13 +29,13 @@ export function warnCanvasUnavailableOnce() {
  * Logs once per process on first injection.
  */
 export function getSvgDocumentFontStyleBlock(): string {
-  if (!renderFontStackLogDone) {
-    renderFontStackLogDone = true;
-    console.log("[render] using font stack: Arial, Helvetica, sans-serif");
+  if (!renderSharpFontLogDone) {
+    renderSharpFontLogDone = true;
+    console.log("[render] using font: sans-serif");
   }
   return `<style type="text/css"><![CDATA[
 text {
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: sans-serif;
 }
 ]]></style>`;
 }

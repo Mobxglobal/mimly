@@ -1,4 +1,4 @@
-import { SVG_SAFE_FONT_STACK } from "@/lib/rendering/fonts";
+import { SHARP_SVG_FONT_FAMILY } from "@/lib/rendering/fonts";
 import { measureLineWidthPx, measureSquareTextLineWidthPx } from "@/renderer/square-text-measure";
 
 export const SOFT_WRAP_RATIO = 0.84;
@@ -136,7 +136,7 @@ function estimateTopCaptionWidthPx(
     fontSize,
     fontFamily && String(fontFamily).trim()
       ? String(fontFamily)
-      : SVG_SAFE_FONT_STACK
+      : SHARP_SVG_FONT_FAMILY
   );
 }
 

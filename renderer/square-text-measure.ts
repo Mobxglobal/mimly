@@ -1,6 +1,6 @@
 /**
- * Text width estimates for wrapping (no node-canvas). Ratios tuned for Arial-like sans metrics
- * used in Sharp-rasterized SVG (`Arial, Helvetica, sans-serif`).
+ * Text width estimates for wrapping (no node-canvas). Ratios tuned for generic sans metrics
+ * used in Sharp-rasterized SVG (`font-family: sans-serif`).
  */
 import { warnCanvasUnavailableOnce } from "@/lib/rendering/fonts";
 

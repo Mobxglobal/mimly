@@ -2,7 +2,7 @@ import sharp from "sharp";
 import { measureLineWidthPx } from "@/renderer/square-text-measure";
 import {
   getSvgDocumentFontStyleBlock,
-  SVG_SAFE_FONT_STACK,
+  SHARP_SVG_FONT_FAMILY,
 } from "@/lib/rendering/fonts";
 import type { MemeTemplateForRender } from "@/renderer/renderMemeTemplate";
 import {
@@ -23,7 +23,7 @@ function escapeXML(str: string) {
 }
 
 function normalizeFontFamily(): string {
-  return SVG_SAFE_FONT_STACK;
+  return SHARP_SVG_FONT_FAMILY;
 }
 
 function wrapTextToLines(

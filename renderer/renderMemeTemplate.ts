@@ -6,7 +6,7 @@ import { wrapCaptionWithSoftEarlySplit, wrapSquareTopCaptionScoped } from "@/ren
 import { normalizeNobodyMeSetupSlots } from "@/lib/memes/normalize-nobody-me-setup-slots";
 import {
   getSvgDocumentFontStyleBlock,
-  SVG_SAFE_FONT_STACK,
+  SHARP_SVG_FONT_FAMILY,
 } from "@/lib/rendering/fonts";
 
 export type MemeTemplateForRender = {
@@ -217,7 +217,7 @@ function buildSVG(template: MemeTemplateForRender, slotTexts: SlotTexts) {
   const textColor = template.text_color || "#000000";
   const strokeColor = template.stroke_color || "";
   const strokeWidth = template.stroke_width || 0;
-  const fontFamily = SVG_SAFE_FONT_STACK;
+  const fontFamily = SHARP_SVG_FONT_FAMILY;
 
   const style = {
     fontSize,

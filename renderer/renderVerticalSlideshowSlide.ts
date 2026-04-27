@@ -30,7 +30,7 @@ export type VerticalSlideshowRenderStyle = {
   layout_b_max_lines: number;
   font_size_layout_a: number;
   font_size_layout_b: number;
-  /** Kept for template config compatibility; Sharp SVG text uses the global safe sans stack. */
+  /** Kept for template config compatibility; Sharp SVG text uses generic `sans-serif` only. */
   font_family: string;
   text_color: string;
   stroke_color: string;
@@ -135,7 +135,7 @@ function buildTextSvg(
     .cap {
       fill: ${style.text_color};
       font-size: ${fontSize}px;
-      font-family: Arial, Helvetica, sans-serif;
+      font-family: sans-serif;
       font-weight: normal;
     }
   </style>

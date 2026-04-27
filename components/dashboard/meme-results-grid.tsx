@@ -170,9 +170,9 @@ function getDownloadHref(
       </defs>
       <rect width="1080" height="1080" rx="44" fill="url(#bg)" />
       <rect x="40" y="40" width="1000" height="1000" rx="32" fill="#020617" stroke="#334155" />
-      <text x="540" y="146" text-anchor="middle" fill="#f8fafc" font-family="Arial, Helvetica, sans-serif" font-size="48" font-weight="700">${top}</text>
-      <text x="540" y="944" text-anchor="middle" fill="#e2e8f0" font-family="Arial, Helvetica, sans-serif" font-size="42" font-weight="700">${bottom}</text>
-      <text x="540" y="540" text-anchor="middle" fill="#64748b" font-family="Arial, Helvetica, sans-serif" font-size="36">${safeTitle}</text>
+      <text x="540" y="146" text-anchor="middle" fill="#f8fafc" font-family="sans-serif" font-size="48" font-weight="700">${top}</text>
+      <text x="540" y="944" text-anchor="middle" fill="#e2e8f0" font-family="sans-serif" font-size="42" font-weight="700">${bottom}</text>
+      <text x="540" y="540" text-anchor="middle" fill="#64748b" font-family="sans-serif" font-size="36">${safeTitle}</text>
     </svg>
   `;
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
