@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
-import { processWorkspaceHomepageIntent } from "@/lib/actions/workspace";
+import {
+  getImplicitNewIdeaText,
+  processWorkspaceHomepageIntent,
+} from "@/lib/actions/workspace";
 
 type HomepageIntentBody = {
   preferredOutputFormat?:
@@ -84,8 +87,23 @@ export async function POST(request: Request) {
   console.log("[new-idea] raw body:", JSON.stringify(body));
 
   const workspaceId = pickWorkspaceId(body);
-  const inputType = inferInputType(body);
-  const value = resolveValue(inputType, body);
+  let inputType = inferInputType(body);
+  let value = resolveValue(inputType, body);
+
+  const promptFromBody =
+    (typeof body.prompt === "string" && body.prompt) ||
+    (typeof body.input === "string" && body.input) ||
+    (typeof body.text === "string" && body.text) ||
+    (typeof body.message === "string" && body.message) ||
+    (typeof body.value === "string" && body.value) ||
+    "";
+
+  if (!value && promptFromBody.trim()) {
+    value = promptFromBody.trim();
+    if (inputType !== "url" && /^https?:\/\//i.test(value)) {
+      inputType = "url";
+    }
+  }
 
   const options: HomepageIntentBody = {
     preferredOutputFormat:
@@ -100,16 +118,6 @@ export async function POST(request: Request) {
           : undefined,
   };
 
-  console.log("[new-idea] parsed:", {
-    workspaceId: workspaceId || "(empty)",
-    inputType,
-    valueLength: value.length,
-    valuePreview: value.slice(0, 120),
-    preferredOutputFormat: options.preferredOutputFormat ?? null,
-    templateFamilyPreference: options.templateFamilyPreference ?? null,
-    contentType: request.headers.get("content-type"),
-  });
-
   if (!workspaceId) {
     console.error("[new-idea] 400: missing workspaceId", {
       reason: "workspaceId/workspace_id/id missing or empty after trim",
@@ -120,10 +128,38 @@ export async function POST(request: Request) {
   }
 
   if (!value) {
+    const implicit = await getImplicitNewIdeaText(workspaceId);
+    if (implicit.error) {
+      console.error("[new-idea] 400: implicit workspace text failed", {
+        reason: implicit.error,
+        body,
+        workspaceId,
+      });
+      return NextResponse.json({ error: implicit.error }, { status: 400 });
+    }
+    if (implicit.text?.trim()) {
+      const t = implicit.text.trim();
+      value = t;
+      inputType = /^https?:\/\//i.test(t) ? "url" : "prompt";
+    }
+  }
+
+  console.log("[new-idea] parsed:", {
+    workspaceId: workspaceId || "(empty)",
+    inputType,
+    promptFromBodyPreview: String(promptFromBody).slice(0, 120),
+    valueLength: value.length,
+    valuePreview: value.slice(0, 120),
+    preferredOutputFormat: options.preferredOutputFormat ?? null,
+    templateFamilyPreference: options.templateFamilyPreference ?? null,
+    contentType: request.headers.get("content-type"),
+  });
+
+  if (!value) {
     const fieldHint =
       inputType === "url"
         ? "url (or website/link/href, or prompt/input/text/value as fallback)"
-        : "prompt (or input/text/message/value)";
+        : "prompt (or input/text/message/value), or workspace initial_prompt/business_summary/business_url";
     console.error("[new-idea] 400: missing content value", {
       reason: `no non-empty string found for ${fieldHint}`,
       body,

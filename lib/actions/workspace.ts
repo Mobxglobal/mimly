@@ -13,6 +13,7 @@ import {
   buildWorkspaceGenerationPlan,
   enqueueGenerationJob,
   runGenerationJob,
+  expireStaleGenerationJobs,
 } from "@/lib/actions/workspace-generation";
 import { resolveWorkspaceOutputFormat } from "@/lib/workspace/output-format-resolver";
 import { interpretWorkspaceMessage } from "@/lib/workspace/message-interpreter";
@@ -674,16 +675,37 @@ export async function bootstrapHomepageWorkspace(): Promise<{
   return { workspaceId, error: null, reused: false };
 }
 
+/** First non-empty workspace field for implicit /api/workspace/new-idea kickoff (no body text). */
+export async function getImplicitNewIdeaText(
+  workspaceId: string
+): Promise<{ text: string | null; error: string | null }> {
+  const loaded = await loadAccessibleWorkspace(workspaceId);
+  if (!loaded.workspace || !loaded.admin) {
+    return { text: null, error: loaded.error ?? "Workspace not found." };
+  }
+  const w = loaded.workspace as Record<string, unknown>;
+  const candidates = [
+    String(w.initial_prompt ?? "").trim(),
+    String(w.business_summary ?? "").trim(),
+    String(w.business_url ?? "").trim(),
+  ].filter(Boolean);
+  return { text: candidates[0] ?? null, error: null };
+}
+
 export async function processWorkspaceHomepageIntent(
   workspaceId: string,
   inputType: "prompt" | "url",
   value: string,
   options?: HomepageIntentOptions
 ): Promise<{ error: string | null }> {
+  console.log("[intent] starting generation", { workspaceId, inputType });
   console.log("[workspace] processing intent", {
     workspaceId,
     inputType,
   });
+
+  const sweepAdmin = createWorkspaceAdminClient();
+  await expireStaleGenerationJobs(sweepAdmin, workspaceId);
 
   if (inputType === "prompt") {
     const sent = await sendWorkspaceMessage(workspaceId, value, {
@@ -746,28 +768,39 @@ export async function processWorkspaceHomepageIntent(
     currentUserId?: string | null;
   };
 
-  const { data: activeJob } = await admin
+  const { data: existingJob } = await admin
     .schema("public")
     .from("generation_jobs")
-    .select("id")
+    .select("id, status, created_at")
     .eq("workspace_id", workspaceId)
-    .in("status", ["queued", "running"])
+    .eq("status", "running")
+    .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
 
-  if (activeJob?.id) {
-    const reason =
-      "A generation is already in progress. Wait for it to finish.";
+  const isRunning = existingJob?.status === "running";
+  const createdAtMs = existingJob?.created_at
+    ? new Date(String(existingJob.created_at)).getTime()
+    : 0;
+  const isStale =
+    Boolean(existingJob) && Date.now() - createdAtMs > 60_000;
+
+  if (isRunning && !isStale) {
+    console.warn("[intent] blocking due to active running job");
     console.error("[intent] failure:", {
-      reason,
+      reason: "A generation job is already running",
       context: {
         workspaceId,
         inputType: "url" as const,
         valuePreview: value.slice(0, 120),
-        activeJobId: activeJob.id,
+        activeJobId: existingJob?.id ?? null,
       },
     });
-    return { error: reason };
+    return { error: "A generation job is already running" };
+  }
+
+  if (isStale && existingJob) {
+    console.warn("[intent] stale job detected, ignoring");
   }
 
   await persistWorkspaceBusinessProfile(

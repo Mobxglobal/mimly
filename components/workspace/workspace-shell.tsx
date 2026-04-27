@@ -50,6 +50,7 @@ export function WorkspaceShell({
   const processedCompletedJobIdsRef = useRef<Set<string>>(new Set());
   const bootedQueuedStart = useRef(false);
   const homepageIntentProcessedRef = useRef(false);
+  const clientGenerationKickoffRef = useRef(false);
 
   const latestJob = state.latestJob;
   const isJobActive =
@@ -64,6 +65,60 @@ export function WorkspaceShell({
     bootedQueuedStart.current = true;
     void startGenerationIfQueued(workspaceId);
   }, [latestJob?.status, latestJob?.id, workspaceId]);
+
+  useEffect(() => {
+    clientGenerationKickoffRef.current = false;
+  }, [workspaceId]);
+
+  useEffect(() => {
+    if (!workspaceId) return;
+    if (clientGenerationKickoffRef.current) return;
+    if (typeof window === "undefined") return;
+    if (latestJob?.status === "queued" || latestJob?.status === "running") {
+      clientGenerationKickoffRef.current = true;
+      return;
+    }
+
+    const rawIntent = window.sessionStorage.getItem("homepage-workspace-intent");
+    if (rawIntent) {
+      try {
+        const parsed = JSON.parse(rawIntent) as { value?: unknown };
+        const v =
+          parsed?.value != null ? String(parsed.value).trim() : "";
+        if (v) {
+          clientGenerationKickoffRef.current = true;
+          return;
+        }
+      } catch {
+        /* fall through to POST /new-idea */
+      }
+    }
+
+    clientGenerationKickoffRef.current = true;
+    console.log("[workspace] triggering generation");
+    void fetch("/api/workspace/new-idea", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      credentials: "same-origin",
+      body: JSON.stringify({ workspaceId }),
+    })
+      .then(async (res) => {
+        const data = (await res.json().catch(() => ({}))) as Record<
+          string,
+          unknown
+        >;
+        console.log("[workspace] generation response:", { ok: res.ok, data });
+        if (res.ok) {
+          const next = await getWorkspaceState(workspaceId);
+          if (!next.error && next.state) setState(next.state);
+        }
+      })
+      .catch((err) => {
+        console.error("[workspace] generation error:", err);
+      });
+  }, [workspaceId, latestJob?.status, latestJob?.id]);
 
   useEffect(() => {
     if (homepageIntentProcessedRef.current) return;

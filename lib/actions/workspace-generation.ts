@@ -128,6 +128,31 @@ function coerceOutputFormat(
     : "square_image";
 }
 
+const STALE_GENERATION_JOB_MS = 60_000;
+
+/** Marks queued/running jobs older than STALE_GENERATION_JOB_MS as failed so they do not block new work. */
+export async function expireStaleGenerationJobs(
+  admin: ReturnType<typeof createWorkspaceAdminClient>,
+  workspaceId: string
+): Promise<void> {
+  const cutoffIso = new Date(Date.now() - STALE_GENERATION_JOB_MS).toISOString();
+  const { error } = await admin
+    .schema("public")
+    .from("generation_jobs")
+    .update({
+      status: "failed",
+      error_message: "Stale job cleared (exceeded inactivity window).",
+      completed_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("workspace_id", workspaceId)
+    .in("status", ["queued", "running"])
+    .lt("created_at", cutoffIso);
+  if (error) {
+    console.warn("[workspace-gen] expireStaleGenerationJobs:", error.message);
+  }
+}
+
 export async function enqueueGenerationJob(params: {
   workspaceId: string;
   prompt: string;
@@ -153,15 +178,17 @@ export async function enqueueGenerationJob(params: {
 
   console.log("JOB METADATA", { workspaceId, prompt: normalizedPrompt, metadata });
 
-  const { data: existing } = await admin
+  await expireStaleGenerationJobs(admin, workspaceId);
+
+  const { data: runningExisting } = await admin
     .schema("public")
     .from("generation_jobs")
     .select("id")
     .eq("workspace_id", workspaceId)
-    .in("status", ["queued", "running"])
+    .eq("status", "running")
     .limit(1);
-  if ((existing ?? []).length > 0) {
-    return { jobId: null, error: "A generation is already in progress." };
+  if ((runningExisting ?? []).length > 0) {
+    return { jobId: null, error: "A generation job is already running." };
   }
 
   const { data, error } = await admin
