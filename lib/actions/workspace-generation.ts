@@ -191,6 +191,20 @@ export async function enqueueGenerationJob(params: {
     return { jobId: null, error: "A generation job is already running." };
   }
 
+  const { data: workspaceRow } = await admin
+    .schema("public")
+    .from("workspaces")
+    .select("session_id")
+    .eq("id", workspaceId)
+    .maybeSingle();
+
+  const sessionIdFromWorkspace =
+    workspaceRow &&
+    typeof (workspaceRow as { session_id?: unknown }).session_id === "string"
+      ? String((workspaceRow as { session_id: string }).session_id).trim() ||
+        null
+      : null;
+
   const { data, error } = await admin
     .schema("public")
     .from("generation_jobs")
@@ -203,10 +217,15 @@ export async function enqueueGenerationJob(params: {
       output_format: outputFormat,
       requested_variant_count: requestedVariantCount,
       metadata,
+      session_id: sessionIdFromWorkspace,
       updated_at: new Date().toISOString(),
     })
     .select("id")
     .single();
+
+  if (!error && data) {
+    console.log("[jobs] session_id on job:", sessionIdFromWorkspace);
+  }
 
   if (error || !data) {
     if (error?.code === "23505") {

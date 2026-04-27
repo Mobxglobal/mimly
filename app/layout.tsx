@@ -1,5 +1,6 @@
 import "./globals.css";
 import type { Metadata } from "next";
+import Script from "next/script";
 import { Courier_Prime, Instrument_Serif, Inter } from "next/font/google";
 
 const instrumentSerif = Instrument_Serif({
@@ -62,7 +63,15 @@ export default function RootLayout({
       lang="en"
       className={`${instrumentSerif.variable} ${inter.variable} ${courierPrime.variable}`}
     >
-      <body>{children}</body>
+      <body>
+        {children}
+        <Script
+          src="https://datafa.st/js/script.js"
+          data-website-id="dfid_MLsJuIcgt9yQcSLYliDEJ"
+          data-domain="mimly.co"
+          strategy="afterInteractive"
+        />
+      </body>
     </html>
   );
 }

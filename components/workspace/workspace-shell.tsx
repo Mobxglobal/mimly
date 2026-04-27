@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
+import { useRouter } from "next/navigation";
+import { createClient } from "@/lib/supabase/client";
 import {
   deleteWorkspaceOutput,
   getWorkspaceState,
@@ -26,8 +28,11 @@ export function WorkspaceShell({
   workspaceId: string;
   initialState: WorkspaceState;
 }) {
+  const router = useRouter();
   const [state, setState] = useState<WorkspaceState>(initialState);
   const [error, setError] = useState<string | null>(null);
+  /** Latest generation_jobs.status from Supabase Realtime (may lead server state briefly). */
+  const [jobStatus, setJobStatus] = useState<string | null>(null);
   /** "thread" = normal send box; "new_idea" = same dock, replace context (prompt or URL). */
   const [chatInputMode, setChatInputMode] = useState<"thread" | "new_idea">("thread");
   const [newIdeaMode, setNewIdeaMode] = useState<"prompt" | "url">("prompt");
@@ -53,8 +58,9 @@ export function WorkspaceShell({
   const hasTriggeredRef = useRef(false);
 
   const latestJob = state.latestJob;
+  const effectiveJobStatus = jobStatus ?? latestJob?.status ?? null;
   const isJobActive =
-    latestJob?.status === "queued" || latestJob?.status === "running";
+    effectiveJobStatus === "queued" || effectiveJobStatus === "running";
 
   useEffect(() => {
     if (latestJob?.status !== "queued") {
@@ -69,6 +75,74 @@ export function WorkspaceShell({
   useEffect(() => {
     hasTriggeredRef.current = false;
   }, [workspaceId]);
+
+  useEffect(() => {
+    setJobStatus(null);
+  }, [workspaceId]);
+
+  useEffect(() => {
+    if (jobStatus && latestJob?.status === jobStatus) {
+      setJobStatus(null);
+    }
+  }, [latestJob?.status, jobStatus]);
+
+  useEffect(() => {
+    if (!workspaceId) return;
+
+    console.log("[realtime] subscribing to workspace:", workspaceId);
+
+    const supabase = createClient();
+    const channel = supabase
+      .channel(`workspace-${workspaceId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "generation_jobs",
+          filter: `workspace_id=eq.${workspaceId}`,
+        },
+        (payload) => {
+          console.log("[realtime] job update:", payload);
+          const row = (payload.new ?? payload.old) as { status?: string } | null;
+          const newStatus = row?.status;
+          if (typeof newStatus !== "string") return;
+
+          setJobStatus(newStatus);
+
+          if (newStatus === "completed") {
+            console.log("[realtime] job completed — refreshing workspace");
+            void getWorkspaceState(workspaceId).then((next) => {
+              if (!next.error && next.state) setState(next.state);
+            });
+            router.refresh();
+            setJobStatus(null);
+            return;
+          }
+
+          if (newStatus === "failed") {
+            console.warn("[realtime] job failed");
+            void getWorkspaceState(workspaceId).then((next) => {
+              if (!next.error && next.state) setState(next.state);
+            });
+            router.refresh();
+            setJobStatus(null);
+          }
+        }
+      )
+      .subscribe((status, err) => {
+        if (status === "SUBSCRIBED") {
+          console.log("[realtime] subscribed to workspace:", workspaceId);
+        }
+        if (err) {
+          console.warn("[realtime] subscribe error:", err);
+        }
+      });
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [workspaceId, router]);
 
   useEffect(() => {
     if (!workspaceId) return;
@@ -263,7 +337,7 @@ export function WorkspaceShell({
     return "border-stone-200 bg-stone-100 text-stone-600";
   }, [state.workspace.current_plan]);
 
-  const statusLabel = latestJob?.status ?? "idle";
+  const statusLabel = effectiveJobStatus ?? "idle";
   const isAuthLocked = state.workspace.gate_state === "anonymous_blocked";
   const isPlanLocked = state.workspace.gate_state === "authenticated_plan_required";
   const displayStatusLabel =
@@ -506,7 +580,13 @@ export function WorkspaceShell({
                       style={{ animationDelay: "360ms" }}
                     />
                   </div>
-                  <span>Working on this now...</span>
+                  <span>
+                    {effectiveJobStatus === "queued"
+                      ? "Getting things ready…"
+                      : effectiveJobStatus === "running"
+                        ? "Generating your meme…"
+                        : "Working on this now…"}
+                  </span>
                 </div>
               </div>
             ) : null}
