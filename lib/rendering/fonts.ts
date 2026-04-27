@@ -1,21 +1,26 @@
 import fs from "fs";
 import path from "path";
 
-let fontsRegistered = false;
 let svgFontFaceBlock: string | null = null;
+let canvasGuardDone = false;
 
-/** Avoid top-level `import "canvas"` so Next can analyze routes without loading native bindings. */
-function getRegisterFont(): (
-  src: string,
-  options: { family: string; weight?: string }
-) => void {
-  const dynamicRequire = eval("require") as (id: string) => {
-    registerFont: (src: string, options: { family: string; weight?: string }) => void;
-  };
-  return dynamicRequire("canvas").registerFont;
+/**
+ * One-time check: if `canvas` is not resolvable (typical on Vercel), log SVG-only path.
+ * Uses `require.resolve` only — does not load native bindings.
+ */
+export function warnCanvasUnavailableOnce() {
+  if (canvasGuardDone) return;
+  canvasGuardDone = true;
+  try {
+    const req = (0, eval)("require") as { resolve: (id: string) => string };
+    req.resolve("canvas");
+  } catch {
+    console.warn("[render] canvas not available — using SVG fallback");
+  }
 }
 
 export function getInterSvgFontFaceBlock(): string {
+  warnCanvasUnavailableOnce();
   if (svgFontFaceBlock) return svgFontFaceBlock;
   const regularPath = path.join(process.cwd(), "public", "fonts", "Inter-Regular.ttf");
   const boldPath = path.join(process.cwd(), "public", "fonts", "Inter-Bold.ttf");
@@ -26,26 +31,6 @@ export function getInterSvgFontFaceBlock(): string {
 @font-face{font-family:Inter;font-style:normal;font-weight:700;font-display:block;src:url(data:font/ttf;base64,${boldB64}) format("truetype");}
 ]]></style>`;
   return svgFontFaceBlock;
-}
-
-export function ensureFontsRegistered() {
-  if (fontsRegistered) return;
-
-  try {
-    const registerFont = getRegisterFont();
-    const regularPath = path.join(process.cwd(), "public", "fonts", "Inter-Regular.ttf");
-    const boldPath = path.join(process.cwd(), "public", "fonts", "Inter-Bold.ttf");
-
-    registerFont(regularPath, { family: "Inter", weight: "normal" });
-    registerFont(boldPath, { family: "Inter", weight: "bold" });
-
-    console.log("[fonts] registered Inter-Regular and Inter-Bold");
-
-    fontsRegistered = true;
-  } catch (err) {
-    console.error("[fonts] failed to register font:", err);
-    throw err;
-  }
 }
 
 /** Absolute path to bundled bold TTF (e.g. ffmpeg `fontfile`). */

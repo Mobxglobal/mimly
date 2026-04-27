@@ -1,9 +1,6 @@
 import sharp from "sharp";
 import { measureLineWidthPx } from "@/renderer/square-text-measure";
-import {
-  ensureFontsRegistered,
-  getInterSvgFontFaceBlock,
-} from "@/lib/rendering/fonts";
+import { getInterSvgFontFaceBlock } from "@/lib/rendering/fonts";
 import type { MemeTemplateForRender } from "@/renderer/renderMemeTemplate";
 import {
   resolveEngagementTheme,
@@ -806,7 +803,6 @@ async function renderBirthdayNamesListLayout(
 export async function renderEngagementTextMemePng(
   params: RenderEngagementTextMemePngParams
 ): Promise<Buffer> {
-  ensureFontsRegistered();
   console.log("[font] using font: Inter (engagement PNG)");
   const textLayoutType = String(
     params.template.text_layout_type ?? "finish_sentence"
@@ -822,6 +818,12 @@ export async function renderEngagementTextMemePng(
   }
 
   const theme = resolveEngagementTheme(params.engagementStyle);
-  return renderer({ ...params, theme });
+  const buf = await renderer({ ...params, theme });
+  if (!buf?.length) {
+    throw new Error(
+      `[render] renderEngagementTextMemePng produced empty buffer (${textLayoutType})`
+    );
+  }
+  return buf;
 }
 

@@ -8,7 +8,7 @@ import { getOrCreateDefaultWorkspaceForUser } from "@/lib/workspace/default-work
 
 /**
  * Homepage/session bootstrap only — keep separate from `lib/actions/workspace.ts`
- * so API routes do not pull in meme renderers (canvas/sharp) during Next build.
+ * so API routes do not pull in the full meme renderer graph during Next build.
  */
 export async function bootstrapHomepageWorkspace(
   sessionId?: string | null

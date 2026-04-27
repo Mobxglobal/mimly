@@ -7,7 +7,10 @@ import {
   type MemeTemplateForRender,
 } from "@/renderer/renderMemeTemplate";
 import { wrapCaptionWithSoftEarlySplit, wrapSquareTopCaptionScoped } from "@/renderer/caption-wrap";
-import { ensureFontsRegistered, getInterBoldFontPath } from "@/lib/rendering/fonts";
+import {
+  getInterBoldFontPath,
+  warnCanvasUnavailableOnce,
+} from "@/lib/rendering/fonts";
 
 type MemeVideoTemplateForRender = {
   slug?: string | null;
@@ -102,7 +105,7 @@ export async function renderMemeMP4FromTemplate(params: {
   template: MemeVideoTemplateForRender;
   topText: string;
 }): Promise<Buffer> {
-  ensureFontsRegistered();
+  warnCanvasUnavailableOnce();
   const interDrawtextFontFile = getInterBoldFontPath().replace(/\\/g, "/");
   const slotX = params.template.slot_1_x ?? 80;
   const slotY = params.template.slot_1_y ?? 65;

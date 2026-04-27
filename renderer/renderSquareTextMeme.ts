@@ -1,10 +1,7 @@
 import sharp from "sharp";
 import { wrapSquareTextMemeLines } from "@/renderer/caption-wrap";
 import { measureSquareTextLineWidthPx } from "@/renderer/square-text-measure";
-import {
-  ensureFontsRegistered,
-  getInterSvgFontFaceBlock,
-} from "@/lib/rendering/fonts";
+import { getInterSvgFontFaceBlock } from "@/lib/rendering/fonts";
 import {
   resolveEngagementTheme,
   type EngagementVisualStyle,
@@ -21,7 +18,7 @@ const MULTI_LINE_PAD_X = 16;
 /**
  * Max measured line width for copy drawn from multi-line anchor x = 112.
  * 896px ⇒ implied right extent x = 1008 (slightly past the 984 “safe” vertical, for fuller lines).
- * Wrapping uses canvas `measureText` (see `square-text-measure.ts`).
+ * Wrapping uses estimated line widths (see `square-text-measure.ts`).
  */
 export const SQUARE_TEXT_MAX_LINE_WIDTH_PX = 896;
 
@@ -226,7 +223,6 @@ export async function renderSquareTextMemePng(params: {
   /** When true, overlays margin/center/baseline guides for visual calibration only. */
   debug?: boolean;
 }): Promise<Buffer> {
-  ensureFontsRegistered();
   const top = normalizeText(params.topText);
   const bottom = normalizeText(params.bottomText ?? "");
 
@@ -290,7 +286,9 @@ export async function renderSquareTextMemePng(params: {
 </svg>
 `.trim();
 
-  return sharp(Buffer.from(svg))
-    .png()
-    .toBuffer();
+  const out = await sharp(Buffer.from(svg)).png().toBuffer();
+  if (!out?.length) {
+    throw new Error("[render] renderSquareTextMemePng produced empty buffer");
+  }
+  return out;
 }

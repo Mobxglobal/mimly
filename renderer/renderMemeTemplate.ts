@@ -1,10 +1,10 @@
+/**
+ * Slot meme PNGs: SVG text overlay + Sharp composite/rasterize only (no node-canvas).
+ */
 import sharp from "sharp";
 import { wrapCaptionWithSoftEarlySplit, wrapSquareTopCaptionScoped } from "@/renderer/caption-wrap";
 import { normalizeNobodyMeSetupSlots } from "@/lib/memes/normalize-nobody-me-setup-slots";
-import {
-  ensureFontsRegistered,
-  getInterSvgFontFaceBlock,
-} from "@/lib/rendering/fonts";
+import { getInterSvgFontFaceBlock } from "@/lib/rendering/fonts";
 
 export type MemeTemplateForRender = {
   slug?: string | null;
@@ -345,7 +345,6 @@ export async function renderMemePNGFromTemplate(params: {
   bottomText: string | null;
   slot_3_text?: string;
 }) {
-  ensureFontsRegistered();
   const mechanic = String(params.template.meme_mechanic ?? "").trim().toLowerCase();
   const slug = String(params.template.slug ?? "").trim();
   const isNobodyMeTemplate =
@@ -364,10 +363,14 @@ export async function renderMemePNGFromTemplate(params: {
   );
 
   const svgBuffer = Buffer.from(svg);
-  return sharp(params.baseImageBuffer)
+  const out = await sharp(params.baseImageBuffer)
     .composite([{ input: svgBuffer }])
     .png()
     .toBuffer();
+  if (!out?.length) {
+    throw new Error("[render] renderMemePNGFromTemplate produced empty buffer");
+  }
+  return out;
 }
 
 /** Transparent PNG (full canvas) with slot-1 caption only — for video overlay when ffmpeg lacks drawtext. */
@@ -375,7 +378,6 @@ export async function renderTopCaptionOverlayPng(params: {
   template: MemeTemplateForRender;
   topText: string;
 }): Promise<Buffer> {
-  ensureFontsRegistered();
   console.log("VIDEO OVERLAY FALLBACK TEMPLATE", {
     slug: params.template.slug ?? null,
     height_bucket: params.template.height_bucket ?? null,
@@ -388,6 +390,10 @@ export async function renderTopCaptionOverlayPng(params: {
     slot_3_text: "",
   });
 
-  return sharp(Buffer.from(svg)).png().toBuffer();
+  const out = await sharp(Buffer.from(svg)).png().toBuffer();
+  if (!out?.length) {
+    throw new Error("[render] renderTopCaptionOverlayPng produced empty buffer");
+  }
+  return out;
 }
 
