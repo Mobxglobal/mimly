@@ -7,7 +7,7 @@ let embeddedInterSvgDefs: string | null = null;
 
 /**
  * Family name for Sharp/librsvg SVG text — matches `@font-face` in `getSvgDocumentFontStyleBlock()`.
- * Embedded TTF avoids fontconfig when `sans-serif` cannot resolve (e.g. serverless).
+ * Embedded TTF avoids fontconfig / system font resolution on serverless runtimes.
  */
 export const SHARP_SVG_FONT_FAMILY = "InterEmbed";
 
@@ -33,8 +33,8 @@ function buildEmbeddedInterSvgFontDefs(): string {
   <style type="text/css"><![CDATA[
 @font-face {
   font-family: 'InterEmbed';
-  src: url(data:font/truetype;base64,${fontData}) format('truetype');
-  font-weight: 100 900;
+  src: url("data:font/truetype;charset=utf-8;base64,${fontData}") format("truetype");
+  font-weight: bold;
   font-style: normal;
   font-display: block;
 }

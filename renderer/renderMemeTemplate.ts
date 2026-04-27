@@ -1,13 +1,11 @@
 /**
  * Slot meme PNGs: SVG text overlay + Sharp composite/rasterize only (no node-canvas).
  */
+import fs from "fs";
+import path from "path";
 import sharp from "sharp";
 import { wrapCaptionWithSoftEarlySplit, wrapSquareTopCaptionScoped } from "@/renderer/caption-wrap";
 import { normalizeNobodyMeSetupSlots } from "@/lib/memes/normalize-nobody-me-setup-slots";
-import {
-  getSvgDocumentFontStyleBlock,
-  SHARP_SVG_FONT_FAMILY,
-} from "@/lib/rendering/fonts";
 import {
   SVG_UTF8_XML_DECL,
   escapeXML,
@@ -15,7 +13,16 @@ import {
   svgStringToUtf8Buffer,
 } from "@/lib/rendering/svg-utf8";
 
-/** Sharp SVG captions use embedded Inter from `public/fonts/Inter-Bold.ttf` via `getSvgDocumentFontStyleBlock`. */
+const MEME_INTER_FONT_PATH = path.join(process.cwd(), "public", "fonts", "Inter-Bold.ttf");
+let memeInterFontDataBase64: string | null = null;
+
+function readMemeInterFontBase64(): string {
+  if (memeInterFontDataBase64) return memeInterFontDataBase64;
+  memeInterFontDataBase64 = fs.readFileSync(MEME_INTER_FONT_PATH).toString("base64");
+  return memeInterFontDataBase64;
+}
+
+/** Sharp slot memes: Inter is base64-embedded in the SVG (no system fontconfig). */
 export type MemeTemplateForRender = {
   slug?: string | null;
   /** Present on DB-backed templates; used for mechanic-specific render paths. */
@@ -108,7 +115,6 @@ function renderLines(
     textColor: string;
     strokeColor: string;
     strokeWidth: number;
-    fontFamily: string;
   }
 ) {
   if (!lines.length) return "";
@@ -128,7 +134,7 @@ function renderLines(
         style.strokeWidth > 0 && style.strokeColor
           ? `stroke="${style.strokeColor}" stroke-width="${style.strokeWidth}" paint-order="stroke"`
           : "";
-      return `<text x="${x}" y="${y}" class="caption" text-anchor="${textAnchor}" ${strokeAttrs}>${escapeXML(String(line))}</text>`;
+      return `<text x="${x}" y="${y}" class="caption" font-family="InterEmbed" text-anchor="${textAnchor}" ${strokeAttrs}>${escapeXML(String(line))}</text>`;
     })
     .join("");
 }
@@ -213,7 +219,6 @@ function buildSVG(template: MemeTemplateForRender, slotTexts: SlotTexts) {
   const textColor = template.text_color || "#000000";
   const strokeColor = template.stroke_color || "";
   const strokeWidth = template.stroke_width || 0;
-  const fontFamily = SHARP_SVG_FONT_FAMILY;
 
   const style = {
     fontSize,
@@ -222,7 +227,6 @@ function buildSVG(template: MemeTemplateForRender, slotTexts: SlotTexts) {
     textColor,
     strokeColor,
     strokeWidth,
-    fontFamily,
   };
 
   const slot1Text = normalizeRenderableText(slotTexts.slot_1_text);
@@ -322,16 +326,26 @@ function buildSVG(template: MemeTemplateForRender, slotTexts: SlotTexts) {
 
   logSvgDebugSample(slot1Text || slot2Text || slot3Text);
 
+  const fontData = readMemeInterFontBase64();
+  const embeddedFontStyle = `<style type="text/css"><![CDATA[
+@font-face {
+  font-family: 'InterEmbed';
+  src: url("data:font/truetype;charset=utf-8;base64,${fontData}") format("truetype");
+  font-weight: bold;
+}
+text {
+  font-family: 'InterEmbed';
+}
+.caption {
+  fill: ${style.textColor};
+  font-size: ${style.fontSize}px;
+  font-family: 'InterEmbed';
+}
+]]></style>`;
+
   return `${SVG_UTF8_XML_DECL}
 <svg xmlns="http://www.w3.org/2000/svg" width="${template.canvas_width}" height="${template.canvas_height}">
-  ${getSvgDocumentFontStyleBlock()}
-  <style>
-    .caption {
-      fill: ${style.textColor};
-      font-size: ${style.fontSize}px;
-      font-family: ${style.fontFamily};
-    }
-  </style>
+  ${embeddedFontStyle}
   ${renderedText}
 </svg>
   `;
