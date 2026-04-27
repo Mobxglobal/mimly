@@ -15,7 +15,20 @@ export function normalizeFinalMemeText(
   if (typeof value !== "string") return null;
   if (value === "") return "";
 
-  let s = value.trim();
+  let s = value.trim().normalize("NFKC");
+  // Remove control characters that can break SVG/text rendering.
+  s = s.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/g, "");
+  // Remove zero-width/invisible characters that produce odd glyph artifacts.
+  s = s.replace(/[\u200B-\u200D\uFEFF]/g, "");
+  // Repair common UTF-8 mojibake sequences seen in generated copy.
+  s = s
+    .replace(/â€™/g, "'")
+    .replace(/â€˜/g, "'")
+    .replace(/â€œ/g, '"')
+    .replace(/â€/g, '"')
+    .replace(/â€”/g, "—")
+    .replace(/â€“/g, "–");
+  s = s.replace(/\s+/g, " ").trim();
   while (s.endsWith(",")) {
     s = s.slice(0, -1).trimEnd();
   }

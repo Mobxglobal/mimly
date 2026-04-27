@@ -3872,6 +3872,24 @@ ${isThreeSlot
       variant_metadata: mergedVariantMetadata,
     };
 
+    if (!imageUrl) {
+      failedCount++;
+      console.error("[meme-gen] Skipped template (render produced no media URL)", {
+        template: `${template.template_name} (${template.slug})`,
+        templateType: template.template_type,
+        variantType,
+        explicitPromoMode,
+        attemptUsed,
+      });
+      console.log("[meme-gen] Fallback replacement queued", {
+        failedTemplate: template.slug,
+        nextTemplate: selectedTemplatesForBatch[poolIndex + 1]?.slug ?? null,
+        insertedCount,
+        failedCount,
+      });
+      continue;
+    }
+
     console.log("[variant-insert]", {
       slug: template.slug,
       variantType,

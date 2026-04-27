@@ -55,6 +55,21 @@ function escapeXML(str: unknown) {
     .replace(/'/g, "&apos;");
 }
 
+function normalizeRenderableText(value: unknown): string {
+  return String(value ?? "")
+    .normalize("NFKC")
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/g, "")
+    .replace(/[\u200B-\u200D\uFEFF]/g, "")
+    .replace(/â€™/g, "'")
+    .replace(/â€˜/g, "'")
+    .replace(/â€œ/g, '"')
+    .replace(/â€/g, '"')
+    .replace(/â€”/g, "—")
+    .replace(/â€“/g, "–")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function getTextAnchor(alignment: string | null | undefined) {
   if (alignment === "left") return "start";
   if (alignment === "right") return "end";
@@ -207,9 +222,9 @@ function buildSVG(template: MemeTemplateForRender, slotTexts: SlotTexts) {
     fontFamily,
   };
 
-  const slot1Text = slotTexts.slot_1_text || "";
-  const slot2Text = slotTexts.slot_2_text || "";
-  const slot3Text = slotTexts.slot_3_text || "";
+  const slot1Text = normalizeRenderableText(slotTexts.slot_1_text);
+  const slot2Text = normalizeRenderableText(slotTexts.slot_2_text);
+  const slot3Text = normalizeRenderableText(slotTexts.slot_3_text);
 
   const mechanic = String(template.meme_mechanic ?? "").trim().toLowerCase();
   const slug = String(template.slug ?? "").trim();
@@ -294,6 +309,13 @@ function buildSVG(template: MemeTemplateForRender, slotTexts: SlotTexts) {
       });
     })
     .join("");
+
+  const hasInputText = Boolean(slot1Text || slot2Text || slot3Text);
+  if (hasInputText && !renderedText.trim()) {
+    throw new Error(
+      `[render] No renderable text slots for template slug=${String(template.slug ?? "unknown")}`
+    );
+  }
 
   return `
 <svg xmlns="http://www.w3.org/2000/svg" width="${template.canvas_width}" height="${template.canvas_height}">
