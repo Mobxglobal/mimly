@@ -6,6 +6,9 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: path.dirname(fileURLToPath(import.meta.url)),
   },
+  images: {
+    unoptimized: true,
+  },
 };
 
 export default nextConfig;
