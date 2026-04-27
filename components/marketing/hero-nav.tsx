@@ -8,15 +8,12 @@ import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 
-interface HeroNavProps {
-  onFixedChange?: (fixed: boolean) => void;
-}
+interface HeroNavProps {}
 
-export function HeroNav({ onFixedChange }: HeroNavProps) {
+export function HeroNav({}: HeroNavProps) {
   const router = useRouter();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [closing, setClosing] = useState(false);
-  const [isFixed, setIsFixed] = useState(false);
   const [hasSession, setHasSession] = useState(false);
   const [showLoggedOutMessage, setShowLoggedOutMessage] = useState(false);
 
@@ -58,20 +55,6 @@ export function HeroNav({ onFixedChange }: HeroNavProps) {
   }, []);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
-
-    const handleScroll = () => {
-      const fixed = window.scrollY > 16;
-      setIsFixed(fixed);
-      onFixedChange?.(fixed);
-    };
-
-    handleScroll();
-    window.addEventListener("scroll", handleScroll, { passive: true });
-    return () => window.removeEventListener("scroll", handleScroll);
-  }, [onFixedChange]);
-
-  useEffect(() => {
     if (typeof document === "undefined") return;
     if (mobileOpen && !closing) {
       document.body.style.overflow = "hidden";
@@ -105,10 +88,7 @@ export function HeroNav({ onFixedChange }: HeroNavProps) {
 
   return (
     <header
-      className={cn(
-        "w-full transition-transform duration-200",
-        isFixed ? "fixed top-0 left-0 right-0 z-[100]" : "relative z-20"
-      )}
+      className="sticky top-2 z-[100] w-full"
       aria-label="Main navigation"
     >
       <nav

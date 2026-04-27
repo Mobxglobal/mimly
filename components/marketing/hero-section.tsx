@@ -59,7 +59,6 @@ function LikeCount({
 }
 
 export function HeroSection() {
-  const [navFixed, setNavFixed] = useState(false);
   const [mode, setMode] = useState<"prompt" | "url">("prompt");
   const [promptText, setPromptText] = useState("");
   const [urlValue, setUrlValue] = useState("");
@@ -148,7 +147,7 @@ export function HeroSection() {
   }, [isPromptFocused, promptText, placeholderIndex]);
 
   return (
-    <div className={cn("w-full", navFixed && "relative z-[100]")}>
+    <div className="w-full">
       <FramedSection
         variant="hero"
         id="hero"
@@ -159,7 +158,7 @@ export function HeroSection() {
         <div className="flex min-h-[70vh] flex-col items-center gap-8 md:gap-12">
           {/* Nav inside hero container */}
           <div className="w-full">
-            <HeroNav onFixedChange={setNavFixed} />
+            <HeroNav />
           </div>
 
         {/* Main hero content – stacked on all breakpoints */}

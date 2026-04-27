@@ -37,7 +37,7 @@ export const metadata: Metadata = {
       "Create memes that feel native to the internet. Mimly turns your brand context into content people want to share.",
     images: [
       {
-        url: "/og-default.png",
+        url: "/og-default.jpg",
         width: 1200,
         height: 630,
         alt: "Meme Builder",
@@ -50,7 +50,7 @@ export const metadata: Metadata = {
     title: "AI Meme Generator for Brands",
     description:
       "Create memes that feel native to the internet. Mimly turns your brand context into content people want to share.",
-    images: ["/og-default.png"],
+    images: ["/og-default.jpg"],
   },
 };
 
