@@ -1,3 +1,4 @@
+import { SVG_SAFE_FONT_STACK } from "@/lib/rendering/fonts";
 import { measureLineWidthPx, measureSquareTextLineWidthPx } from "@/renderer/square-text-measure";
 
 export const SOFT_WRAP_RATIO = 0.84;
@@ -135,7 +136,7 @@ function estimateTopCaptionWidthPx(
     fontSize,
     fontFamily && String(fontFamily).trim()
       ? String(fontFamily)
-      : "Inter"
+      : SVG_SAFE_FONT_STACK
   );
 }
 
@@ -1179,7 +1180,7 @@ function enforceSquareTextMaxLineWidthFinal(
 
 /**
  * Square meme PNG: word-boundary layouts scored like slideshow, but **line width** is capped
- * using estimated Inter line widths (52px equivalent) — not character counts.
+ * using estimated sans line widths (52px equivalent) — not character counts.
  */
 export function wrapSquareTextMemeLines(
   text: string,

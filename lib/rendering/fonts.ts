@@ -1,8 +1,13 @@
-import fs from "fs";
 import path from "path";
 
-let svgFontFaceBlock: string | null = null;
 let canvasGuardDone = false;
+let renderFontStackLogDone = false;
+
+/**
+ * Stack for Sharp/librsvg SVG text: Arial is often missing on Linux/serverless;
+ * Helvetica and generic sans-serif give Pango usable fallbacks.
+ */
+export const SVG_SAFE_FONT_STACK = "Arial, Helvetica, sans-serif";
 
 /**
  * One-time check: if `canvas` is not resolvable (typical on Vercel), log SVG-only path.
@@ -19,18 +24,20 @@ export function warnCanvasUnavailableOnce() {
   }
 }
 
-export function getInterSvgFontFaceBlock(): string {
-  warnCanvasUnavailableOnce();
-  if (svgFontFaceBlock) return svgFontFaceBlock;
-  const regularPath = path.join(process.cwd(), "public", "fonts", "Inter-Regular.ttf");
-  const boldPath = path.join(process.cwd(), "public", "fonts", "Inter-Bold.ttf");
-  const regularB64 = fs.readFileSync(regularPath).toString("base64");
-  const boldB64 = fs.readFileSync(boldPath).toString("base64");
-  svgFontFaceBlock = `<style type="text/css"><![CDATA[
-@font-face{font-family:Inter;font-style:normal;font-weight:400;font-display:block;src:url(data:font/ttf;base64,${regularB64}) format("truetype");}
-@font-face{font-family:Inter;font-style:normal;font-weight:700;font-display:block;src:url(data:font/ttf;base64,${boldB64}) format("truetype");}
+/**
+ * Global SVG rule for all `<text>` nodes — no @font-face (unreliable with Sharp).
+ * Logs once per process on first injection.
+ */
+export function getSvgDocumentFontStyleBlock(): string {
+  if (!renderFontStackLogDone) {
+    renderFontStackLogDone = true;
+    console.log("[render] using font stack: Arial, Helvetica, sans-serif");
+  }
+  return `<style type="text/css"><![CDATA[
+text {
+  font-family: Arial, Helvetica, sans-serif;
+}
 ]]></style>`;
-  return svgFontFaceBlock;
 }
 
 /** Absolute path to bundled bold TTF (e.g. ffmpeg `fontfile`). */

@@ -4,7 +4,10 @@
 import sharp from "sharp";
 import { wrapCaptionWithSoftEarlySplit, wrapSquareTopCaptionScoped } from "@/renderer/caption-wrap";
 import { normalizeNobodyMeSetupSlots } from "@/lib/memes/normalize-nobody-me-setup-slots";
-import { getInterSvgFontFaceBlock } from "@/lib/rendering/fonts";
+import {
+  getSvgDocumentFontStyleBlock,
+  SVG_SAFE_FONT_STACK,
+} from "@/lib/rendering/fonts";
 
 export type MemeTemplateForRender = {
   slug?: string | null;
@@ -214,7 +217,7 @@ function buildSVG(template: MemeTemplateForRender, slotTexts: SlotTexts) {
   const textColor = template.text_color || "#000000";
   const strokeColor = template.stroke_color || "";
   const strokeWidth = template.stroke_width || 0;
-  const fontFamily = "Inter";
+  const fontFamily = SVG_SAFE_FONT_STACK;
 
   const style = {
     fontSize,
@@ -321,11 +324,9 @@ function buildSVG(template: MemeTemplateForRender, slotTexts: SlotTexts) {
     );
   }
 
-  console.log("[font] using font:", `${style.fontSize}px ${style.fontFamily}`);
-
   return `
 <svg xmlns="http://www.w3.org/2000/svg" width="${template.canvas_width}" height="${template.canvas_height}">
-  ${getInterSvgFontFaceBlock()}
+  ${getSvgDocumentFontStyleBlock()}
   <style>
     .caption {
       fill: ${style.textColor};

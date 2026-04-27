@@ -1,4 +1,5 @@
 import sharp from "sharp";
+import { getSvgDocumentFontStyleBlock } from "@/lib/rendering/fonts";
 import type { MemeTemplateForRender } from "@/renderer/renderMemeTemplate";
 
 function escapeXml(s: string) {
@@ -37,14 +38,14 @@ export async function compositeSlotBoundingOverlayPng(
     if (s.x == null || s.y == null || s.w == null || s.h == null) continue;
     body += `<rect x="${s.x}" y="${s.y}" width="${s.w}" height="${s.h}" fill="none" stroke="rgba(255,59,48,0.92)" stroke-width="3"/>`;
     const label = `slot ${s.n}  x=${s.x} y=${s.y}  ${s.w}×${s.h}  align=${align}`;
-    body += `<text x="${s.x + 6}" y="${Math.min(s.y + 22, H - 4)}" fill="rgba(255,59,48,0.95)" font-size="18" font-family="system-ui, sans-serif">${escapeXml(label)}</text>`;
+    body += `<text x="${s.x + 6}" y="${Math.min(s.y + 22, H - 4)}" fill="rgba(255,59,48,0.95)" font-size="18" font-family="Arial, Helvetica, sans-serif">${escapeXml(label)}</text>`;
   }
 
   if (!body) {
     return basePng;
   }
 
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}">${body}</svg>`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}">${getSvgDocumentFontStyleBlock()}${body}</svg>`;
   const overlay = await sharp(Buffer.from(svg)).png().toBuffer();
   return sharp(basePng).composite([{ input: overlay, blend: "over" }]).png().toBuffer();
 }

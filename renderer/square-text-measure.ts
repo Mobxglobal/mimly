@@ -1,10 +1,10 @@
 /**
- * Text width estimates for wrapping (no node-canvas). Tuned for bundled Inter;
- * SVG output uses the same font via @font-face — estimates align closely enough for line breaks.
+ * Text width estimates for wrapping (no node-canvas). Ratios tuned for Arial-like sans metrics
+ * used in Sharp-rasterized SVG (`Arial, Helvetica, sans-serif`).
  */
 import { warnCanvasUnavailableOnce } from "@/lib/rendering/fonts";
 
-/** Average glyph width / font-size for Inter regular (conservative). */
+/** Average glyph width / font-size for regular sans (conservative). */
 const WIDTH_RATIO_REGULAR = 0.52;
 /** Slightly wider for bold / font-weight 700 SVG text. */
 const WIDTH_RATIO_BOLD = 0.56;
@@ -13,7 +13,7 @@ function graphemeCount(text: string): number {
   return [...String(text ?? "")].length;
 }
 
-function estimateInterLineWidthPx(
+function estimateSansLineWidthPx(
   text: string,
   fontSizePx: number,
   bold: boolean
@@ -28,7 +28,7 @@ function estimateInterLineWidthPx(
 
 /** Returns estimated horizontal advance width in CSS pixels for the full line string. */
 export function measureSquareTextLineWidthPx(text: string): number {
-  return estimateInterLineWidthPx(text, 52, false);
+  return estimateSansLineWidthPx(text, 52, false);
 }
 
 /**
@@ -42,5 +42,5 @@ export function measureLineWidthPx(
   options?: { bold?: boolean }
 ): number {
   const size = Number.isFinite(fontSizePx) ? Math.max(1, fontSizePx) : 52;
-  return estimateInterLineWidthPx(text, size, Boolean(options?.bold));
+  return estimateSansLineWidthPx(text, size, Boolean(options?.bold));
 }

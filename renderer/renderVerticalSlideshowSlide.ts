@@ -1,8 +1,7 @@
-import fs from "node:fs";
-import path from "node:path";
 import sharp from "sharp";
 import { wrapSlideshowVerticalLines } from "@/renderer/caption-wrap";
 import type { SlideshowLayoutVariant } from "@/lib/memes/slideshow/types";
+import { getSvgDocumentFontStyleBlock } from "@/lib/rendering/fonts";
 
 const CANVAS_W = 1080;
 const CANVAS_H = 1920;
@@ -24,78 +23,6 @@ const TEXT_B_BAND = {
   height: TEXT_B_BAND_HEIGHT,
 } as const;
 
-/**
- * Family name referenced in SVG/CSS — must match @font-face. All vertical slideshow text uses
- * this face; `slideshow_config.font_family` is accepted on the style object but mapped here so
- * config stays backward-compatible without pulling arbitrary system fonts into Sharp's SVG path.
- */
-export const SLIDESHOW_EMBEDDED_FONT_FAMILY = "ProximaNovaSemibold";
-
-const SLIDESHOW_FONT_DIR = path.join(process.cwd(), "assets", "fonts");
-/** Prefer canonical filename; second entry matches a legacy on-disk typo (space before Semibold). */
-const SLIDESHOW_FONT_FILENAMES = [
-  "Proxima_Nova_Semibold.ttf",
-  "Proxima_Nova_ Semibold.ttf",
-] as const;
-
-let cachedFontFaceBlock: string | null = null;
-
-function resolveSlideshowFontPath(): string {
-  for (const name of SLIDESHOW_FONT_FILENAMES) {
-    const full = path.join(SLIDESHOW_FONT_DIR, name);
-    if (fs.existsSync(full)) return full;
-  }
-  return "";
-}
-
-/**
- * Lazily reads the TTF once, base64-embeds it in a CSS @font-face block for the SVG Sharp composites.
- *
- * Why base64 in SVG: Sharp/librsvg rasterizes the overlay without access to project-relative font
- * paths; an inline data URI makes the face available deterministically on every environment.
- */
-function getSlideshowFontFaceBlock(): string {
-  if (cachedFontFaceBlock) return cachedFontFaceBlock;
-
-  const fontPath = resolveSlideshowFontPath();
-  if (!fontPath) {
-    console.error("[slideshow-render] Slideshow font missing", {
-      dir: SLIDESHOW_FONT_DIR,
-      tried: [...SLIDESHOW_FONT_FILENAMES],
-    });
-    throw new Error(
-      `[slideshow-render] Slideshow font not found. Place Proxima Nova Semibold at ${path.join(
-        SLIDESHOW_FONT_DIR,
-        SLIDESHOW_FONT_FILENAMES[0]
-      )} (see renderer/renderVerticalSlideshowSlide.ts for accepted filenames).`
-    );
-  }
-
-  let buf: Buffer;
-  try {
-    buf = fs.readFileSync(fontPath);
-  } catch (err) {
-    console.error("[slideshow-render] Failed to read slideshow font file", {
-      fontPath,
-      err,
-    });
-    throw new Error(
-      `[slideshow-render] Could not read slideshow font file: ${fontPath}`
-    );
-  }
-
-  const b64 = buf.toString("base64");
-  cachedFontFaceBlock = `
-@font-face {
-  font-family: '${SLIDESHOW_EMBEDDED_FONT_FAMILY}';
-  src: url('data:font/ttf;base64,${b64}') format('truetype');
-  font-weight: normal;
-  font-style: normal;
-  font-display: block;
-}`;
-  return cachedFontFaceBlock;
-}
-
 export type VerticalSlideshowRenderStyle = {
   layout_a_max_chars: number;
   layout_b_max_chars: number;
@@ -103,7 +30,7 @@ export type VerticalSlideshowRenderStyle = {
   layout_b_max_lines: number;
   font_size_layout_a: number;
   font_size_layout_b: number;
-  /** Kept for template config compatibility; glyphs always use the embedded Proxima Nova Semibold face. */
+  /** Kept for template config compatibility; Sharp SVG text uses the global safe sans stack. */
   font_family: string;
   text_color: string;
   stroke_color: string;
@@ -201,16 +128,14 @@ function buildTextSvg(
     strokeWidth: style.stroke_width,
   });
 
-  const fontFace = getSlideshowFontFaceBlock();
-
   return `
 <svg xmlns="http://www.w3.org/2000/svg" width="${CANVAS_W}" height="${CANVAS_H}">
+  ${getSvgDocumentFontStyleBlock()}
   <style type="text/css">
-    ${fontFace}
     .cap {
       fill: ${style.text_color};
       font-size: ${fontSize}px;
-      font-family: '${SLIDESHOW_EMBEDDED_FONT_FAMILY}', sans-serif;
+      font-family: Arial, Helvetica, sans-serif;
       font-weight: normal;
     }
   </style>

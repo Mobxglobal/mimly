@@ -1,6 +1,9 @@
 import sharp from "sharp";
 import { measureLineWidthPx } from "@/renderer/square-text-measure";
-import { getInterSvgFontFaceBlock } from "@/lib/rendering/fonts";
+import {
+  getSvgDocumentFontStyleBlock,
+  SVG_SAFE_FONT_STACK,
+} from "@/lib/rendering/fonts";
 import type { MemeTemplateForRender } from "@/renderer/renderMemeTemplate";
 import {
   resolveEngagementTheme,
@@ -20,7 +23,7 @@ function escapeXML(str: string) {
 }
 
 function normalizeFontFamily(): string {
-  return "Inter";
+  return SVG_SAFE_FONT_STACK;
 }
 
 function wrapTextToLines(
@@ -154,7 +157,7 @@ async function renderFinishSentenceLayout(
 
   const svg = `
 <svg xmlns="http://www.w3.org/2000/svg" width="${CANVAS}" height="${CANVAS}" viewBox="0 0 ${CANVAS} ${CANVAS}">
-  ${getInterSvgFontFaceBlock()}
+  ${getSvgDocumentFontStyleBlock()}
   <rect x="0" y="0" width="${CANVAS}" height="${CANVAS}" fill="${escapeXML(theme.canvasBg)}" />
 
   <text x="${xLeft}" y="${line1Y}" text-anchor="start"
@@ -247,7 +250,7 @@ async function renderOneWordLayout(
 
   const svg = `
 <svg xmlns="http://www.w3.org/2000/svg" width="${CANVAS}" height="${CANVAS}" viewBox="0 0 ${CANVAS} ${CANVAS}">
-  ${getInterSvgFontFaceBlock()}
+  ${getSvgDocumentFontStyleBlock()}
   <rect x="0" y="0" width="${CANVAS}" height="${CANVAS}" fill="${escapeXML(theme.canvasBg)}" />
   ${textBlocks}
 </svg>
@@ -326,7 +329,7 @@ async function renderEmojiOnlyLayout(
 
   const svg = `
 <svg xmlns="http://www.w3.org/2000/svg" width="${CANVAS}" height="${CANVAS}" viewBox="0 0 ${CANVAS} ${CANVAS}">
-  ${getInterSvgFontFaceBlock()}
+  ${getSvgDocumentFontStyleBlock()}
   <rect x="0" y="0" width="${CANVAS}" height="${CANVAS}" fill="${escapeXML(theme.canvasBg)}" />
   ${textBlocks}
 </svg>
@@ -427,7 +430,7 @@ async function renderPickOneLayout(
 
   const svg = `
 <svg xmlns="http://www.w3.org/2000/svg" width="${CANVAS}" height="${CANVAS}" viewBox="0 0 ${CANVAS} ${CANVAS}">
-  ${getInterSvgFontFaceBlock()}
+  ${getSvgDocumentFontStyleBlock()}
   <rect x="0" y="0" width="${CANVAS}" height="${CANVAS}" fill="${escapeXML(theme.canvasBg)}" />
   ${headSvg}
   ${optASvg}
@@ -506,7 +509,7 @@ async function renderFillGapLayout(
 
   const svg = `
 <svg xmlns="http://www.w3.org/2000/svg" width="${CANVAS}" height="${CANVAS}" viewBox="0 0 ${CANVAS} ${CANVAS}">
-  ${getInterSvgFontFaceBlock()}
+  ${getSvgDocumentFontStyleBlock()}
   <rect x="0" y="0" width="${CANVAS}" height="${CANVAS}" fill="${escapeXML(theme.canvasBg)}" />
   ${textBlocks}
 </svg>
@@ -574,7 +577,7 @@ async function renderAgreeDisagreeLayout(
 
   const svg = `
 <svg xmlns="http://www.w3.org/2000/svg" width="${CANVAS}" height="${CANVAS}" viewBox="0 0 ${CANVAS} ${CANVAS}">
-  ${getInterSvgFontFaceBlock()}
+  ${getSvgDocumentFontStyleBlock()}
   <rect x="0" y="0" width="${CANVAS}" height="${CANVAS}" fill="${escapeXML(theme.canvasBg)}" />
   ${stmtSvg}
   ${footSvg}
@@ -648,7 +651,7 @@ async function renderHotTakeLayout(
 
   const svg = `
 <svg xmlns="http://www.w3.org/2000/svg" width="${CANVAS}" height="${CANVAS}" viewBox="0 0 ${CANVAS} ${CANVAS}">
-  ${getInterSvgFontFaceBlock()}
+  ${getSvgDocumentFontStyleBlock()}
   <rect x="0" y="0" width="${CANVAS}" height="${CANVAS}" fill="${escapeXML(theme.canvasBg)}" />
   ${headSvg}
   ${stmtSvg}
@@ -786,7 +789,7 @@ async function renderBirthdayNamesListLayout(
 
   const svg = `
 <svg xmlns="http://www.w3.org/2000/svg" width="${CANVAS}" height="${CANVAS}" viewBox="0 0 ${CANVAS} ${CANVAS}">
-  ${getInterSvgFontFaceBlock()}
+  ${getSvgDocumentFontStyleBlock()}
   <rect x="0" y="0" width="${CANVAS}" height="${CANVAS}" fill="${escapeXML(theme.canvasBg)}" />
   ${headlineSvgLines}
   ${rows.join("\n  ")}
@@ -803,7 +806,6 @@ async function renderBirthdayNamesListLayout(
 export async function renderEngagementTextMemePng(
   params: RenderEngagementTextMemePngParams
 ): Promise<Buffer> {
-  console.log("[font] using font: Inter (engagement PNG)");
   const textLayoutType = String(
     params.template.text_layout_type ?? "finish_sentence"
   )
