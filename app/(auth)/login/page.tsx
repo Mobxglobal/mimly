@@ -1,12 +1,21 @@
 "use client";
 
 import { useState } from "react";
+import { Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { OnboardingShell } from "@/components/onboarding/onboarding-shell";
 import { HERO_BACKGROUND_IMAGE_SRC } from "@/lib/marketing/hero-background";
 
 export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginPageContent />
+    </Suspense>
+  );
+}
+
+function LoginPageContent() {
   const searchParams = useSearchParams();
   const [email, setEmail] = useState("");
   const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");

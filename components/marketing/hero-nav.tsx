@@ -4,7 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { useEffect, useState, useCallback } from "react";
 import { Menu, X } from "lucide-react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 
@@ -14,7 +14,6 @@ interface HeroNavProps {
 
 export function HeroNav({ onFixedChange }: HeroNavProps) {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [closing, setClosing] = useState(false);
   const [isFixed, setIsFixed] = useState(false);
@@ -48,13 +47,15 @@ export function HeroNav({ onFixedChange }: HeroNavProps) {
   }, []);
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
+    const searchParams = new URLSearchParams(window.location.search);
     if (searchParams.get("logged_out") !== "1") return;
     setShowLoggedOutMessage(true);
     const timer = window.setTimeout(() => {
       setShowLoggedOutMessage(false);
     }, 3200);
     return () => window.clearTimeout(timer);
-  }, [searchParams]);
+  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") return;

@@ -4,6 +4,8 @@ import fs from "fs";
 import path from "path";
 import { createClient } from "@supabase/supabase-js";
 
+type SupabaseAdminClient = ReturnType<typeof createClient<any>>;
+
 /**
  * Image-only usage:
  * pnpm tsx scripts/templates/publish-approved-to-supabase.ts \
@@ -380,7 +382,7 @@ function buildPayloadSummary(payload: Record<string, unknown>) {
 }
 
 async function fetchExistingTemplateIdMap(params: {
-  supabase: ReturnType<typeof createClient>;
+  supabase: SupabaseAdminClient;
 }): Promise<Map<string, number>> {
   const { supabase } = params;
   const { data, error } = await supabase
@@ -403,7 +405,7 @@ async function fetchExistingTemplateIdMap(params: {
 }
 
 async function fetchNextTemplateIdSeed(params: {
-  supabase: ReturnType<typeof createClient>;
+  supabase: SupabaseAdminClient;
 }): Promise<number> {
   const { supabase } = params;
   const { data, error } = await supabase
@@ -440,7 +442,7 @@ function resolveTemplateId(params: {
 }
 
 async function uploadImage(params: {
-  supabase: ReturnType<typeof createClient>;
+  supabase: SupabaseAdminClient;
   bucket: string;
   storageKey: string;
   filePath: string;
@@ -459,12 +461,12 @@ async function uploadImage(params: {
 }
 
 async function upsertTemplate(params: {
-  supabase: ReturnType<typeof createClient>;
+  supabase: SupabaseAdminClient;
   payload: Record<string, unknown>;
 }): Promise<void> {
   const { supabase, payload } = params;
 
-  const { error } = await supabase.from("meme_templates").upsert(payload, {
+  const { error } = await supabase.from("meme_templates" as any).upsert(payload as any, {
     onConflict: "slug",
   });
 
