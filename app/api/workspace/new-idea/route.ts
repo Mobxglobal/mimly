@@ -150,13 +150,23 @@ export async function POST(request: Request) {
     }
   );
 
-  if (result.error) {
+  console.log("[new-idea] intent result:", {
+    success: !result?.error,
+    error: result?.error || null,
+  });
+
+  if (result?.error) {
     console.error("[new-idea] 400: processWorkspaceHomepageIntent failed", {
       reason: result.error,
-      body,
-      derived: { workspaceId, inputType, value },
+      workspaceId,
+      inputType,
+      valuePreview: typeof value === "string" ? value.slice(0, 120) : null,
     });
-    return NextResponse.json({ error: result.error }, { status: 400 });
+
+    return NextResponse.json(
+      { error: result.error },
+      { status: 400 }
+    );
   }
 
   return NextResponse.json({ success: true }, { status: 200 });

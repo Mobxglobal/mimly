@@ -690,6 +690,16 @@ export async function processWorkspaceHomepageIntent(
       preferredOutputFormat: options?.preferredOutputFormat,
       templateFamilyPreference: options?.templateFamilyPreference ?? null,
     });
+    if (sent.error) {
+      console.error("[intent] failure:", {
+        reason: sent.error,
+        context: {
+          workspaceId,
+          inputType: "prompt" as const,
+          valuePreview: value.slice(0, 120),
+        },
+      });
+    }
     return { error: sent.error ?? null };
   }
 
@@ -697,14 +707,37 @@ export async function processWorkspaceHomepageIntent(
   try {
     pack = await resolveHomepageInputToProfile(value, "url");
   } catch (e) {
+    const reason =
+      e instanceof Error ? e.message : "Could not process URL.";
+    console.error("[intent] failure:", {
+      reason,
+      context: {
+        workspaceId,
+        inputType: "url" as const,
+        valuePreview: value.slice(0, 120),
+        errorName: e instanceof Error ? e.name : typeof e,
+      },
+    });
     return {
-      error: e instanceof Error ? e.message : "Could not process URL.",
+      error: reason,
     };
   }
 
   const loaded = await loadAccessibleWorkspace(workspaceId);
   if (!loaded.workspace || !loaded.admin) {
-    return { error: loaded.error ?? "Workspace not found." };
+    const reason = loaded.error ?? "Workspace not found.";
+    console.error("[intent] failure:", {
+      reason,
+      context: {
+        workspaceId,
+        inputType: "url" as const,
+        valuePreview: value.slice(0, 120),
+        hasWorkspace: Boolean(loaded.workspace),
+        hasAdmin: Boolean(loaded.admin),
+        loadedError: loaded.error ?? null,
+      },
+    });
+    return { error: reason };
   }
 
   const { admin, workspace, currentUserId = null } = loaded as {
@@ -723,7 +756,18 @@ export async function processWorkspaceHomepageIntent(
     .maybeSingle();
 
   if (activeJob?.id) {
-    return { error: "A generation is already in progress. Wait for it to finish." };
+    const reason =
+      "A generation is already in progress. Wait for it to finish.";
+    console.error("[intent] failure:", {
+      reason,
+      context: {
+        workspaceId,
+        inputType: "url" as const,
+        valuePreview: value.slice(0, 120),
+        activeJobId: activeJob.id,
+      },
+    });
+    return { error: reason };
   }
 
   await persistWorkspaceBusinessProfile(
@@ -805,7 +849,18 @@ export async function processWorkspaceHomepageIntent(
   });
 
   if (queued.error || !queued.jobId) {
-    return { error: queued.error ?? "Failed to queue generation." };
+    const reason = queued.error ?? "Failed to queue generation.";
+    console.error("[intent] failure:", {
+      reason,
+      context: {
+        workspaceId,
+        inputType: "url" as const,
+        valuePreview: value.slice(0, 120),
+        queuedJobId: queued.jobId ?? null,
+        queuedError: queued.error ?? null,
+      },
+    });
+    return { error: reason };
   }
 
   void runGenerationJob(queued.jobId);
