@@ -41,9 +41,13 @@ export async function POST(request: Request) {
     const startedAt = Date.now();
     const result = await bootstrapHomepageWorkspace(session_id);
 
-    if (!result || !result.workspaceId) {
+    if (!result) {
       console.error("[bootstrap] invalid result:", result);
       throw new Error("Invalid workspace result");
+    }
+
+    if (!result.workspaceId) {
+      throw new Error("Workspace creation returned no ID");
     }
 
     console.log("[bootstrap] success:", {
@@ -60,12 +64,22 @@ export async function POST(request: Request) {
       { status: 200 }
     );
   } catch (err) {
-    console.error("[bootstrap] fatal error:", err);
+    const message =
+      err instanceof Error
+        ? err.message
+        : typeof err === "string"
+          ? err
+          : JSON.stringify(err);
+
+    console.error("[bootstrap] fatal error:", {
+      message,
+      raw: err,
+    });
+
     return NextResponse.json(
       {
         error: "Bootstrap failed",
-        message:
-          err instanceof Error ? err.message : JSON.stringify(err),
+        message,
       },
       { status: 500 }
     );

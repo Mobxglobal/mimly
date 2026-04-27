@@ -656,7 +656,9 @@ export async function bootstrapHomepageWorkspace(
     if (lookupError) {
       console.error("[bootstrap] session workspace lookup failed:", lookupError);
       throw new Error(
-        lookupError.message || "Session workspace lookup failed"
+        typeof lookupError === "string"
+          ? lookupError
+          : lookupError?.message || JSON.stringify(lookupError)
       );
     }
 
@@ -702,10 +704,20 @@ export async function bootstrapHomepageWorkspace(
 
   if (error || !createdWorkspace?.id) {
     console.error("[bootstrap] workspace insert failed:", error);
-    throw new Error(error?.message || "Workspace insert failed");
+    if (error) {
+      throw new Error(
+        typeof error === "string"
+          ? error
+          : error?.message || JSON.stringify(error)
+      );
+    }
+    throw new Error("Workspace insert returned no row id");
   }
 
   const workspaceId = String(createdWorkspace.id);
+  if (!workspaceId) {
+    throw new Error("Workspace creation returned no ID");
+  }
   console.log("[bootstrap] workspace created/reused", {
     workspaceId,
     reused: false,
