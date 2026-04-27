@@ -4,6 +4,9 @@ import {
   processWorkspaceHomepageIntent,
 } from "@/lib/actions/workspace";
 
+/** Per-workspace throttle (each serverless instance has its own map). */
+const newIdeaLastRequestAt = new Map<string, number>();
+
 type HomepageIntentBody = {
   preferredOutputFormat?:
     | "square_image"
@@ -85,8 +88,13 @@ export async function POST(request: Request) {
   }
 
   const workspaceIdEarly = pickWorkspaceId(body);
+  const sessionIdFromBody =
+    typeof body.session_id === "string" && body.session_id.trim()
+      ? body.session_id.trim()
+      : null;
   console.log("[new-idea] request received", {
     workspaceId: workspaceIdEarly || null,
+    session_id: sessionIdFromBody,
     timestamp: Date.now(),
   });
 
@@ -132,6 +140,17 @@ export async function POST(request: Request) {
     });
     return NextResponse.json({ error: "workspaceId is required." }, { status: 400 });
   }
+
+  const now = Date.now();
+  const lastAt = newIdeaLastRequestAt.get(workspaceId);
+  if (lastAt && now - lastAt < 2000) {
+    console.warn("[rate-limit] blocked rapid request", { workspaceId });
+    return NextResponse.json(
+      { error: "Too many requests" },
+      { status: 429 }
+    );
+  }
+  newIdeaLastRequestAt.set(workspaceId, now);
 
   if (!value) {
     const implicit = await getImplicitNewIdeaText(workspaceId);

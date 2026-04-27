@@ -33,6 +33,7 @@ export function WorkspaceShell({
   const [error, setError] = useState<string | null>(null);
   /** Latest generation_jobs.status from Supabase Realtime (may lead server state briefly). */
   const [jobStatus, setJobStatus] = useState<string | null>(null);
+  const [lastRealtimeAt, setLastRealtimeAt] = useState(() => Date.now());
   /** "thread" = normal send box; "new_idea" = same dock, replace context (prompt or URL). */
   const [chatInputMode, setChatInputMode] = useState<"thread" | "new_idea">("thread");
   const [newIdeaMode, setNewIdeaMode] = useState<"prompt" | "url">("prompt");
@@ -56,6 +57,8 @@ export function WorkspaceShell({
   const bootedQueuedStart = useRef(false);
   const homepageIntentProcessedRef = useRef(false);
   const hasTriggeredRef = useRef(false);
+  /** Prevents duplicate refresh when Realtime sends multiple terminal events. */
+  const hasRefreshedRef = useRef(false);
 
   const latestJob = state.latestJob;
   const effectiveJobStatus = jobStatus ?? latestJob?.status ?? null;
@@ -78,6 +81,8 @@ export function WorkspaceShell({
 
   useEffect(() => {
     setJobStatus(null);
+    hasRefreshedRef.current = false;
+    setLastRealtimeAt(Date.now());
   }, [workspaceId]);
 
   useEffect(() => {
@@ -85,6 +90,11 @@ export function WorkspaceShell({
       setJobStatus(null);
     }
   }, [latestJob?.status, jobStatus]);
+
+  useEffect(() => {
+    console.log("[workspace] jobStatus:", jobStatus);
+    console.log("[workspace] effectiveJobStatus:", effectiveJobStatus);
+  }, [jobStatus, effectiveJobStatus]);
 
   useEffect(() => {
     if (!workspaceId) return;
@@ -108,25 +118,29 @@ export function WorkspaceShell({
           const newStatus = row?.status;
           if (typeof newStatus !== "string") return;
 
-          setJobStatus(newStatus);
+          setLastRealtimeAt(Date.now());
 
-          if (newStatus === "completed") {
-            console.log("[realtime] job completed — refreshing workspace");
-            void getWorkspaceState(workspaceId).then((next) => {
-              if (!next.error && next.state) setState(next.state);
-            });
-            router.refresh();
-            setJobStatus(null);
-            return;
+          if (newStatus === "queued" || newStatus === "running") {
+            hasRefreshedRef.current = false;
           }
 
-          if (newStatus === "failed") {
-            console.warn("[realtime] job failed");
-            void getWorkspaceState(workspaceId).then((next) => {
+          setJobStatus(newStatus);
+
+          if (
+            (newStatus === "completed" || newStatus === "failed") &&
+            !hasRefreshedRef.current
+          ) {
+            hasRefreshedRef.current = true;
+            if (newStatus === "failed") {
+              console.warn("[realtime] job failed");
+            }
+            console.log("[realtime] terminal state reached:", newStatus);
+            void (async () => {
+              const next = await getWorkspaceState(workspaceId);
               if (!next.error && next.state) setState(next.state);
-            });
-            router.refresh();
-            setJobStatus(null);
+              router.refresh();
+              setJobStatus(null);
+            })();
           }
         }
       )
@@ -258,13 +272,19 @@ export function WorkspaceShell({
 
   useEffect(() => {
     if (!isJobActive) return;
-    const timer = setInterval(async () => {
-      const next = await getWorkspaceState(workspaceId);
-      if (next.error || !next.state) return;
-      setState(next.state);
-    }, 2500);
-    return () => clearInterval(timer);
-  }, [isJobActive, workspaceId]);
+
+    const interval = setInterval(() => {
+      const stale = Date.now() - lastRealtimeAt > 3000;
+      if (stale) {
+        console.log("[polling] fallback triggered");
+        void getWorkspaceState(workspaceId).then((next) => {
+          if (!next.error && next.state) setState(next.state);
+        });
+      }
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [isJobActive, workspaceId, lastRealtimeAt]);
 
   const getGenerationCount = () => {
     if (typeof window === "undefined") return 0;

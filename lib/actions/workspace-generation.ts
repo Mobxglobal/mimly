@@ -205,6 +205,11 @@ export async function enqueueGenerationJob(params: {
         null
       : null;
 
+  console.log("[jobs] inserting job", {
+    workspaceId,
+    session_id: sessionIdFromWorkspace,
+  });
+
   const { data, error } = await admin
     .schema("public")
     .from("generation_jobs")
@@ -222,10 +227,6 @@ export async function enqueueGenerationJob(params: {
     })
     .select("id")
     .single();
-
-  if (!error && data) {
-    console.log("[jobs] session_id on job:", sessionIdFromWorkspace);
-  }
 
   if (error || !data) {
     if (error?.code === "23505") {
