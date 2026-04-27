@@ -573,9 +573,23 @@ export function HeroSection() {
                     <button
                       type="submit"
                       aria-label="Start workspace"
-                      className="cursor-pointer inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-stone-900 text-lg font-semibold text-white shadow-sm hover:bg-stone-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-stone-200/80 focus-visible:ring-offset-2 focus-visible:ring-offset-white"
+                      aria-busy={isSubmittingPrompt}
+                      disabled={isSubmittingPrompt}
+                      className={cn(
+                        "inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-stone-900 text-lg font-semibold text-white shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-stone-200/80 focus-visible:ring-offset-2 focus-visible:ring-offset-white",
+                        isSubmittingPrompt
+                          ? "cursor-default scale-[0.98] bg-stone-800/95 opacity-90 transition-all"
+                          : "cursor-pointer hover:bg-stone-800"
+                      )}
                     >
-                      ↑
+                      <span
+                        className={cn(
+                          "inline-flex items-center justify-center transition-transform duration-150",
+                          isSubmittingPrompt && "animate-pulse"
+                        )}
+                      >
+                        {isSubmittingPrompt ? "…" : "↑"}
+                      </span>
                     </button>
                   </div>
                 </div>
