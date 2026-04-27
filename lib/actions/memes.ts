@@ -1975,10 +1975,11 @@ ${body.trim()}`;
     }
 
     if (previousFailureRule === "one_slot_bottom_text_not_null") {
-      return `Retry correction:
-- This template only supports one text slot.
-- bottom_text MUST be null.
-- Put the full meme idea into top_text only.`;
+      return `Retry correction (CRITICAL):
+- This template ONLY supports ONE text field (top_text).
+- bottom_text MUST be the JSON literal null — not a string, not empty text, not a second line.
+- Put the ENTIRE meme in top_text only. Do not split setup/punchline across fields.
+- Do not format as top/bottom or multiple sections.`;
     }
 
     if (previousFailureRule === "one_word_trailing_comma") {
@@ -2916,6 +2917,27 @@ IMPORTANT DAY WRITING RULES
     const engagementLayout = getEngagementLayoutConfig(template);
     const namesCount = engagementLayout?.namesCount ?? null;
     const engagementLayoutKey = getEngagementLayoutKey(template);
+    /** Single visible caption: not 3-slot, not birthday-names layout, not two-slot image templates. */
+    const isOneSlotMeme =
+      !isThreeSlot && !namesCount && !template.isTwoSlot;
+
+    const oneSlotCriticalOutputRule = isOneSlotMeme
+      ? `
+CRITICAL OUTPUT RULE:
+
+This template ONLY supports ONE text field.
+
+You MUST:
+- Write ONLY the main caption (top_text)
+- DO NOT include bottom text
+- DO NOT include multiple sections
+- DO NOT format as top/bottom
+- DO NOT include line breaks that imply multiple sections
+
+If you include bottom text, the output will be rejected.
+
+`
+      : "";
 
     const explicitPromoModeInstructions =
       variantContext.variantType !== "promo"
@@ -3133,8 +3155,18 @@ ${
       : ""
 }- top_text MUST be <= ${template.slot_1_max_chars} characters and complete (no mid-word cut-offs).
 - top_text should ideally be <= ${topIdeal} characters.
-- bottom_text MUST be <= ${template.slot_2_max_chars} characters when present, and complete.
-- bottom_text should ideally be <= ${bottomIdeal} characters when present.
+${
+  isThreeSlot
+    ? ""
+    : namesCount
+      ? `- bottom_text MUST be <= ${template.slot_2_max_chars} characters and complete (no mid-word cut-offs).
+- bottom_text should ideally be <= ${bottomIdeal} characters when present.`
+      : template.isTwoSlot
+        ? `- bottom_text MUST be <= ${template.slot_2_max_chars} characters when present, and complete.
+- bottom_text should ideally be <= ${bottomIdeal} characters when present.`
+        : `- bottom_text MUST be the JSON literal null (not an empty string, not a second caption). This template has ONLY top_text.`
+}
+${oneSlotCriticalOutputRule}
 ${structuredThreeSlotDebateMode
   ? `- For structured 3-slot debate templates: slot_2_text must be a compact central subject label (1-3 words ideally; 4 only if absolutely necessary), not a sentence.
 - For structured 3-slot debate templates: slot_1_text and slot_3_text must present contrasting takes about the same slot_2 subject.
@@ -3264,6 +3296,10 @@ ${isThreeSlot
       });
     }
 
+    if (isOneSlotMeme) {
+      p.bottom_text = null;
+    }
+
     const slot1ValidationLabel = "slot_1";
     const slot2ValidationLabel = "slot_2";
     const slot3ValidationLabel = "slot_3";
@@ -3277,6 +3313,21 @@ ${isThreeSlot
       const fixed = normalizeNobodyMeSetupSlots(slot1Value, slot2Value);
       slot1Value = fixed.top;
       slot2Value = fixed.bottom;
+    }
+    if (isOneSlotMeme) {
+      const raw = slot2Value;
+      if (
+        raw !== null &&
+        raw !== undefined &&
+        String(raw).trim() !== ""
+      ) {
+        console.warn("[meme-gen] stripping invalid bottom text", {
+          template: template.slug,
+          preview: String(raw).slice(0, 120),
+        });
+        slot2Value = null;
+        p.bottom_text = null;
+      }
     }
     const slot3Value = isThreeSlot ? p.slot_3_text : null;
     const namesValidation = namesCount
@@ -3303,7 +3354,6 @@ ${isThreeSlot
           isReactionStyleTopCaptionTemplate(template),
       }
     );
-    const rawBottom = slot2Value;
     const bottomValidation = template.isTwoSlot || isThreeSlot
       ? validateSlotTextSingleLine(
           slot2Value,
@@ -3329,26 +3379,17 @@ ${isThreeSlot
         )
       : { value: null as string | null, failRule: null as string | null, length: null as number | null };
 
-    if (!template.isTwoSlot && !isThreeSlot) {
-      // Enforce the contract: 1-slot templates must have `bottom_text = null`.
-      if (rawBottom !== null && rawBottom !== undefined) {
-        const rawBottomNormLen = normalizeSingleLine(rawBottom)?.length ?? null;
-        console.error("[meme-gen] Validation failed", {
-          template: `${template.template_name} (${template.slug})`,
-          templateType: template.template_type,
-          attempt,
-          slotType: "1-slot",
-          title_len: titleValidation.length,
-          title_max: TITLE_MAX_CHARS,
-          top_len: topValidation.length,
-          top_max: template.slot_1_max_chars,
-          bottom_len: rawBottomNormLen,
-          bottom_max: template.slot_2_max_chars,
-          rule: "one_slot_bottom_text_not_null",
-        });
-        return { result: null, failureRule: "one_slot_bottom_text_not_null" };
-      }
-    }
+    console.log("[meme-gen] final parsed output", {
+      slotType: isThreeSlot
+        ? "3-slot"
+        : namesCount
+          ? "names"
+          : template.isTwoSlot
+            ? "2-slot"
+            : "1-slot",
+      top: slot1Value,
+      bottom: slot2Value,
+    });
 
     if (!titleValidation.value || !topValidation.value) {
       const rule = !titleValidation.failRule
