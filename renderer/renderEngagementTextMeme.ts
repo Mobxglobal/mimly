@@ -4,6 +4,12 @@ import {
   getSvgDocumentFontStyleBlock,
   SHARP_SVG_FONT_FAMILY,
 } from "@/lib/rendering/fonts";
+import {
+  SVG_UTF8_XML_DECL,
+  escapeXML,
+  svgStringToUtf8Buffer,
+  logSvgDebugSample,
+} from "@/lib/rendering/svg-utf8";
 import type { MemeTemplateForRender } from "@/renderer/renderMemeTemplate";
 import {
   resolveEngagementTheme,
@@ -13,13 +19,9 @@ import {
 
 const CANVAS = 1080;
 
-function escapeXML(str: string) {
-  return String(str)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&apos;");
+function rasterizeEngagementSvg(svg: string, debugRawText: string): Promise<Buffer> {
+  logSvgDebugSample(debugRawText);
+  return sharp(svgStringToUtf8Buffer(svg)).png().toBuffer();
 }
 
 function normalizeFontFamily(): string {
@@ -155,7 +157,7 @@ async function renderFinishSentenceLayout(
   const underlineWidth = Math.min(maxWidth, measuredLine2Width + underlineExtra);
   const underlineX = xLeft;
 
-  const svg = `
+  const svg = `${SVG_UTF8_XML_DECL}
 <svg xmlns="http://www.w3.org/2000/svg" width="${CANVAS}" height="${CANVAS}" viewBox="0 0 ${CANVAS} ${CANVAS}">
   ${getSvgDocumentFontStyleBlock()}
   <rect x="0" y="0" width="${CANVAS}" height="${CANVAS}" fill="${escapeXML(theme.canvasBg)}" />
@@ -177,7 +179,7 @@ async function renderFinishSentenceLayout(
 </svg>
 `.trim();
 
-  return sharp(Buffer.from(svg)).png().toBuffer();
+  return rasterizeEngagementSvg(svg, line2);
 }
 
 async function renderOneWordLayout(
@@ -248,7 +250,7 @@ async function renderOneWordLayout(
     })
     .join("\n  ");
 
-  const svg = `
+  const svg = `${SVG_UTF8_XML_DECL}
 <svg xmlns="http://www.w3.org/2000/svg" width="${CANVAS}" height="${CANVAS}" viewBox="0 0 ${CANVAS} ${CANVAS}">
   ${getSvgDocumentFontStyleBlock()}
   <rect x="0" y="0" width="${CANVAS}" height="${CANVAS}" fill="${escapeXML(theme.canvasBg)}" />
@@ -256,7 +258,7 @@ async function renderOneWordLayout(
 </svg>
 `.trim();
 
-  return sharp(Buffer.from(svg)).png().toBuffer();
+  return rasterizeEngagementSvg(svg, fullText);
 }
 
 async function renderEmojiOnlyLayout(
@@ -327,7 +329,7 @@ async function renderEmojiOnlyLayout(
     })
     .join("\n  ");
 
-  const svg = `
+  const svg = `${SVG_UTF8_XML_DECL}
 <svg xmlns="http://www.w3.org/2000/svg" width="${CANVAS}" height="${CANVAS}" viewBox="0 0 ${CANVAS} ${CANVAS}">
   ${getSvgDocumentFontStyleBlock()}
   <rect x="0" y="0" width="${CANVAS}" height="${CANVAS}" fill="${escapeXML(theme.canvasBg)}" />
@@ -335,7 +337,7 @@ async function renderEmojiOnlyLayout(
 </svg>
 `.trim();
 
-  return sharp(Buffer.from(svg)).png().toBuffer();
+  return rasterizeEngagementSvg(svg, fullText);
 }
 
 /** Shared stack typography for agree_disagree + pick_one (aligned caps and vertical budget). */
@@ -428,7 +430,7 @@ async function renderPickOneLayout(
     })
     .join("\n  ");
 
-  const svg = `
+  const svg = `${SVG_UTF8_XML_DECL}
 <svg xmlns="http://www.w3.org/2000/svg" width="${CANVAS}" height="${CANVAS}" viewBox="0 0 ${CANVAS} ${CANVAS}">
   ${getSvgDocumentFontStyleBlock()}
   <rect x="0" y="0" width="${CANVAS}" height="${CANVAS}" fill="${escapeXML(theme.canvasBg)}" />
@@ -438,7 +440,7 @@ async function renderPickOneLayout(
 </svg>
 `.trim();
 
-  return sharp(Buffer.from(svg)).png().toBuffer();
+  return rasterizeEngagementSvg(svg, `${a}\n${b}`);
 }
 
 async function renderFillGapLayout(
@@ -507,7 +509,7 @@ async function renderFillGapLayout(
     })
     .join("\n  ");
 
-  const svg = `
+  const svg = `${SVG_UTF8_XML_DECL}
 <svg xmlns="http://www.w3.org/2000/svg" width="${CANVAS}" height="${CANVAS}" viewBox="0 0 ${CANVAS} ${CANVAS}">
   ${getSvgDocumentFontStyleBlock()}
   <rect x="0" y="0" width="${CANVAS}" height="${CANVAS}" fill="${escapeXML(theme.canvasBg)}" />
@@ -515,7 +517,7 @@ async function renderFillGapLayout(
 </svg>
 `.trim();
 
-  return sharp(Buffer.from(svg)).png().toBuffer();
+  return rasterizeEngagementSvg(svg, statement);
 }
 
 async function renderAgreeDisagreeLayout(
@@ -575,7 +577,7 @@ async function renderAgreeDisagreeLayout(
     font-family="${escapeXML(fontFamily)}"
     font-size="${size}" font-weight="700" fill="${escapeXML(theme.textPrimary)}">${escapeXML(footer)}</text>`;
 
-  const svg = `
+  const svg = `${SVG_UTF8_XML_DECL}
 <svg xmlns="http://www.w3.org/2000/svg" width="${CANVAS}" height="${CANVAS}" viewBox="0 0 ${CANVAS} ${CANVAS}">
   ${getSvgDocumentFontStyleBlock()}
   <rect x="0" y="0" width="${CANVAS}" height="${CANVAS}" fill="${escapeXML(theme.canvasBg)}" />
@@ -584,7 +586,7 @@ async function renderAgreeDisagreeLayout(
 </svg>
 `.trim();
 
-  return sharp(Buffer.from(svg)).png().toBuffer();
+  return rasterizeEngagementSvg(svg, statement);
 }
 
 async function renderHotTakeLayout(
@@ -649,7 +651,7 @@ async function renderHotTakeLayout(
     })
     .join("\n  ");
 
-  const svg = `
+  const svg = `${SVG_UTF8_XML_DECL}
 <svg xmlns="http://www.w3.org/2000/svg" width="${CANVAS}" height="${CANVAS}" viewBox="0 0 ${CANVAS} ${CANVAS}">
   ${getSvgDocumentFontStyleBlock()}
   <rect x="0" y="0" width="${CANVAS}" height="${CANVAS}" fill="${escapeXML(theme.canvasBg)}" />
@@ -658,7 +660,7 @@ async function renderHotTakeLayout(
 </svg>
 `.trim();
 
-  return sharp(Buffer.from(svg)).png().toBuffer();
+  return rasterizeEngagementSvg(svg, statement);
 }
 
 async function renderBirthdayNamesListLayout(
@@ -787,7 +789,7 @@ async function renderBirthdayNamesListLayout(
     })
     .join("\n  ");
 
-  const svg = `
+  const svg = `${SVG_UTF8_XML_DECL}
 <svg xmlns="http://www.w3.org/2000/svg" width="${CANVAS}" height="${CANVAS}" viewBox="0 0 ${CANVAS} ${CANVAS}">
   ${getSvgDocumentFontStyleBlock()}
   <rect x="0" y="0" width="${CANVAS}" height="${CANVAS}" fill="${escapeXML(theme.canvasBg)}" />
@@ -796,7 +798,7 @@ async function renderBirthdayNamesListLayout(
 </svg>
 `.trim();
 
-  return sharp(Buffer.from(svg)).png().toBuffer();
+  return rasterizeEngagementSvg(svg, headline);
 }
 
 /**

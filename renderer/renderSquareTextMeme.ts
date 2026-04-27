@@ -6,6 +6,12 @@ import {
   SHARP_SVG_FONT_FAMILY,
 } from "@/lib/rendering/fonts";
 import {
+  SVG_UTF8_XML_DECL,
+  escapeXML,
+  logSvgDebugSample,
+  svgStringToUtf8Buffer,
+} from "@/lib/rendering/svg-utf8";
+import {
   resolveEngagementTheme,
   type EngagementVisualStyle,
 } from "@/lib/memes/engagement-style";
@@ -51,15 +57,6 @@ export const SQUARE_TEXT_LAYOUT_METRICS = {
 const LINE_HEIGHT_SINGLE = Math.round(FONT_SIZE * 1.18);
 const LINE_HEIGHT_STACK = Math.round(FONT_SIZE * 1.08);
 const BLOCK_GAP = Math.round(FONT_SIZE * 0.68);
-
-function escapeXML(str: string) {
-  return String(str)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&apos;");
-}
 
 function normalizeText(text: string): string {
   return String(text ?? "")
@@ -271,7 +268,7 @@ export async function renderSquareTextMemePng(params: {
         ? buildSquareTextDebugGuidesSvg([])
         : "";
 
-  const svg = `
+  const svg = `${SVG_UTF8_XML_DECL}
 <svg xmlns="http://www.w3.org/2000/svg" width="${CANVAS}" height="${CANVAS}" viewBox="0 0 ${CANVAS} ${CANVAS}">
   ${getSvgDocumentFontStyleBlock()}
   <rect width="${CANVAS}" height="${CANVAS}" fill="${theme.canvasBg}"/>
@@ -287,7 +284,9 @@ export async function renderSquareTextMemePng(params: {
 </svg>
 `.trim();
 
-  const out = await sharp(Buffer.from(svg)).png().toBuffer();
+  logSvgDebugSample(top || bottom);
+
+  const out = await sharp(svgStringToUtf8Buffer(svg)).png().toBuffer();
   if (!out?.length) {
     throw new Error("[render] renderSquareTextMemePng produced empty buffer");
   }

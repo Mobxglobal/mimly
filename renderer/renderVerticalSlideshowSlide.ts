@@ -2,6 +2,12 @@ import sharp from "sharp";
 import { wrapSlideshowVerticalLines } from "@/renderer/caption-wrap";
 import type { SlideshowLayoutVariant } from "@/lib/memes/slideshow/types";
 import { getSvgDocumentFontStyleBlock } from "@/lib/rendering/fonts";
+import {
+  SVG_UTF8_XML_DECL,
+  escapeXML,
+  logSvgDebugSample,
+  svgStringToUtf8Buffer,
+} from "@/lib/rendering/svg-utf8";
 
 const CANVAS_W = 1080;
 const CANVAS_H = 1920;
@@ -36,15 +42,6 @@ export type VerticalSlideshowRenderStyle = {
   stroke_color: string;
   stroke_width: number;
 };
-
-function escapeXML(str: unknown) {
-  return String(str)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&apos;");
-}
 
 /** Text band geometry for 1080×1920 vertical slides (centered narrow column). */
 function getTextBand(layout: SlideshowLayoutVariant): {
@@ -92,10 +89,10 @@ function renderLinesSvg(
       const y = startY + i * lineHeight;
       const strokeAttrs =
         style.strokeWidth > 0 && style.strokeColor
-          ? `stroke="${escapeXML(style.strokeColor)}" stroke-width="${style.strokeWidth}" paint-order="stroke"`
+          ? `stroke="${escapeXML(String(style.strokeColor))}" stroke-width="${style.strokeWidth}" paint-order="stroke"`
           : "";
       return `<text class="cap" x="${cx}" y="${y}" text-anchor="middle" ${strokeAttrs}>${escapeXML(
-        line
+        String(line)
       )}</text>`;
     })
     .join("");
@@ -128,7 +125,7 @@ function buildTextSvg(
     strokeWidth: style.stroke_width,
   });
 
-  return `
+  return `${SVG_UTF8_XML_DECL}
 <svg xmlns="http://www.w3.org/2000/svg" width="${CANVAS_W}" height="${CANVAS_H}">
   ${getSvgDocumentFontStyleBlock()}
   <style type="text/css">
@@ -169,7 +166,8 @@ export async function renderVerticalSlideshowSlidePng(params: {
     .toBuffer();
 
   const svg = buildTextSvg(params.text, params.layout_variant, params.style);
-  const svgBuf = Buffer.from(svg);
+  logSvgDebugSample(params.text);
+  const svgBuf = svgStringToUtf8Buffer(svg);
 
   return sharp(base)
     .composite([

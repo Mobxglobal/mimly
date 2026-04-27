@@ -8,6 +8,12 @@ import {
   getSvgDocumentFontStyleBlock,
   SHARP_SVG_FONT_FAMILY,
 } from "@/lib/rendering/fonts";
+import {
+  SVG_UTF8_XML_DECL,
+  escapeXML,
+  logSvgDebugSample,
+  svgStringToUtf8Buffer,
+} from "@/lib/rendering/svg-utf8";
 
 export type MemeTemplateForRender = {
   slug?: string | null;
@@ -52,15 +58,6 @@ type SlotTexts = {
   slot_2_text?: string | null;
   slot_3_text?: string | null;
 };
-
-function escapeXML(str: unknown) {
-  return String(str)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&apos;");
-}
 
 function normalizeRenderableText(value: unknown): string {
   return String(value ?? "")
@@ -130,9 +127,7 @@ function renderLines(
         style.strokeWidth > 0 && style.strokeColor
           ? `stroke="${style.strokeColor}" stroke-width="${style.strokeWidth}" paint-order="stroke"`
           : "";
-      return `<text x="${x}" y="${y}" class="caption" text-anchor="${textAnchor}" ${strokeAttrs}>${escapeXML(
-        line
-      )}</text>`;
+      return `<text x="${x}" y="${y}" class="caption" text-anchor="${textAnchor}" ${strokeAttrs}>${escapeXML(String(line))}</text>`;
     })
     .join("");
 }
@@ -324,7 +319,9 @@ function buildSVG(template: MemeTemplateForRender, slotTexts: SlotTexts) {
     );
   }
 
-  return `
+  logSvgDebugSample(slot1Text || slot2Text || slot3Text);
+
+  return `${SVG_UTF8_XML_DECL}
 <svg xmlns="http://www.w3.org/2000/svg" width="${template.canvas_width}" height="${template.canvas_height}">
   ${getSvgDocumentFontStyleBlock()}
   <style>
@@ -363,7 +360,7 @@ export async function renderMemePNGFromTemplate(params: {
     }
   );
 
-  const svgBuffer = Buffer.from(svg);
+  const svgBuffer = svgStringToUtf8Buffer(svg);
   const out = await sharp(params.baseImageBuffer)
     .composite([{ input: svgBuffer }])
     .png()
@@ -391,7 +388,7 @@ export async function renderTopCaptionOverlayPng(params: {
     slot_3_text: "",
   });
 
-  const out = await sharp(Buffer.from(svg)).png().toBuffer();
+  const out = await sharp(svgStringToUtf8Buffer(svg)).png().toBuffer();
   if (!out?.length) {
     throw new Error("[render] renderTopCaptionOverlayPng produced empty buffer");
   }
