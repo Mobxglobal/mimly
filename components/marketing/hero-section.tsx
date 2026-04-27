@@ -356,12 +356,13 @@ export function HeroSection() {
                   };
                   if (!bootstrapRes.ok || !bootstrapData.workspaceId) {
                     setPromptError(bootstrapData.error ?? "Failed to start workspace.");
+                    setIsSubmittingPrompt(false);
                     return;
                   }
                   router.push(`/workspace/${bootstrapData.workspaceId}`);
+                  return;
                 } catch {
                   setPromptError("Something went wrong. Try again.");
-                } finally {
                   setIsSubmittingPrompt(false);
                 }
               }}
