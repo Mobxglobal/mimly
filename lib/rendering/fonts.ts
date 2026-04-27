@@ -6,10 +6,9 @@ let renderSharpFontLogDone = false;
 let embeddedInterSvgDefs: string | null = null;
 
 /**
- * Family name for Sharp/librsvg SVG text — matches `@font-face` in `getSvgDocumentFontStyleBlock()`.
- * Embedded TTF avoids fontconfig / system font resolution on serverless runtimes.
+ * Family name for Sharp/librsvg SVG text — matches embedded `@font-face` (no system font stack).
  */
-export const SHARP_SVG_FONT_FAMILY = "InterEmbed";
+export const SHARP_SVG_FONT_FAMILY = "Inter";
 
 /**
  * One-time check: if `canvas` is not resolvable (typical on Vercel), log SVG-only path.
@@ -32,14 +31,15 @@ function buildEmbeddedInterSvgFontDefs(): string {
   return `<defs>
   <style type="text/css"><![CDATA[
 @font-face {
-  font-family: 'InterEmbed';
+  font-family: 'Inter';
   src: url("data:font/truetype;charset=utf-8;base64,${fontData}") format("truetype");
   font-weight: bold;
   font-style: normal;
   font-display: block;
 }
 text {
-  font-family: 'InterEmbed';
+  font-family: 'Inter';
+  font-weight: bold;
 }
 ]]></style>
 </defs>`;
@@ -52,7 +52,7 @@ text {
 export function getSvgDocumentFontStyleBlock(): string {
   if (!renderSharpFontLogDone) {
     renderSharpFontLogDone = true;
-    console.log("[render] using font: InterEmbed (embedded)");
+    console.log("[render] using font: Inter");
   }
   if (!embeddedInterSvgDefs) {
     embeddedInterSvgDefs = buildEmbeddedInterSvgFontDefs();

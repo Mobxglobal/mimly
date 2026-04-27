@@ -1,6 +1,6 @@
 /**
  * Text width estimates for wrapping (no node-canvas). Ratios tuned for generic sans metrics
- * used in Sharp-rasterized SVG (`font-family: 'InterEmbed'` with embedded face).
+ * used in Sharp-rasterized SVG (`font-family: 'Inter'` with embedded face).
  */
 import { warnCanvasUnavailableOnce } from "@/lib/rendering/fonts";
 

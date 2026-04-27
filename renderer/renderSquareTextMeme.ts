@@ -276,7 +276,8 @@ export async function renderSquareTextMemePng(params: {
     .caption {
       fill: ${theme.textPrimary};
       font-size: ${FONT_SIZE}px;
-      font-family: 'InterEmbed';
+      font-family: 'Inter';
+      font-weight: bold;
     }
   </style>
   ${textElements.join("\n")}

@@ -1,5 +1,6 @@
 /**
  * Slot meme PNGs: SVG text overlay + Sharp composite/rasterize only (no node-canvas).
+ * Inter is base64-embedded in the SVG; `canvas.registerFont` does not apply to librsvg/Sharp.
  */
 import fs from "fs";
 import path from "path";
@@ -134,7 +135,7 @@ function renderLines(
         style.strokeWidth > 0 && style.strokeColor
           ? `stroke="${style.strokeColor}" stroke-width="${style.strokeWidth}" paint-order="stroke"`
           : "";
-      return `<text x="${x}" y="${y}" class="caption" font-family="InterEmbed" text-anchor="${textAnchor}" ${strokeAttrs}>${escapeXML(String(line))}</text>`;
+      return `<text x="${x}" y="${y}" class="caption" font-family="Inter" font-weight="bold" text-anchor="${textAnchor}" ${strokeAttrs}>${escapeXML(String(line))}</text>`;
     })
     .join("");
 }
@@ -329,19 +330,23 @@ function buildSVG(template: MemeTemplateForRender, slotTexts: SlotTexts) {
   const fontData = readMemeInterFontBase64();
   const embeddedFontStyle = `<style type="text/css"><![CDATA[
 @font-face {
-  font-family: 'InterEmbed';
+  font-family: 'Inter';
   src: url("data:font/truetype;charset=utf-8;base64,${fontData}") format("truetype");
   font-weight: bold;
 }
 text {
-  font-family: 'InterEmbed';
+  font-family: 'Inter';
+  font-weight: bold;
 }
 .caption {
   fill: ${style.textColor};
   font-size: ${style.fontSize}px;
-  font-family: 'InterEmbed';
+  font-family: 'Inter';
+  font-weight: bold;
 }
 ]]></style>`;
+
+  console.log("[render] using font: Inter");
 
   return `${SVG_UTF8_XML_DECL}
 <svg xmlns="http://www.w3.org/2000/svg" width="${template.canvas_width}" height="${template.canvas_height}">
