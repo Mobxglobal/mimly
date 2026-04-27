@@ -130,6 +130,24 @@ function coerceOutputFormat(
 
 const STALE_GENERATION_JOB_MS = 60_000;
 
+async function updateJobStatus(
+  admin: ReturnType<typeof createWorkspaceAdminClient>,
+  jobId: string,
+  status: "failed",
+  fields: { error?: string }
+): Promise<void> {
+  await admin
+    .schema("public")
+    .from("generation_jobs")
+    .update({
+      status,
+      error_message: fields.error ?? "Unknown error",
+      completed_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", jobId);
+}
+
 /** Marks queued/running jobs older than STALE_GENERATION_JOB_MS as failed so they do not block new work. */
 export async function expireStaleGenerationJobs(
   admin: ReturnType<typeof createWorkspaceAdminClient>,
@@ -234,7 +252,26 @@ export async function enqueueGenerationJob(params: {
     }
     return { jobId: null, error: error?.message ?? "Failed to queue generation." };
   }
-  return { jobId: data.id as string, error: null };
+
+  const jobId = data.id as string;
+
+  // Duplicate execution: prevented by the pre-insert `running` check above and by
+  // `runGenerationJob` only transitioning `queued` → `running`. Do not re-check
+  // `running` here — deferred follow-ups enqueue while the parent job is still `running`.
+
+  console.log("[jobs] triggering runGenerationJob", { jobId });
+  let runError: string | null = null;
+  try {
+    await runGenerationJob(jobId);
+  } catch (err) {
+    console.error("[jobs] runGenerationJob failed", err);
+    runError = err instanceof Error ? err.message : String(err);
+    await updateJobStatus(admin, jobId, "failed", {
+      error: runError,
+    });
+  }
+
+  return { jobId, error: runError };
 }
 
 export async function runGenerationPlan(params: {
@@ -250,7 +287,7 @@ export async function runGenerationPlan(params: {
     job.metadata && typeof job.metadata === "object"
       ? (job.metadata as Record<string, unknown>)
       : {};
-  console.log("RUN GENERATION INPUT", {
+  console.log("RUN GENERATION PLAN", {
     jobId: job.id,
     jobPrompt: job.prompt,
     metadata: job.metadata,
@@ -455,6 +492,7 @@ It should make the audience feel "this is so accurate".
 export async function runGenerationJob(
   jobId: string
 ): Promise<{ ok: boolean; status: string; error?: string | null }> {
+  console.log("RUN GENERATION INPUT", { jobId });
   const admin = createWorkspaceAdminClient();
 
   const { data: lockedJob, error: lockError } = await admin
@@ -601,6 +639,11 @@ export async function runGenerationJob(
         .insert(payload);
       if (mapError) {
         console.error("[workspace-gen] Failed to map job outputs", mapError);
+      } else {
+        console.log("[meme-gen] output inserted", {
+          jobId: job.id,
+          count: payload.length,
+        });
       }
     }
 
@@ -881,9 +924,7 @@ export async function runGenerationJob(
             metadata: deferredPlan.metadata as Json,
           });
 
-          if (queuedFollowup.jobId) {
-            void runGenerationJob(queuedFollowup.jobId);
-          }
+          // runGenerationJob is invoked from enqueueGenerationJob after insert.
         }
       }
     }

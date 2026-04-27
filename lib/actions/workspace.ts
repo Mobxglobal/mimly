@@ -402,10 +402,12 @@ export async function createWorkspaceFromPrompt(
     requestedVariantCount: generationPlan.requestedVariantCount,
     metadata: generationPlan.metadata as Json,
   });
-  if (initialQueued.jobId) {
-    void runGenerationJob(initialQueued.jobId);
+  if (initialQueued.error || !initialQueued.jobId) {
+    return {
+      workspaceId,
+      error: initialQueued.error ?? "Failed to queue or run generation.",
+    };
   }
-
   return { workspaceId, error: null };
 }
 
@@ -561,8 +563,6 @@ async function queueAuthenticatedHomepageFromUrl(
       error: initialQueued.error ?? "Failed to queue generation.",
     };
   }
-
-  void runGenerationJob(initialQueued.jobId);
 
   return { workspaceId, error: null };
 }
@@ -827,7 +827,6 @@ export async function processWorkspaceHomepageIntent(
     return { error: reason };
   }
 
-  void runGenerationJob(queued.jobId);
   return { error: null };
 }
 
@@ -1370,7 +1369,7 @@ export async function startGenerationIfQueued(
     .maybeSingle();
 
   if (!queued?.id) return { started: false, error: null };
-  void runGenerationJob(String(queued.id));
+  await runGenerationJob(String(queued.id));
   return { started: true, error: null };
 }
 
@@ -1743,7 +1742,6 @@ export async function sendWorkspaceMessage(
   if (queued.error || !queued.jobId) {
     return { state: null, error: queued.error ?? "Failed to queue generation." };
   }
-  void runGenerationJob(queued.jobId);
   return getWorkspaceState(workspaceId);
 }
 
@@ -1920,9 +1918,6 @@ export async function unlockWorkspacePlan(
     });
     if (queued.error) {
       return { error: queued.error };
-    }
-    if (queued.jobId) {
-      void runGenerationJob(queued.jobId);
     }
   }
 
