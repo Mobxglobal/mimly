@@ -1,9 +1,19 @@
-import { registerFont } from "canvas";
 import fs from "fs";
 import path from "path";
 
 let fontsRegistered = false;
 let svgFontFaceBlock: string | null = null;
+
+/** Avoid top-level `import "canvas"` so Next can analyze routes without loading native bindings. */
+function getRegisterFont(): (
+  src: string,
+  options: { family: string; weight?: string }
+) => void {
+  const dynamicRequire = eval("require") as (id: string) => {
+    registerFont: (src: string, options: { family: string; weight?: string }) => void;
+  };
+  return dynamicRequire("canvas").registerFont;
+}
 
 export function getInterSvgFontFaceBlock(): string {
   if (svgFontFaceBlock) return svgFontFaceBlock;
@@ -22,6 +32,7 @@ export function ensureFontsRegistered() {
   if (fontsRegistered) return;
 
   try {
+    const registerFont = getRegisterFont();
     const regularPath = path.join(process.cwd(), "public", "fonts", "Inter-Regular.ttf");
     const boldPath = path.join(process.cwd(), "public", "fonts", "Inter-Bold.ttf");
 

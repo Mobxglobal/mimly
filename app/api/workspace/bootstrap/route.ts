@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { bootstrapHomepageWorkspace } from "@/lib/actions/workspace";
+import { bootstrapHomepageWorkspace } from "@/lib/workspace/bootstrap-homepage-workspace";
 
 export async function POST(request: Request) {
   try {
