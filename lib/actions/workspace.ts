@@ -613,19 +613,27 @@ export async function bootstrapHomepageWorkspace(
   error: string | null;
   reused: boolean;
 }> {
+  console.log("[bootstrap] step: ensure workspace token");
   const token = await ensureWorkspaceToken();
   const tokenHash = hashWorkspaceToken(token);
+
+  console.log("[bootstrap] step: admin client");
   const admin = createWorkspaceAdminClient();
   const nowIso = new Date().toISOString();
 
+  console.log("[bootstrap] step: load auth user");
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const sid = typeof sessionId === "string" ? sessionId.trim() : "";
+  const sid =
+    sessionId != null && typeof sessionId === "string"
+      ? sessionId.trim()
+      : "";
 
   if (user?.id) {
+    console.log("[bootstrap] step: get or create default workspace (authenticated)");
     const workspaceId = await getOrCreateDefaultWorkspaceForUser(user.id, sid || null);
     console.log("[bootstrap] workspace created/reused", {
       workspaceId,
@@ -637,6 +645,7 @@ export async function bootstrapHomepageWorkspace(
   }
 
   if (sid) {
+    console.log("[bootstrap] step: anonymous session workspace lookup");
     const { data: sessionWorkspace } = await admin
       .schema("public")
       .from("workspaces")
@@ -660,27 +669,41 @@ export async function bootstrapHomepageWorkspace(
     }
   }
 
+  console.log("[bootstrap] step: insert new anonymous workspace");
+  const insertPayload = {
+    user_id: null as string | null,
+    anon_token_hash: tokenHash,
+    session_id: sid ? sid : null,
+    initial_prompt: "",
+    business_url: null as string | null,
+    business_summary: "",
+    detected_content_type: "meme" as const,
+    status: "active" as const,
+    preview_generations_used: 0,
+    last_message_at: nowIso,
+    created_at: nowIso,
+    updated_at: nowIso,
+  };
+  console.log("[bootstrap] workspace insert payload:", {
+    session_id: insertPayload.session_id,
+    initial_prompt: insertPayload.initial_prompt,
+    business_url: insertPayload.business_url,
+  });
+
   const { data: createdWorkspace, error } = await admin
     .schema("public")
     .from("workspaces")
-    .insert({
-      user_id: null,
-      anon_token_hash: tokenHash,
-      session_id: sid || null,
-      initial_prompt: "",
-      business_url: null,
-      business_summary: "",
-      detected_content_type: "meme",
-      status: "active",
-      preview_generations_used: 0,
-      last_message_at: nowIso,
-      created_at: nowIso,
-      updated_at: nowIso,
-    })
+    .insert(insertPayload)
     .select("id")
     .single();
 
   if (error || !createdWorkspace?.id) {
+    console.error("[bootstrap] workspace insert failed:", {
+      message: error?.message,
+      code: error?.code,
+      details: error?.details,
+      hint: error?.hint,
+    });
     return {
       workspaceId: null,
       error: error?.message ?? "Failed to bootstrap workspace.",
