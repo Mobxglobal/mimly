@@ -578,13 +578,14 @@ export async function qaGenerateRealOutput(slug: string): Promise<QaRealOutputCa
   }
 
   const q = gen.qaSanitizedText;
+  const wowDogePhrases = (q as { wowDogePhrases?: string[] }).wowDogePhrases;
   const payload: QaRealOutputCacheEntry = {
     top_text: q.top_text,
     bottom_text: q.bottom_text,
     slot_3_text: q.slot_3_text,
     title: q.title,
     ...(q.names && q.names.length > 0 ? { names: q.names } : {}),
-    ...(q.wowDogePhrases && q.wowDogePhrases.length > 0 ? { phrases: q.wowDogePhrases } : {}),
+    ...(wowDogePhrases && wowDogePhrases.length > 0 ? { phrases: wowDogePhrases } : {}),
   };
 
   realOutputMemoryCache.set(slug, payload);

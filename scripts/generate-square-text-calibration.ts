@@ -8,13 +8,13 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { wrapSquareTextMemeLines } from "../renderer/caption-wrap.ts";
+import { wrapSquareTextMemeLines } from "../renderer/caption-wrap";
 import {
   renderSquareTextMemePng,
   SQUARE_TEXT_LAYOUT_METRICS,
   SQUARE_TEXT_MAX_LINE_WIDTH_PX,
-} from "../renderer/renderSquareTextMeme.ts";
-import { measureSquareTextLineWidthPx } from "../renderer/square-text-measure.ts";
+} from "../renderer/renderSquareTextMeme";
+import { measureSquareTextLineWidthPx } from "../renderer/square-text-measure";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const OUT_DIR = join(__dirname, "../debug-output/square-text-calibration");

@@ -125,7 +125,7 @@ export async function GET(request: Request) {
     });
   }
 
-  const zipBuffer = await zip.generateAsync({ type: "nodebuffer" });
+  const zipBuffer = await zip.generateAsync({ type: "arraybuffer" });
   return new Response(zipBuffer, {
     status: 200,
     headers: {
