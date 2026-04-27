@@ -2,6 +2,10 @@ import sharp from "sharp";
 import { wrapSquareTextMemeLines } from "@/renderer/caption-wrap";
 import { measureSquareTextLineWidthPx } from "@/renderer/square-text-measure";
 import {
+  ensureFontsRegistered,
+  getInterSvgFontFaceBlock,
+} from "@/lib/rendering/fonts";
+import {
   resolveEngagementTheme,
   type EngagementVisualStyle,
 } from "@/lib/memes/engagement-style";
@@ -202,12 +206,12 @@ function buildSquareTextDebugGuidesSvg(layoutRows: TextLineLayoutRow[]): string 
   ${vertical(multiX, "#2563eb", "5 5", 1.5)}
   ${vertical(cx, "#c026d3", "10 8", 2)}
   ${rowGuides}
-  <text x="${safeL + 4}" y="28" fill="#7c3aed" font-size="18" font-family="Arial, Helvetica, sans-serif">DEBUG square_text guides: red=safe verticals (96/984), blue dashed=multi-line anchor (112), magenta=center (540), orange=top/bottom margin (96), cyan=baseline, blue fill=row band</text>
+  <text x="${safeL + 4}" y="28" fill="#7c3aed" font-size="18" font-family="Inter">DEBUG square_text guides: red=safe verticals (96/984), blue dashed=multi-line anchor (112), magenta=center (540), orange=top/bottom margin (96), cyan=baseline, blue fill=row band</text>
 </g>`.trim();
 }
 
 /**
- * Plain 1080×1080 PNG: white background, black Arial; wide wrap + phrase scoring; single line
+ * Plain 1080×1080 PNG: white background, Inter; wide wrap + phrase scoring; single line
  * centered, multi-line left-aligned in the full margin band.
  *
  * @param params.debug — TEMPORARY: draws calibration guides (safe margins, center, baselines).
@@ -222,6 +226,7 @@ export async function renderSquareTextMemePng(params: {
   /** When true, overlays margin/center/baseline guides for visual calibration only. */
   debug?: boolean;
 }): Promise<Buffer> {
+  ensureFontsRegistered();
   const top = normalizeText(params.topText);
   const bottom = normalizeText(params.bottomText ?? "");
 
@@ -267,14 +272,17 @@ export async function renderSquareTextMemePng(params: {
         ? buildSquareTextDebugGuidesSvg([])
         : "";
 
+  console.log("[font] using font:", `${FONT_SIZE}px Inter`);
+
   const svg = `
 <svg xmlns="http://www.w3.org/2000/svg" width="${CANVAS}" height="${CANVAS}" viewBox="0 0 ${CANVAS} ${CANVAS}">
+  ${getInterSvgFontFaceBlock()}
   <rect width="${CANVAS}" height="${CANVAS}" fill="${theme.canvasBg}"/>
   <style>
     .caption {
       fill: ${theme.textPrimary};
       font-size: ${FONT_SIZE}px;
-      font-family: Arial, Helvetica, sans-serif;
+      font-family: Inter;
     }
   </style>
   ${textElements.join("\n")}

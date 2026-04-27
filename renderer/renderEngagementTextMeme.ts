@@ -1,5 +1,9 @@
 import sharp from "sharp";
 import { measureLineWidthPx } from "@/renderer/square-text-measure";
+import {
+  ensureFontsRegistered,
+  getInterSvgFontFaceBlock,
+} from "@/lib/rendering/fonts";
 import type { MemeTemplateForRender } from "@/renderer/renderMemeTemplate";
 import {
   resolveEngagementTheme,
@@ -18,11 +22,8 @@ function escapeXML(str: string) {
     .replace(/'/g, "&apos;");
 }
 
-function normalizeFontFamily(font?: string | null): string {
-  const f = String(font ?? "").trim();
-  if (!f) return "Arial, sans-serif";
-  // SVG font-family lists are forgiving; keep it simple.
-  return /sans-serif/i.test(f) ? f : `${f}, sans-serif`;
+function normalizeFontFamily(): string {
+  return "Inter";
 }
 
 function wrapTextToLines(
@@ -36,7 +37,7 @@ function wrapTextToLines(
   let cur = "";
   for (const w of words) {
     const next = cur ? `${cur} ${w}` : w;
-    if (measureLineWidthPx(next, fontSize, fontFamily) <= maxWidth || !cur) {
+    if (measureLineWidthPx(next, fontSize, fontFamily, { bold: true }) <= maxWidth || !cur) {
       cur = next;
     } else {
       lines.push(cur);
@@ -95,7 +96,7 @@ async function renderFinishSentenceLayout(
   const { template, keyword, theme } = params;
 
   // This layout is intentionally fixed to finish_sentence behavior.
-  const fontFamily = normalizeFontFamily(template.font ?? "Arial");
+  const fontFamily = normalizeFontFamily();
   const baseFontSize = Number.isFinite(template.font_size)
     ? Math.max(56, Math.min(64, Number(template.font_size)))
     : 60;
@@ -156,6 +157,7 @@ async function renderFinishSentenceLayout(
 
   const svg = `
 <svg xmlns="http://www.w3.org/2000/svg" width="${CANVAS}" height="${CANVAS}" viewBox="0 0 ${CANVAS} ${CANVAS}">
+  ${getInterSvgFontFaceBlock()}
   <rect x="0" y="0" width="${CANVAS}" height="${CANVAS}" fill="${escapeXML(theme.canvasBg)}" />
 
   <text x="${xLeft}" y="${line1Y}" text-anchor="start"
@@ -187,7 +189,7 @@ async function renderOneWordLayout(
     throw new Error("one_word requires topText");
   }
 
-  const fontFamily = normalizeFontFamily(template.font ?? "Arial");
+  const fontFamily = normalizeFontFamily();
   const baseFontSize = Number.isFinite(template.font_size)
     ? Math.max(54, Math.min(70, Number(template.font_size)))
     : 62;
@@ -213,7 +215,7 @@ async function renderOneWordLayout(
     let cur = "";
     for (const w of words) {
       const next = cur ? `${cur} ${w}` : w;
-      if (measureLineWidthPx(next, size, fontFamily) <= maxWidth || !cur) {
+      if (measureLineWidthPx(next, size, fontFamily, { bold: true }) <= maxWidth || !cur) {
         cur = next;
       } else {
         lines.push(cur);
@@ -248,6 +250,7 @@ async function renderOneWordLayout(
 
   const svg = `
 <svg xmlns="http://www.w3.org/2000/svg" width="${CANVAS}" height="${CANVAS}" viewBox="0 0 ${CANVAS} ${CANVAS}">
+  ${getInterSvgFontFaceBlock()}
   <rect x="0" y="0" width="${CANVAS}" height="${CANVAS}" fill="${escapeXML(theme.canvasBg)}" />
   ${textBlocks}
 </svg>
@@ -265,7 +268,7 @@ async function renderEmojiOnlyLayout(
     throw new Error("emoji_only requires topText");
   }
 
-  const fontFamily = normalizeFontFamily(template.font ?? "Arial");
+  const fontFamily = normalizeFontFamily();
   const baseFontSize = Number.isFinite(template.font_size)
     ? Math.max(54, Math.min(70, Number(template.font_size)))
     : 62;
@@ -291,7 +294,7 @@ async function renderEmojiOnlyLayout(
     let cur = "";
     for (const w of words) {
       const next = cur ? `${cur} ${w}` : w;
-      if (measureLineWidthPx(next, size, fontFamily) <= maxWidth || !cur) {
+      if (measureLineWidthPx(next, size, fontFamily, { bold: true }) <= maxWidth || !cur) {
         cur = next;
       } else {
         lines.push(cur);
@@ -326,6 +329,7 @@ async function renderEmojiOnlyLayout(
 
   const svg = `
 <svg xmlns="http://www.w3.org/2000/svg" width="${CANVAS}" height="${CANVAS}" viewBox="0 0 ${CANVAS} ${CANVAS}">
+  ${getInterSvgFontFaceBlock()}
   <rect x="0" y="0" width="${CANVAS}" height="${CANVAS}" fill="${escapeXML(theme.canvasBg)}" />
   ${textBlocks}
 </svg>
@@ -350,7 +354,7 @@ async function renderPickOneLayout(
   }
 
   const header = "Pick one:";
-  const fontFamily = normalizeFontFamily(template.font ?? "Arial");
+  const fontFamily = normalizeFontFamily();
 
   const boxX = template.slot_1_x ?? 0;
   const boxY = template.slot_1_y ?? 0;
@@ -426,6 +430,7 @@ async function renderPickOneLayout(
 
   const svg = `
 <svg xmlns="http://www.w3.org/2000/svg" width="${CANVAS}" height="${CANVAS}" viewBox="0 0 ${CANVAS} ${CANVAS}">
+  ${getInterSvgFontFaceBlock()}
   <rect x="0" y="0" width="${CANVAS}" height="${CANVAS}" fill="${escapeXML(theme.canvasBg)}" />
   ${headSvg}
   ${optASvg}
@@ -445,7 +450,7 @@ async function renderFillGapLayout(
     throw new Error("fill_gap requires topText");
   }
 
-  const fontFamily = normalizeFontFamily(template.font ?? "Arial");
+  const fontFamily = normalizeFontFamily();
   const baseFontSize = Number.isFinite(template.font_size)
     ? Math.max(52, Math.min(64, Number(template.font_size)))
     : 58;
@@ -469,7 +474,7 @@ async function renderFillGapLayout(
     let cur = "";
     for (const w of words) {
       const next = cur ? `${cur} ${w}` : w;
-      if (measureLineWidthPx(next, size, fontFamily) <= maxWidth || !cur) {
+      if (measureLineWidthPx(next, size, fontFamily, { bold: true }) <= maxWidth || !cur) {
         cur = next;
       } else {
         lines.push(cur);
@@ -504,6 +509,7 @@ async function renderFillGapLayout(
 
   const svg = `
 <svg xmlns="http://www.w3.org/2000/svg" width="${CANVAS}" height="${CANVAS}" viewBox="0 0 ${CANVAS} ${CANVAS}">
+  ${getInterSvgFontFaceBlock()}
   <rect x="0" y="0" width="${CANVAS}" height="${CANVAS}" fill="${escapeXML(theme.canvasBg)}" />
   ${textBlocks}
 </svg>
@@ -521,7 +527,7 @@ async function renderAgreeDisagreeLayout(
     throw new Error("agree_disagree requires topText");
   }
   const footer = "Agree or disagree?";
-  const fontFamily = normalizeFontFamily(template.font ?? "Arial");
+  const fontFamily = normalizeFontFamily();
 
   const boxX = template.slot_1_x ?? 0;
   const boxY = template.slot_1_y ?? 0;
@@ -571,6 +577,7 @@ async function renderAgreeDisagreeLayout(
 
   const svg = `
 <svg xmlns="http://www.w3.org/2000/svg" width="${CANVAS}" height="${CANVAS}" viewBox="0 0 ${CANVAS} ${CANVAS}">
+  ${getInterSvgFontFaceBlock()}
   <rect x="0" y="0" width="${CANVAS}" height="${CANVAS}" fill="${escapeXML(theme.canvasBg)}" />
   ${stmtSvg}
   ${footSvg}
@@ -589,7 +596,7 @@ async function renderHotTakeLayout(
     throw new Error("hot_take requires topText");
   }
   const header = "Hot take:";
-  const fontFamily = normalizeFontFamily(template.font ?? "Arial");
+  const fontFamily = normalizeFontFamily();
 
   const boxX = template.slot_1_x ?? 0;
   const boxY = template.slot_1_y ?? 0;
@@ -644,6 +651,7 @@ async function renderHotTakeLayout(
 
   const svg = `
 <svg xmlns="http://www.w3.org/2000/svg" width="${CANVAS}" height="${CANVAS}" viewBox="0 0 ${CANVAS} ${CANVAS}">
+  ${getInterSvgFontFaceBlock()}
   <rect x="0" y="0" width="${CANVAS}" height="${CANVAS}" fill="${escapeXML(theme.canvasBg)}" />
   ${headSvg}
   ${stmtSvg}
@@ -670,7 +678,7 @@ async function renderBirthdayNamesListLayout(
     throw new Error("birthday_names_list requires exactly 24 names");
   }
 
-  const fontFamily = normalizeFontFamily(template.font ?? "Arial");
+  const fontFamily = normalizeFontFamily();
   const titleFontSize = Number.isFinite(template.font_size)
     ? Math.max(44, Math.min(56, Number(template.font_size)))
     : 50;
@@ -781,6 +789,7 @@ async function renderBirthdayNamesListLayout(
 
   const svg = `
 <svg xmlns="http://www.w3.org/2000/svg" width="${CANVAS}" height="${CANVAS}" viewBox="0 0 ${CANVAS} ${CANVAS}">
+  ${getInterSvgFontFaceBlock()}
   <rect x="0" y="0" width="${CANVAS}" height="${CANVAS}" fill="${escapeXML(theme.canvasBg)}" />
   ${headlineSvgLines}
   ${rows.join("\n  ")}
@@ -797,6 +806,8 @@ async function renderBirthdayNamesListLayout(
 export async function renderEngagementTextMemePng(
   params: RenderEngagementTextMemePngParams
 ): Promise<Buffer> {
+  ensureFontsRegistered();
+  console.log("[font] using font: Inter (engagement PNG)");
   const textLayoutType = String(
     params.template.text_layout_type ?? "finish_sentence"
   )

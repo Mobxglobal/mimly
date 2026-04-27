@@ -1,7 +1,9 @@
 /**
  * Text width measurement for square text memes — must match SVG caption styling in
- * `renderSquareTextMeme.ts`: 52px Arial, Helvetica, sans-serif (regular weight).
+ * `renderSquareTextMeme.ts`: 52px Inter (regular weight), bundled via `ensureFontsRegistered`.
  */
+import { ensureFontsRegistered } from "@/lib/rendering/fonts";
+
 type MeasureContext = {
   font: string;
   measureText: (text: string) => { width: number };
@@ -16,12 +18,12 @@ type CanvasModule = {
 let cachedCtx: MeasureContext | null = null;
 let canvasModuleLoadAttempted = false;
 let canvasModule: CanvasModule | null = null;
+let loggedSquareMeasureFont = false;
 
 function getCanvasModule(): CanvasModule | null {
   if (canvasModuleLoadAttempted) return canvasModule;
   canvasModuleLoadAttempted = true;
   try {
-    // Keep this dynamic so build doesn't require native canvas at module evaluation time.
     const dynamicRequire = eval("require") as (id: string) => unknown;
     const loaded = dynamicRequire("canvas") as CanvasModule;
     canvasModule = loaded;
@@ -33,12 +35,12 @@ function getCanvasModule(): CanvasModule | null {
 }
 
 function estimateTextWidthPx(text: string, fontSizePx: number): number {
-  // Fallback approximation when native canvas bindings are unavailable in the build/runtime.
   return String(text ?? "").length * fontSizePx * 0.56;
 }
 
 function getSquareTextMeasureContext(): MeasureContext | null {
   if (!cachedCtx) {
+    ensureFontsRegistered();
     const canvas = getCanvasModule();
     if (!canvas) return null;
     const c = canvas.createCanvas(4096, 128);
@@ -46,7 +48,11 @@ function getSquareTextMeasureContext(): MeasureContext | null {
     if (!ctx) {
       return null;
     }
-    ctx.font = "52px Arial, Helvetica, sans-serif";
+    ctx.font = "52px Inter";
+    if (!loggedSquareMeasureFont) {
+      console.log("[font] using font:", ctx.font);
+      loggedSquareMeasureFont = true;
+    }
     cachedCtx = ctx;
   }
   return cachedCtx;
@@ -62,26 +68,27 @@ export function measureSquareTextLineWidthPx(text: string): number {
 }
 
 const dynamicCtxCache = new Map<string, MeasureContext>();
+const loggedDynamicFontKeys = new Set<string>();
 
 /**
- * Generic line-width measurement for caption rendering with explicit font sizing/family.
+ * Generic line-width measurement for caption rendering with explicit font sizing.
+ * Family is always bundled Inter; use `bold` to match SVG `font-weight: 700` layouts.
  */
 export function measureLineWidthPx(
   text: string,
   fontSizePx: number,
-  fontFamily: string
+  _fontFamily: string,
+  options?: { bold?: boolean }
 ): number {
   const t = String(text ?? "");
   if (!t) return 0;
   const size = Number.isFinite(fontSizePx) ? Math.max(1, fontSizePx) : 52;
-  const rawFamily = String(fontFamily ?? "").trim() || "Arial, Helvetica, sans-serif";
-  const family = /sans-serif/i.test(rawFamily)
-    ? rawFamily
-    : `${rawFamily}, sans-serif`;
-  const key = `${size}|${family}`;
+  const bold = Boolean(options?.bold);
+  const key = `${bold ? "b" : "n"}|${size}`;
 
   let ctx = dynamicCtxCache.get(key) ?? null;
   if (!ctx) {
+    ensureFontsRegistered();
     const canvas = getCanvasModule();
     if (!canvas) return estimateTextWidthPx(t, size);
     const c = canvas.createCanvas(4096, 128);
@@ -89,7 +96,11 @@ export function measureLineWidthPx(
     if (!next) {
       return estimateTextWidthPx(t, size);
     }
-    next.font = `${size}px ${family}`;
+    next.font = bold ? `bold ${size}px Inter` : `${size}px Inter`;
+    if (!loggedDynamicFontKeys.has(key)) {
+      console.log("[font] using font:", next.font);
+      loggedDynamicFontKeys.add(key);
+    }
     ctx = next;
     dynamicCtxCache.set(key, ctx);
   }

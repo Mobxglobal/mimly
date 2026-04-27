@@ -7,6 +7,7 @@ import {
   type MemeTemplateForRender,
 } from "@/renderer/renderMemeTemplate";
 import { wrapCaptionWithSoftEarlySplit, wrapSquareTopCaptionScoped } from "@/renderer/caption-wrap";
+import { ensureFontsRegistered, getInterBoldFontPath } from "@/lib/rendering/fonts";
 
 type MemeVideoTemplateForRender = {
   slug?: string | null;
@@ -101,6 +102,8 @@ export async function renderMemeMP4FromTemplate(params: {
   template: MemeVideoTemplateForRender;
   topText: string;
 }): Promise<Buffer> {
+  ensureFontsRegistered();
+  const interDrawtextFontFile = getInterBoldFontPath().replace(/\\/g, "/");
   const slotX = params.template.slot_1_x ?? 80;
   const slotY = params.template.slot_1_y ?? 65;
   const slotWidth = params.template.slot_1_width ?? 920;
@@ -173,8 +176,13 @@ export async function renderMemeMP4FromTemplate(params: {
   const strokeColor = hexToFfmpegColor(params.template.stroke_color);
   const strokeWidth = Number(params.template.stroke_width ?? 0);
   const escapedText = escapeDrawtextText(drawtextText || " ");
+  console.log("[font] using font: ffmpeg drawtext", {
+    fontfile: interDrawtextFontFile,
+    fontsize: fontSize,
+  });
   const drawtext = [
     `drawtext=text='${escapedText}'`,
+    `fontfile=${interDrawtextFontFile}`,
     `x=${xExpr}`,
     `y=${startY}`,
     `fontsize=${fontSize}`,

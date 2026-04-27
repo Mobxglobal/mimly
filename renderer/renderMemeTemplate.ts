@@ -1,6 +1,10 @@
 import sharp from "sharp";
 import { wrapCaptionWithSoftEarlySplit, wrapSquareTopCaptionScoped } from "@/renderer/caption-wrap";
 import { normalizeNobodyMeSetupSlots } from "@/lib/memes/normalize-nobody-me-setup-slots";
+import {
+  ensureFontsRegistered,
+  getInterSvgFontFaceBlock,
+} from "@/lib/rendering/fonts";
 
 export type MemeTemplateForRender = {
   slug?: string | null;
@@ -210,7 +214,7 @@ function buildSVG(template: MemeTemplateForRender, slotTexts: SlotTexts) {
   const textColor = template.text_color || "#000000";
   const strokeColor = template.stroke_color || "";
   const strokeWidth = template.stroke_width || 0;
-  const fontFamily = template.font || "Arial";
+  const fontFamily = "Inter";
 
   const style = {
     fontSize,
@@ -317,13 +321,16 @@ function buildSVG(template: MemeTemplateForRender, slotTexts: SlotTexts) {
     );
   }
 
+  console.log("[font] using font:", `${style.fontSize}px ${style.fontFamily}`);
+
   return `
 <svg xmlns="http://www.w3.org/2000/svg" width="${template.canvas_width}" height="${template.canvas_height}">
+  ${getInterSvgFontFaceBlock()}
   <style>
     .caption {
       fill: ${style.textColor};
       font-size: ${style.fontSize}px;
-      font-family: ${style.fontFamily}, sans-serif;
+      font-family: ${style.fontFamily};
     }
   </style>
   ${renderedText}
@@ -338,6 +345,7 @@ export async function renderMemePNGFromTemplate(params: {
   bottomText: string | null;
   slot_3_text?: string;
 }) {
+  ensureFontsRegistered();
   const mechanic = String(params.template.meme_mechanic ?? "").trim().toLowerCase();
   const slug = String(params.template.slug ?? "").trim();
   const isNobodyMeTemplate =
@@ -367,6 +375,7 @@ export async function renderTopCaptionOverlayPng(params: {
   template: MemeTemplateForRender;
   topText: string;
 }): Promise<Buffer> {
+  ensureFontsRegistered();
   console.log("VIDEO OVERLAY FALLBACK TEMPLATE", {
     slug: params.template.slug ?? null,
     height_bucket: params.template.height_bucket ?? null,

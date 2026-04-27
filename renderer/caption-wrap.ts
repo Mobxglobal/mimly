@@ -135,7 +135,7 @@ function estimateTopCaptionWidthPx(
     fontSize,
     fontFamily && String(fontFamily).trim()
       ? String(fontFamily)
-      : "Arial, Helvetica, sans-serif"
+      : "Inter"
   );
 }
 
@@ -1179,7 +1179,7 @@ function enforceSquareTextMaxLineWidthFinal(
 
 /**
  * Square meme PNG: word-boundary layouts scored like slideshow, but **line width** is capped
- * using canvas `measureText` (52px Arial) — not character counts.
+ * using canvas `measureText` (52px Inter) — not character counts.
  */
 export function wrapSquareTextMemeLines(
   text: string,
