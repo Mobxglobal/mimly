@@ -1,12 +1,9 @@
-import fs from "fs";
 import path from "path";
 
 let canvasGuardDone = false;
-let renderSharpFontLogDone = false;
-let embeddedInterSvgDefs: string | null = null;
 
 /**
- * Family name for Sharp/librsvg SVG text — matches embedded `@font-face` (no system font stack).
+ * Hint string for text-width heuristics (`measureLineWidthPx`); SVG output uses paths, not this family.
  */
 export const SHARP_SVG_FONT_FAMILY = "Inter";
 
@@ -25,42 +22,15 @@ export function warnCanvasUnavailableOnce() {
   }
 }
 
-function buildEmbeddedInterSvgFontDefs(): string {
-  const fontPath = path.join(process.cwd(), "public", "fonts", "Inter-Bold.ttf");
-  const fontData = fs.readFileSync(fontPath).toString("base64");
-  return `<defs>
-  <style type="text/css"><![CDATA[
-@font-face {
-  font-family: 'Inter';
-  src: url("data:font/truetype;charset=utf-8;base64,${fontData}") format("truetype");
-  font-weight: bold;
-  font-style: normal;
-  font-display: block;
-}
-text {
-  font-family: 'Inter';
-  font-weight: bold;
-}
-]]></style>
-</defs>`;
-}
-
 /**
- * Embedded Inter (base64) + global `text` rule for Sharp SVG — no system fontconfig resolution.
- * Logs once per process on first injection.
+ * Slot/engagement SVGs use `<path>` from `text-to-svg` (no `@font-face`, no system fonts).
+ * Kept as a no-op fragment so call sites stay stable.
  */
 export function getSvgDocumentFontStyleBlock(): string {
-  if (!renderSharpFontLogDone) {
-    renderSharpFontLogDone = true;
-    console.log("[render] using font: Inter");
-  }
-  if (!embeddedInterSvgDefs) {
-    embeddedInterSvgDefs = buildEmbeddedInterSvgFontDefs();
-  }
-  return embeddedInterSvgDefs;
+  return "";
 }
 
-/** Absolute path to bundled bold TTF (e.g. ffmpeg `fontfile`). */
+/** Absolute path to bundled bold TTF (e.g. ffmpeg `fontfile`, `text-to-svg` input). */
 export function getInterBoldFontPath(): string {
   return path.join(process.cwd(), "public", "fonts", "Inter-Bold.ttf");
 }

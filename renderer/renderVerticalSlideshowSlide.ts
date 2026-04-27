@@ -1,13 +1,8 @@
 import sharp from "sharp";
 import { wrapSlideshowVerticalLines } from "@/renderer/caption-wrap";
 import type { SlideshowLayoutVariant } from "@/lib/memes/slideshow/types";
-import { getSvgDocumentFontStyleBlock } from "@/lib/rendering/fonts";
-import {
-  SVG_UTF8_XML_DECL,
-  escapeXML,
-  logSvgDebugSample,
-  svgStringToUtf8Buffer,
-} from "@/lib/rendering/svg-utf8";
+import { interTextToPathElement } from "@/lib/rendering/text-to-path";
+import { SVG_UTF8_XML_DECL, logSvgDebugSample, svgStringToUtf8Buffer } from "@/lib/rendering/svg-utf8";
 
 const CANVAS_W = 1080;
 const CANVAS_H = 1920;
@@ -36,7 +31,7 @@ export type VerticalSlideshowRenderStyle = {
   layout_b_max_lines: number;
   font_size_layout_a: number;
   font_size_layout_b: number;
-  /** Kept for template config compatibility; Sharp SVG text uses embedded `Inter`. */
+  /** Kept for template config compatibility; glyphs are Inter vector paths in SVG. */
   font_family: string;
   text_color: string;
   stroke_color: string;
@@ -87,13 +82,15 @@ function renderLinesSvg(
   return lines
     .map((line, i) => {
       const y = startY + i * lineHeight;
-      const strokeAttrs =
-        style.strokeWidth > 0 && style.strokeColor
-          ? `stroke="${escapeXML(String(style.strokeColor))}" stroke-width="${style.strokeWidth}" paint-order="stroke"`
-          : "";
-      return `<text class="cap" x="${cx}" y="${y}" text-anchor="middle" ${strokeAttrs}>${escapeXML(
-        String(line)
-      )}</text>`;
+      return interTextToPathElement(String(line), {
+        x: cx,
+        y,
+        fontSize: style.fontSize,
+        textAnchor: "middle",
+        fill: style.textColor,
+        stroke: style.strokeWidth > 0 ? style.strokeColor : undefined,
+        strokeWidth: style.strokeWidth > 0 ? style.strokeWidth : undefined,
+      });
     })
     .join("");
 }
@@ -127,15 +124,6 @@ function buildTextSvg(
 
   return `${SVG_UTF8_XML_DECL}
 <svg xmlns="http://www.w3.org/2000/svg" width="${CANVAS_W}" height="${CANVAS_H}">
-  ${getSvgDocumentFontStyleBlock()}
-  <style type="text/css">
-    .cap {
-      fill: ${style.text_color};
-      font-size: ${fontSize}px;
-      font-family: 'Inter';
-      font-weight: bold;
-    }
-  </style>
   ${inner}
 </svg>`;
 }

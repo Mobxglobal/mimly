@@ -1,9 +1,7 @@
 import sharp from "sharp";
 import { measureLineWidthPx } from "@/renderer/square-text-measure";
-import {
-  getSvgDocumentFontStyleBlock,
-  SHARP_SVG_FONT_FAMILY,
-} from "@/lib/rendering/fonts";
+import { SHARP_SVG_FONT_FAMILY } from "@/lib/rendering/fonts";
+import { interTextToPathElement } from "@/lib/rendering/text-to-path";
 import {
   SVG_UTF8_XML_DECL,
   escapeXML,
@@ -65,21 +63,6 @@ type EngagementLayoutParams = RenderEngagementTextMemePngParams & {
 };
 
 type EngagementLayoutRenderer = (params: EngagementLayoutParams) => Promise<Buffer>;
-
-function xmlLineWithBlankHighlight(line: string, theme: EngagementTheme): string {
-  if (!line.includes("______")) {
-    return escapeXML(line);
-  }
-  const parts = line.split("______");
-  let out = "";
-  for (let i = 0; i < parts.length; i++) {
-    out += escapeXML(parts[i] ?? "");
-    if (i < parts.length - 1) {
-      out += `<tspan font-weight="900" letter-spacing="2" fill="${escapeXML(theme.textPrimary)}">______</tspan>`;
-    }
-  }
-  return out;
-}
 
 const ENGAGEMENT_LAYOUT_RENDERERS: Record<string, EngagementLayoutRenderer> = {
   finish_sentence: renderFinishSentenceLayout,
@@ -159,20 +142,22 @@ async function renderFinishSentenceLayout(
 
   const svg = `${SVG_UTF8_XML_DECL}
 <svg xmlns="http://www.w3.org/2000/svg" width="${CANVAS}" height="${CANVAS}" viewBox="0 0 ${CANVAS} ${CANVAS}">
-  ${getSvgDocumentFontStyleBlock()}
   <rect x="0" y="0" width="${CANVAS}" height="${CANVAS}" fill="${escapeXML(theme.canvasBg)}" />
 
-  <text x="${xLeft}" y="${line1Y}" text-anchor="start"
-    font-family="${escapeXML(fontFamily)}"
-    font-size="${fontSize}" fill="${escapeXML(theme.textPrimary)}">
-    ${escapeXML(line1)}
-  </text>
-
-  <text x="${xLeft}" y="${line2Y}" text-anchor="start"
-    font-family="${escapeXML(fontFamily)}"
-    font-size="${fontSize}" fill="${escapeXML(theme.textPrimary)}">
-    ${escapeXML(line2)}
-  </text>
+  ${interTextToPathElement(line1, {
+    x: xLeft,
+    y: line1Y,
+    fontSize,
+    textAnchor: "start",
+    fill: theme.textPrimary,
+  })}
+  ${interTextToPathElement(line2, {
+    x: xLeft,
+    y: line2Y,
+    fontSize,
+    textAnchor: "start",
+    fill: theme.textPrimary,
+  })}
 
   <line x1="${underlineX}" y1="${underlineY}" x2="${underlineX + underlineWidth}" y2="${underlineY}"
     stroke="${escapeXML(theme.lineStroke)}" stroke-width="${underlineThickness}" stroke-linecap="round" />
@@ -244,15 +229,18 @@ async function renderOneWordLayout(
   const textBlocks = lines
     .map((line, i) => {
       const y = startY + i * lineHeight;
-      return `<text x="${xLeft}" y="${y}" text-anchor="start"
-    font-family="${escapeXML(fontFamily)}"
-    font-size="${fontSize}" font-weight="700" fill="${escapeXML(theme.textPrimary)}">${escapeXML(line)}</text>`;
+      return interTextToPathElement(line, {
+        x: xLeft,
+        y,
+        fontSize,
+        textAnchor: "start",
+        fill: theme.textPrimary,
+      });
     })
     .join("\n  ");
 
   const svg = `${SVG_UTF8_XML_DECL}
 <svg xmlns="http://www.w3.org/2000/svg" width="${CANVAS}" height="${CANVAS}" viewBox="0 0 ${CANVAS} ${CANVAS}">
-  ${getSvgDocumentFontStyleBlock()}
   <rect x="0" y="0" width="${CANVAS}" height="${CANVAS}" fill="${escapeXML(theme.canvasBg)}" />
   ${textBlocks}
 </svg>
@@ -323,15 +311,18 @@ async function renderEmojiOnlyLayout(
   const textBlocks = lines
     .map((line, i) => {
       const y = startY + i * lineHeight;
-      return `<text x="${xLeft}" y="${y}" text-anchor="start"
-    font-family="${escapeXML(fontFamily)}"
-    font-size="${fontSize}" font-weight="700" fill="${escapeXML(theme.textPrimary)}">${escapeXML(line)}</text>`;
+      return interTextToPathElement(line, {
+        x: xLeft,
+        y,
+        fontSize,
+        textAnchor: "start",
+        fill: theme.textPrimary,
+      });
     })
     .join("\n  ");
 
   const svg = `${SVG_UTF8_XML_DECL}
 <svg xmlns="http://www.w3.org/2000/svg" width="${CANVAS}" height="${CANVAS}" viewBox="0 0 ${CANVAS} ${CANVAS}">
-  ${getSvgDocumentFontStyleBlock()}
   <rect x="0" y="0" width="${CANVAS}" height="${CANVAS}" fill="${escapeXML(theme.canvasBg)}" />
   ${textBlocks}
 </svg>
@@ -406,17 +397,25 @@ async function renderPickOneLayout(
   const startY = Math.round(boxY + (boxH - totalBlockH) / 2 + size * 0.35);
 
   let yCursor = startY;
-  const headSvg = `<text x="${xLeft}" y="${yCursor}" text-anchor="start"
-    font-family="${escapeXML(fontFamily)}"
-    font-size="${size}" font-weight="700" fill="${escapeXML(theme.textPrimary)}">${escapeXML(header)}</text>`;
+  const headSvg = interTextToPathElement(header, {
+    x: xLeft,
+    y: yCursor,
+    fontSize: size,
+    textAnchor: "start",
+    fill: theme.textPrimary,
+  });
   yCursor += lh + gapHeader;
 
   const optASvg = linesA
     .map((line, i) => {
       const y = yCursor + i * lh;
-      return `<text x="${xLeft}" y="${y}" text-anchor="start"
-    font-family="${escapeXML(fontFamily)}"
-    font-size="${size}" font-weight="700" fill="${escapeXML(theme.textMuted)}">${escapeXML(line)}</text>`;
+      return interTextToPathElement(line, {
+        x: xLeft,
+        y,
+        fontSize: size,
+        textAnchor: "start",
+        fill: theme.textMuted,
+      });
     })
     .join("\n  ");
   yCursor += linesA.length * lh + gapOptions;
@@ -424,15 +423,18 @@ async function renderPickOneLayout(
   const optBSvg = linesB
     .map((line, i) => {
       const y = yCursor + i * lh;
-      return `<text x="${xLeft}" y="${y}" text-anchor="start"
-    font-family="${escapeXML(fontFamily)}"
-    font-size="${size}" font-weight="700" fill="${escapeXML(theme.textMuted)}">${escapeXML(line)}</text>`;
+      return interTextToPathElement(line, {
+        x: xLeft,
+        y,
+        fontSize: size,
+        textAnchor: "start",
+        fill: theme.textMuted,
+      });
     })
     .join("\n  ");
 
   const svg = `${SVG_UTF8_XML_DECL}
 <svg xmlns="http://www.w3.org/2000/svg" width="${CANVAS}" height="${CANVAS}" viewBox="0 0 ${CANVAS} ${CANVAS}">
-  ${getSvgDocumentFontStyleBlock()}
   <rect x="0" y="0" width="${CANVAS}" height="${CANVAS}" fill="${escapeXML(theme.canvasBg)}" />
   ${headSvg}
   ${optASvg}
@@ -503,15 +505,18 @@ async function renderFillGapLayout(
   const textBlocks = lines
     .map((line, i) => {
       const y = startY + i * lineHeight;
-      return `<text x="${xLeft}" y="${y}" text-anchor="start"
-    font-family="${escapeXML(fontFamily)}"
-    font-size="${fontSize}" font-weight="700" fill="${escapeXML(theme.textPrimary)}">${xmlLineWithBlankHighlight(line, theme)}</text>`;
+      return interTextToPathElement(line, {
+        x: xLeft,
+        y,
+        fontSize,
+        textAnchor: "start",
+        fill: theme.textPrimary,
+      });
     })
     .join("\n  ");
 
   const svg = `${SVG_UTF8_XML_DECL}
 <svg xmlns="http://www.w3.org/2000/svg" width="${CANVAS}" height="${CANVAS}" viewBox="0 0 ${CANVAS} ${CANVAS}">
-  ${getSvgDocumentFontStyleBlock()}
   <rect x="0" y="0" width="${CANVAS}" height="${CANVAS}" fill="${escapeXML(theme.canvasBg)}" />
   ${textBlocks}
 </svg>
@@ -566,20 +571,27 @@ async function renderAgreeDisagreeLayout(
   const stmtSvg = stmtLines
     .map((line, i) => {
       const y = startY + i * lh;
-      return `<text x="${xLeft}" y="${y}" text-anchor="start"
-    font-family="${escapeXML(fontFamily)}"
-    font-size="${size}" font-weight="700" fill="${escapeXML(theme.textMuted)}">${escapeXML(line)}</text>`;
+      return interTextToPathElement(line, {
+        x: xLeft,
+        y,
+        fontSize: size,
+        textAnchor: "start",
+        fill: theme.textMuted,
+      });
     })
     .join("\n  ");
 
   const footY = startY + stmtLines.length * lh + gapPx;
-  const footSvg = `<text x="${xLeft}" y="${footY}" text-anchor="start"
-    font-family="${escapeXML(fontFamily)}"
-    font-size="${size}" font-weight="700" fill="${escapeXML(theme.textPrimary)}">${escapeXML(footer)}</text>`;
+  const footSvg = interTextToPathElement(footer, {
+    x: xLeft,
+    y: footY,
+    fontSize: size,
+    textAnchor: "start",
+    fill: theme.textPrimary,
+  });
 
   const svg = `${SVG_UTF8_XML_DECL}
 <svg xmlns="http://www.w3.org/2000/svg" width="${CANVAS}" height="${CANVAS}" viewBox="0 0 ${CANVAS} ${CANVAS}">
-  ${getSvgDocumentFontStyleBlock()}
   <rect x="0" y="0" width="${CANVAS}" height="${CANVAS}" fill="${escapeXML(theme.canvasBg)}" />
   ${stmtSvg}
   ${footSvg}
@@ -637,23 +649,30 @@ async function renderHotTakeLayout(
   const startY = Math.round(boxY + (boxH - totalBlockH) / 2 + headSize * 0.35);
 
   const headY = startY;
-  const headSvg = `<text x="${xLeft}" y="${headY}" text-anchor="start"
-    font-family="${escapeXML(fontFamily)}"
-    font-size="${headSize}" font-weight="700" fill="${escapeXML(theme.textPrimary)}">${escapeXML(header)}</text>`;
+  const headSvg = interTextToPathElement(header, {
+    x: xLeft,
+    y: headY,
+    fontSize: headSize,
+    textAnchor: "start",
+    fill: theme.textPrimary,
+  });
 
   const stmtStartY = startY + lhHead + gapPx;
   const stmtSvg = stmtLines
     .map((line, i) => {
       const y = stmtStartY + i * lhStmt;
-      return `<text x="${xLeft}" y="${y}" text-anchor="start"
-    font-family="${escapeXML(fontFamily)}"
-    font-size="${stmtSize}" font-weight="700" fill="${escapeXML(theme.textMuted)}">${escapeXML(line)}</text>`;
+      return interTextToPathElement(line, {
+        x: xLeft,
+        y,
+        fontSize: stmtSize,
+        textAnchor: "start",
+        fill: theme.textMuted,
+      });
     })
     .join("\n  ");
 
   const svg = `${SVG_UTF8_XML_DECL}
 <svg xmlns="http://www.w3.org/2000/svg" width="${CANVAS}" height="${CANVAS}" viewBox="0 0 ${CANVAS} ${CANVAS}">
-  ${getSvgDocumentFontStyleBlock()}
   <rect x="0" y="0" width="${CANVAS}" height="${CANVAS}" fill="${escapeXML(theme.canvasBg)}" />
   ${headSvg}
   ${stmtSvg}
@@ -778,20 +797,31 @@ async function renderBirthdayNamesListLayout(
     const x = colXs[col] ?? xLeft;
     const y = namesTopY + row * rowGap;
     rows.push(
-      `<text x="${x}" y="${y}" text-anchor="start" font-family="${escapeXML(fontFamily)}" font-size="${nameFontSize}" fill="${escapeXML(theme.textPrimary)}">${escapeXML(names[i] ?? "")}</text>`
+      interTextToPathElement(names[i] ?? "", {
+        x,
+        y,
+        fontSize: nameFontSize,
+        textAnchor: "start",
+        fill: theme.textPrimary,
+      })
     );
   }
 
   const headlineSvgLines = headlineLines
     .map((line, idx) => {
       const y = headlineTopY + idx * headlineLineHeight;
-      return `<text x="${contentCenterX}" y="${y}" text-anchor="middle" font-family="${escapeXML(fontFamily)}" font-size="${headlineSize}" fill="${escapeXML(theme.textPrimary)}">${escapeXML(line)}</text>`;
+      return interTextToPathElement(line, {
+        x: contentCenterX,
+        y,
+        fontSize: headlineSize,
+        textAnchor: "middle",
+        fill: theme.textPrimary,
+      });
     })
     .join("\n  ");
 
   const svg = `${SVG_UTF8_XML_DECL}
 <svg xmlns="http://www.w3.org/2000/svg" width="${CANVAS}" height="${CANVAS}" viewBox="0 0 ${CANVAS} ${CANVAS}">
-  ${getSvgDocumentFontStyleBlock()}
   <rect x="0" y="0" width="${CANVAS}" height="${CANVAS}" fill="${escapeXML(theme.canvasBg)}" />
   ${headlineSvgLines}
   ${rows.join("\n  ")}

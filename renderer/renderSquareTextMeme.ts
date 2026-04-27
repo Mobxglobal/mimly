@@ -1,16 +1,8 @@
 import sharp from "sharp";
 import { wrapSquareTextMemeLines } from "@/renderer/caption-wrap";
 import { measureSquareTextLineWidthPx } from "@/renderer/square-text-measure";
-import {
-  getSvgDocumentFontStyleBlock,
-  SHARP_SVG_FONT_FAMILY,
-} from "@/lib/rendering/fonts";
-import {
-  SVG_UTF8_XML_DECL,
-  escapeXML,
-  logSvgDebugSample,
-  svgStringToUtf8Buffer,
-} from "@/lib/rendering/svg-utf8";
+import { interTextToPathElement, interTextToPathWithAnchor } from "@/lib/rendering/text-to-path";
+import { SVG_UTF8_XML_DECL, logSvgDebugSample, svgStringToUtf8Buffer } from "@/lib/rendering/svg-utf8";
 import {
   resolveEngagementTheme,
   type EngagementVisualStyle,
@@ -128,7 +120,8 @@ type TextLineLayoutRow = { baselineY: number; lineHeightPx: number };
  */
 function renderTextBlockLines(
   lines: string[],
-  startY: number
+  startY: number,
+  fill: string
 ): {
   svgFragments: string[];
   nextY: number;
@@ -149,7 +142,13 @@ function renderTextBlockLines(
   for (const line of lines) {
     layoutRows.push({ baselineY: y, lineHeightPx: lh });
     fragments.push(
-      `<text x="${x}" y="${y}" text-anchor="${textAnchor}" class="caption">${escapeXML(line)}</text>`
+      interTextToPathElement(line, {
+        x,
+        y,
+        fontSize: FONT_SIZE,
+        textAnchor: textAnchor === "middle" ? "middle" : "start",
+        fill,
+      })
     );
     y += lh;
   }
@@ -203,12 +202,15 @@ function buildSquareTextDebugGuidesSvg(layoutRows: TextLineLayoutRow[]): string 
   ${vertical(multiX, "#2563eb", "5 5", 1.5)}
   ${vertical(cx, "#c026d3", "10 8", 2)}
   ${rowGuides}
-  <text x="${safeL + 4}" y="28" fill="#7c3aed" font-size="18" font-family="${SHARP_SVG_FONT_FAMILY}">DEBUG square_text guides: red=safe verticals (96/984), blue dashed=multi-line anchor (112), magenta=center (540), orange=top/bottom margin (96), cyan=baseline, blue fill=row band</text>
+  ${interTextToPathWithAnchor(
+    "DEBUG square_text guides: red=safe verticals (96/984), blue dashed=multi-line anchor (112), magenta=center (540), orange=top/bottom margin (96), cyan=baseline, blue fill=row band",
+    { x: safeL + 4, y: 28, fontSize: 18, anchor: "left top", fill: "#7c3aed" }
+  )}
 </g>`.trim();
 }
 
 /**
- * Plain 1080×1080 PNG: white background, embedded Inter (Sharp); wide wrap + phrase scoring; single line
+ * Plain 1080×1080 PNG: white background, Inter vector paths (Sharp); wide wrap + phrase scoring; single line
  * centered, multi-line left-aligned in the full margin band.
  *
  * @param params.debug — TEMPORARY: draws calibration guides (safe margins, center, baselines).
@@ -248,7 +250,7 @@ export async function renderSquareTextMemePng(params: {
   const textElements: string[] = [];
   const layoutRowsForDebug: TextLineLayoutRow[] = [];
 
-  const block1 = renderTextBlockLines(lines1, startY);
+  const block1 = renderTextBlockLines(lines1, startY, theme.textPrimary);
   textElements.push(...block1.svgFragments);
   layoutRowsForDebug.push(...block1.layoutRows);
   let y = block1.nextY;
@@ -257,7 +259,7 @@ export async function renderSquareTextMemePng(params: {
     y += BLOCK_GAP;
   }
 
-  const block2 = renderTextBlockLines(lines2, y);
+  const block2 = renderTextBlockLines(lines2, y, theme.textPrimary);
   textElements.push(...block2.svgFragments);
   layoutRowsForDebug.push(...block2.layoutRows);
 
@@ -270,16 +272,7 @@ export async function renderSquareTextMemePng(params: {
 
   const svg = `${SVG_UTF8_XML_DECL}
 <svg xmlns="http://www.w3.org/2000/svg" width="${CANVAS}" height="${CANVAS}" viewBox="0 0 ${CANVAS} ${CANVAS}">
-  ${getSvgDocumentFontStyleBlock()}
   <rect width="${CANVAS}" height="${CANVAS}" fill="${theme.canvasBg}"/>
-  <style>
-    .caption {
-      fill: ${theme.textPrimary};
-      font-size: ${FONT_SIZE}px;
-      font-family: 'Inter';
-      font-weight: bold;
-    }
-  </style>
   ${textElements.join("\n")}
   ${debugOverlay}
 </svg>

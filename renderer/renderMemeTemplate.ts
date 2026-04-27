@@ -1,29 +1,17 @@
 /**
- * Slot meme PNGs: SVG text overlay + Sharp composite/rasterize only (no node-canvas).
- * Inter is base64-embedded in the SVG; `canvas.registerFont` does not apply to librsvg/Sharp.
+ * Slot meme PNGs: SVG text as vector paths + Sharp composite (no `<text>`, no fontconfig).
  */
-import fs from "fs";
-import path from "path";
 import sharp from "sharp";
 import { wrapCaptionWithSoftEarlySplit, wrapSquareTopCaptionScoped } from "@/renderer/caption-wrap";
 import { normalizeNobodyMeSetupSlots } from "@/lib/memes/normalize-nobody-me-setup-slots";
+import { interTextToPathElement } from "@/lib/rendering/text-to-path";
 import {
   SVG_UTF8_XML_DECL,
-  escapeXML,
   logSvgDebugSample,
   svgStringToUtf8Buffer,
 } from "@/lib/rendering/svg-utf8";
 
-const MEME_INTER_FONT_PATH = path.join(process.cwd(), "public", "fonts", "Inter-Bold.ttf");
-let memeInterFontDataBase64: string | null = null;
-
-function readMemeInterFontBase64(): string {
-  if (memeInterFontDataBase64) return memeInterFontDataBase64;
-  memeInterFontDataBase64 = fs.readFileSync(MEME_INTER_FONT_PATH).toString("base64");
-  return memeInterFontDataBase64;
-}
-
-/** Sharp slot memes: Inter is base64-embedded in the SVG (no system fontconfig). */
+/** DB-backed slot geometry + colors for Sharp path rendering. */
 export type MemeTemplateForRender = {
   slug?: string | null;
   /** Present on DB-backed templates; used for mechanic-specific render paths. */
@@ -131,11 +119,16 @@ function renderLines(
   return lines
     .map((line, i) => {
       const y = startY + i * lineHeight;
-      const strokeAttrs =
-        style.strokeWidth > 0 && style.strokeColor
-          ? `stroke="${style.strokeColor}" stroke-width="${style.strokeWidth}" paint-order="stroke"`
-          : "";
-      return `<text x="${x}" y="${y}" class="caption" font-family="Inter" font-weight="bold" text-anchor="${textAnchor}" ${strokeAttrs}>${escapeXML(String(line))}</text>`;
+      const ta = textAnchor === "start" ? "start" : textAnchor === "end" ? "end" : "middle";
+      return interTextToPathElement(String(line), {
+        x,
+        y,
+        fontSize,
+        textAnchor: ta,
+        fill: style.textColor,
+        stroke: style.strokeWidth > 0 ? style.strokeColor : undefined,
+        strokeWidth: style.strokeWidth > 0 ? style.strokeWidth : undefined,
+      });
     })
     .join("");
 }
@@ -327,30 +320,10 @@ function buildSVG(template: MemeTemplateForRender, slotTexts: SlotTexts) {
 
   logSvgDebugSample(slot1Text || slot2Text || slot3Text);
 
-  const fontData = readMemeInterFontBase64();
-  const embeddedFontStyle = `<style type="text/css"><![CDATA[
-@font-face {
-  font-family: 'Inter';
-  src: url("data:font/truetype;charset=utf-8;base64,${fontData}") format("truetype");
-  font-weight: bold;
-}
-text {
-  font-family: 'Inter';
-  font-weight: bold;
-}
-.caption {
-  fill: ${style.textColor};
-  font-size: ${style.fontSize}px;
-  font-family: 'Inter';
-  font-weight: bold;
-}
-]]></style>`;
-
-  console.log("[render] using font: Inter");
+  console.log("[render] SVG text as paths (Inter outlines, no fontconfig)");
 
   return `${SVG_UTF8_XML_DECL}
 <svg xmlns="http://www.w3.org/2000/svg" width="${template.canvas_width}" height="${template.canvas_height}">
-  ${embeddedFontStyle}
   ${renderedText}
 </svg>
   `;

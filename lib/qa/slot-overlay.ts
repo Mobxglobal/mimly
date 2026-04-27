@@ -1,11 +1,6 @@
 import sharp from "sharp";
-import { getSvgDocumentFontStyleBlock } from "@/lib/rendering/fonts";
-import {
-  SVG_UTF8_XML_DECL,
-  escapeXML,
-  logSvgDebugSample,
-  svgStringToUtf8Buffer,
-} from "@/lib/rendering/svg-utf8";
+import { interTextToPathElement } from "@/lib/rendering/text-to-path";
+import { SVG_UTF8_XML_DECL, logSvgDebugSample, svgStringToUtf8Buffer } from "@/lib/rendering/svg-utf8";
 import type { MemeTemplateForRender } from "@/renderer/renderMemeTemplate";
 
 /**
@@ -38,7 +33,13 @@ export async function compositeSlotBoundingOverlayPng(
     body += `<rect x="${s.x}" y="${s.y}" width="${s.w}" height="${s.h}" fill="none" stroke="rgba(255,59,48,0.92)" stroke-width="3"/>`;
     const label = `slot ${s.n}  x=${s.x} y=${s.y}  ${s.w}×${s.h}  align=${align}`;
     if (!firstLabel) firstLabel = label;
-    body += `<text x="${s.x + 6}" y="${Math.min(s.y + 22, H - 4)}" fill="rgba(255,59,48,0.95)" font-size="18" font-family="Inter" font-weight="bold">${escapeXML(label)}</text>`;
+    body += interTextToPathElement(label, {
+      x: s.x + 6,
+      y: Math.min(s.y + 22, H - 4),
+      fontSize: 18,
+      textAnchor: "start",
+      fill: "rgba(255,59,48,0.95)",
+    });
   }
 
   if (!body) {
@@ -48,7 +49,7 @@ export async function compositeSlotBoundingOverlayPng(
   logSvgDebugSample(firstLabel);
 
   const svg = `${SVG_UTF8_XML_DECL}
-<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}">${getSvgDocumentFontStyleBlock()}${body}</svg>`;
+<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}">${body}</svg>`;
   const overlay = await sharp(svgStringToUtf8Buffer(svg)).png().toBuffer();
   return sharp(basePng).composite([{ input: overlay, blend: "over" }]).png().toBuffer();
 }
