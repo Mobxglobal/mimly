@@ -41,24 +41,14 @@ export async function POST(request: Request) {
     const startedAt = Date.now();
     const result = await bootstrapHomepageWorkspace(session_id);
 
-    if (result.error || !result.workspaceId) {
-      console.error("[bootstrap] bootstrapHomepageWorkspace failed:", {
-        error: result.error,
-        workspaceId: result.workspaceId,
-        reused: result.reused,
-      });
-      return NextResponse.json(
-        {
-          error: result.error ?? "Failed to bootstrap workspace.",
-        },
-        { status: 500 }
-      );
+    if (!result || !result.workspaceId) {
+      console.error("[bootstrap] invalid result:", result);
+      throw new Error("Invalid workspace result");
     }
 
-    console.log("[bootstrap] success", {
+    console.log("[bootstrap] success:", {
       workspaceId: result.workspaceId,
       reused: result.reused,
-      elapsedMs: Date.now() - startedAt,
     });
 
     return NextResponse.json(
@@ -74,7 +64,8 @@ export async function POST(request: Request) {
     return NextResponse.json(
       {
         error: "Bootstrap failed",
-        message: err instanceof Error ? err.message : "Unknown error",
+        message:
+          err instanceof Error ? err.message : JSON.stringify(err),
       },
       { status: 500 }
     );

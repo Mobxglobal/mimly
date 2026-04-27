@@ -608,11 +608,7 @@ export async function submitHomepagePrompt(
 
 export async function bootstrapHomepageWorkspace(
   sessionId?: string | null
-): Promise<{
-  workspaceId: string | null;
-  error: string | null;
-  reused: boolean;
-}> {
+): Promise<{ workspaceId: string; reused: boolean }> {
   console.log("[bootstrap] step: ensure workspace token");
   const token = await ensureWorkspaceToken();
   const tokenHash = hashWorkspaceToken(token);
@@ -641,12 +637,12 @@ export async function bootstrapHomepageWorkspace(
       actor: "authenticated",
       sessionId: sid || null,
     });
-    return { workspaceId, error: null, reused: true };
+    return { workspaceId, reused: true };
   }
 
   if (sid) {
     console.log("[bootstrap] step: anonymous session workspace lookup");
-    const { data: sessionWorkspace } = await admin
+    const { data: sessionWorkspace, error: lookupError } = await admin
       .schema("public")
       .from("workspaces")
       .select("id")
@@ -657,6 +653,13 @@ export async function bootstrapHomepageWorkspace(
       .limit(1)
       .maybeSingle();
 
+    if (lookupError) {
+      console.error("[bootstrap] session workspace lookup failed:", lookupError);
+      throw new Error(
+        lookupError.message || "Session workspace lookup failed"
+      );
+    }
+
     if (sessionWorkspace?.id) {
       const workspaceId = String(sessionWorkspace.id);
       console.log("[bootstrap] workspace created/reused", {
@@ -665,7 +668,7 @@ export async function bootstrapHomepageWorkspace(
         actor: "anonymous",
         sessionId: sid,
       });
-      return { workspaceId, error: null, reused: true };
+      return { workspaceId, reused: true };
     }
   }
 
@@ -698,17 +701,8 @@ export async function bootstrapHomepageWorkspace(
     .single();
 
   if (error || !createdWorkspace?.id) {
-    console.error("[bootstrap] workspace insert failed:", {
-      message: error?.message,
-      code: error?.code,
-      details: error?.details,
-      hint: error?.hint,
-    });
-    return {
-      workspaceId: null,
-      error: error?.message ?? "Failed to bootstrap workspace.",
-      reused: false,
-    };
+    console.error("[bootstrap] workspace insert failed:", error);
+    throw new Error(error?.message || "Workspace insert failed");
   }
 
   const workspaceId = String(createdWorkspace.id);
@@ -718,7 +712,7 @@ export async function bootstrapHomepageWorkspace(
     actor: "anonymous",
     sessionId: sid || null,
   });
-  return { workspaceId, error: null, reused: false };
+  return { workspaceId, reused: false };
 }
 
 /** First non-empty workspace field for implicit /api/workspace/new-idea kickoff (no body text). */
