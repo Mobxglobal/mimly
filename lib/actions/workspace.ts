@@ -56,6 +56,15 @@ type HomepageSubmitOptions = {
   inputType?: "prompt" | "url";
 };
 
+type HomepageIntentOptions = {
+  preferredOutputFormat?:
+    | "square_image"
+    | "square_video"
+    | "vertical_slideshow"
+    | "square_text";
+  templateFamilyPreference?: "engagement_text" | null;
+};
+
 export type WorkspaceMessage = {
   id: string;
   role: "user" | "assistant" | "system";
@@ -582,6 +591,225 @@ export async function submitHomepagePrompt(
   }
 
   return { workspaceId, error: null };
+}
+
+export async function bootstrapHomepageWorkspace(): Promise<{
+  workspaceId: string | null;
+  error: string | null;
+  reused: boolean;
+}> {
+  const token = await ensureWorkspaceToken();
+  const tokenHash = hashWorkspaceToken(token);
+  const admin = createWorkspaceAdminClient();
+  const nowIso = new Date().toISOString();
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (user?.id) {
+    const workspaceId = await getOrCreateDefaultWorkspaceForUser(user.id);
+    console.log("[bootstrap] workspace created/reused", {
+      workspaceId,
+      reused: true,
+      actor: "authenticated",
+    });
+    return { workspaceId, error: null, reused: true };
+  }
+
+  const { data: latestWorkspace } = await admin
+    .schema("public")
+    .from("workspaces")
+    .select("id")
+    .eq("anon_token_hash", tokenHash)
+    .eq("status", "active")
+    .order("updated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (latestWorkspace?.id) {
+    const workspaceId = String(latestWorkspace.id);
+    console.log("[bootstrap] workspace created/reused", {
+      workspaceId,
+      reused: true,
+      actor: "anonymous",
+    });
+    return { workspaceId, error: null, reused: true };
+  }
+
+  const { data: createdWorkspace, error } = await admin
+    .schema("public")
+    .from("workspaces")
+    .insert({
+      user_id: null,
+      anon_token_hash: tokenHash,
+      initial_prompt: "",
+      business_url: null,
+      business_summary: "",
+      detected_content_type: "meme",
+      status: "active",
+      preview_generations_used: 0,
+      last_message_at: nowIso,
+      created_at: nowIso,
+      updated_at: nowIso,
+    })
+    .select("id")
+    .single();
+
+  if (error || !createdWorkspace?.id) {
+    return {
+      workspaceId: null,
+      error: error?.message ?? "Failed to bootstrap workspace.",
+      reused: false,
+    };
+  }
+
+  const workspaceId = String(createdWorkspace.id);
+  console.log("[bootstrap] workspace created/reused", {
+    workspaceId,
+    reused: false,
+    actor: "anonymous",
+  });
+  return { workspaceId, error: null, reused: false };
+}
+
+export async function processWorkspaceHomepageIntent(
+  workspaceId: string,
+  inputType: "prompt" | "url",
+  value: string,
+  options?: HomepageIntentOptions
+): Promise<{ error: string | null }> {
+  console.log("[workspace] processing intent", {
+    workspaceId,
+    inputType,
+  });
+
+  if (inputType === "prompt") {
+    const sent = await sendWorkspaceMessage(workspaceId, value, {
+      preferredOutputFormat: options?.preferredOutputFormat,
+      templateFamilyPreference: options?.templateFamilyPreference ?? null,
+    });
+    return { error: sent.error ?? null };
+  }
+
+  let pack: Awaited<ReturnType<typeof resolveHomepageInputToProfile>>;
+  try {
+    pack = await resolveHomepageInputToProfile(value, "url");
+  } catch (e) {
+    return {
+      error: e instanceof Error ? e.message : "Could not process URL.",
+    };
+  }
+
+  const loaded = await loadAccessibleWorkspace(workspaceId);
+  if (!loaded.workspace || !loaded.admin) {
+    return { error: loaded.error ?? "Workspace not found." };
+  }
+
+  const { admin, workspace, currentUserId = null } = loaded as {
+    admin: ReturnType<typeof createWorkspaceAdminClient>;
+    workspace: Record<string, unknown>;
+    currentUserId?: string | null;
+  };
+
+  const { data: activeJob } = await admin
+    .schema("public")
+    .from("generation_jobs")
+    .select("id")
+    .eq("workspace_id", workspaceId)
+    .in("status", ["queued", "running"])
+    .limit(1)
+    .maybeSingle();
+
+  if (activeJob?.id) {
+    return { error: "A generation is already in progress. Wait for it to finish." };
+  }
+
+  await persistWorkspaceBusinessProfile(
+    workspaceId,
+    (workspace.metadata as Record<string, unknown> | null) ?? {},
+    pack.finalProfile,
+    { businessSummaryOverride: pack.contextSummary }
+  );
+
+  const nowIso = new Date().toISOString();
+  await admin
+    .schema("public")
+    .from("workspaces")
+    .update({
+      business_url: pack.displayText,
+      last_message_at: nowIso,
+      updated_at: nowIso,
+    })
+    .eq("id", workspaceId);
+
+  const { data: firstMessage } = await admin
+    .schema("public")
+    .from("workspace_messages")
+    .insert({
+      workspace_id: workspaceId,
+      role: "user",
+      message_type: "text",
+      content: { text: pack.displayText } as Json,
+      metadata: {} as Json,
+    })
+    .select("id")
+    .single();
+
+  const resolvedOutputFormat =
+    options?.preferredOutputFormat ??
+    resolveWorkspaceOutputFormat({
+      prompt: pack.contextSummary,
+      businessUrl: pack.displayText,
+    });
+
+  const generationPlan = buildWorkspaceGenerationPlan({
+    workspaceId,
+    prompt: pack.contextSummary,
+    requestedByUserId: currentUserId,
+    triggerMessageId: firstMessage?.id ?? null,
+    outputFormat: resolvedOutputFormat,
+    requestedVariantCount: 1,
+    metadata: mergeDebugIntoMetadata(
+      {
+        workflow_mode: "single_output",
+        output_format: resolvedOutputFormat,
+        selection_strategy:
+          resolvedOutputFormat === "square_text"
+            ? "square_text_open_variant"
+            : "random_template",
+        selected_template_id: null,
+        selected_template_slug: null,
+        based_on_job_id: null,
+        based_on_output_ids: [],
+        deferred_followup: false,
+        explicit_promo_intent: false,
+        promo_context_excerpt: null,
+        workspace_context_summary: pack.contextSummary,
+        template_family_preference: options?.templateFamilyPreference ?? null,
+        source: "homepage_url",
+      },
+      pack.jobDebug
+    ) as Json,
+  });
+
+  const queued = await enqueueGenerationJob({
+    workspaceId: generationPlan.workspaceId,
+    prompt: generationPlan.prompt,
+    requestedByUserId: generationPlan.requestedByUserId ?? null,
+    triggerMessageId: generationPlan.triggerMessageId ?? null,
+    outputFormat: generationPlan.outputFormat,
+    requestedVariantCount: generationPlan.requestedVariantCount,
+    metadata: generationPlan.metadata as Json,
+  });
+
+  if (queued.error || !queued.jobId) {
+    return { error: queued.error ?? "Failed to queue generation." };
+  }
+
+  void runGenerationJob(queued.jobId);
+  return { error: null };
 }
 
 export async function getWorkspaceState(

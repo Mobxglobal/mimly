@@ -6,7 +6,6 @@ import { Globe, Link as LinkIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { FramedSection } from "./framed-section";
 import { HeroNav } from "./hero-nav";
-import { submitHomepagePrompt } from "@/lib/actions/workspace";
 import { HERO_BACKGROUND_IMAGE_SRC } from "@/lib/marketing/hero-background";
 
 const COUNT_START = 24;
@@ -324,15 +323,42 @@ export function HeroSection() {
                           : null;
 
                 try {
-                  const result = await submitHomepagePrompt(input, {
+                  const intentPayload = {
                     inputType: mode,
+                    value: input,
                     ...(familyMapping ?? {}),
+                  };
+                  if (typeof window !== "undefined") {
+                    window.sessionStorage.setItem(
+                      "homepage-workspace-intent",
+                      JSON.stringify(intentPayload)
+                    );
+                    console.log("[homepage] intent stored", {
+                      inputType: mode,
+                      hasPreferredOutputFormat: Boolean(
+                        (intentPayload as { preferredOutputFormat?: string }).preferredOutputFormat
+                      ),
+                      hasTemplateFamilyPreference: Boolean(
+                        (intentPayload as { templateFamilyPreference?: string | null })
+                          .templateFamilyPreference
+                      ),
+                    });
+                  }
+
+                  const bootstrapRes = await fetch("/api/workspace/bootstrap", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    credentials: "same-origin",
                   });
-                  if (result.error || !result.workspaceId) {
-                    setPromptError(result.error ?? "Failed to start workspace.");
+                  const bootstrapData = (await bootstrapRes.json().catch(() => ({}))) as {
+                    workspaceId?: string;
+                    error?: string;
+                  };
+                  if (!bootstrapRes.ok || !bootstrapData.workspaceId) {
+                    setPromptError(bootstrapData.error ?? "Failed to start workspace.");
                     return;
                   }
-                  router.push(`/workspace/${result.workspaceId}`);
+                  router.push(`/workspace/${bootstrapData.workspaceId}`);
                 } catch {
                   setPromptError("Something went wrong. Try again.");
                 } finally {

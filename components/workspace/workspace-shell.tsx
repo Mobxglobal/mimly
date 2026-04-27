@@ -49,6 +49,7 @@ export function WorkspaceShell({
   const pendingGenerationActionRef = useRef<null | (() => Promise<void>)>(null);
   const processedCompletedJobIdsRef = useRef<Set<string>>(new Set());
   const bootedQueuedStart = useRef(false);
+  const homepageIntentProcessedRef = useRef(false);
 
   const latestJob = state.latestJob;
   const isJobActive =
@@ -63,6 +64,64 @@ export function WorkspaceShell({
     bootedQueuedStart.current = true;
     void startGenerationIfQueued(workspaceId);
   }, [latestJob?.status, latestJob?.id, workspaceId]);
+
+  useEffect(() => {
+    if (homepageIntentProcessedRef.current) return;
+    homepageIntentProcessedRef.current = true;
+    if (typeof window === "undefined") return;
+
+    const rawIntent = window.sessionStorage.getItem("homepage-workspace-intent");
+    if (!rawIntent) return;
+    window.sessionStorage.removeItem("homepage-workspace-intent");
+
+    type HomepageIntent = {
+      inputType?: "prompt" | "url";
+      value?: string;
+      preferredOutputFormat?: "square_image" | "square_video" | "vertical_slideshow" | "square_text";
+      templateFamilyPreference?: "engagement_text" | null;
+    };
+
+    let intent: HomepageIntent | null = null;
+    try {
+      intent = JSON.parse(rawIntent) as HomepageIntent;
+    } catch {
+      intent = null;
+    }
+    if (!intent?.value || !String(intent.value).trim()) return;
+
+    const inputType = intent.inputType === "url" ? "url" : "prompt";
+    const value = String(intent.value).trim();
+    console.log("[workspace] processing intent", { workspaceId, inputType });
+
+    if (inputType === "url") {
+      void (async () => {
+        await fetch("/api/workspace/new-idea", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "same-origin",
+          body: JSON.stringify({
+            workspaceId,
+            inputType: "url",
+            url: value,
+            preferredOutputFormat: intent?.preferredOutputFormat,
+            templateFamilyPreference: intent?.templateFamilyPreference ?? null,
+          }),
+        }).catch(() => null);
+
+        const next = await getWorkspaceState(workspaceId);
+        if (!next.error && next.state) setState(next.state);
+      })();
+      return;
+    }
+
+    void (async () => {
+      const sent = await sendWorkspaceMessage(workspaceId, value, {
+        preferredOutputFormat: intent?.preferredOutputFormat,
+        templateFamilyPreference: intent?.templateFamilyPreference ?? null,
+      });
+      if (!sent.error && sent.state) setState(sent.state);
+    })();
+  }, [workspaceId]);
 
   useEffect(() => {
     if (!isJobActive) return;
