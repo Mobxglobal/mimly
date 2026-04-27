@@ -12,10 +12,10 @@ import { HERO_BACKGROUND_IMAGE_SRC } from "@/lib/marketing/hero-background";
 const COUNT_START = 24;
 const COUNT_DURATION_MS = 2500;
 const HERO_PROMPT_EXAMPLES = [
-  "Create memes for my plumbing business to post on Instagram",
-  "Make a funny video meme about running a small business",
-  "Generate engagement posts for a fitness coach audience",
-  "Create a funny carousel about marketing mistakes for Instagram",
+  "Memes for my plumbing business",
+  "Funny posts about running a small business",
+  "Content for a fitness coach audience",
+  "Marketing mistakes as memes",
 ] as const;
 const PLACEHOLDER_INITIAL_DELAY_MS = 400;
 const PLACEHOLDER_VISIBLE_MS = 1800;

@@ -32,59 +32,57 @@ export default function AboutPage() {
                   About Mimly
                 </h1>
                 <div className="marketing-copy mt-4 space-y-3.5 text-left leading-relaxed text-stone-700">
-                  <p>Mimly came from years of watching how the internet actually behaves.</p>
                   <p>
-                    I&apos;m Alex, the person behind it. About 14 years ago, I accidentally grew a Facebook page to 2M+
-                    followers just posting memes, then sold it to a retailer in the same niche. That&apos;s when it clicked:
-                    memes don&apos;t just entertain, they drive real attention and real business.
+                    Mimly came from years of watching how the internet actually behaves.
                   </p>
                   <p>
-                    Since then, I&apos;ve worked closely with social content and seen how hard it is for brands to show up
-                    in a way that feels natural. Most either overthink it, move too slowly, or miss the tone completely.
-                  </p>
-                  <p>Mimly is my attempt to fix that.</p>
-                  <p>
-                    The goal isn&apos;t random memes. It&apos;s turning a brand&apos;s tone, audience, and offer into content that
-                    actually feels native to the internet, the kind people share without thinking.
+                    I&apos;m Alex. About 14 years ago I grew a Facebook page to 2M+ followers with memes and sold it,
+                    that&apos;s when I realised they drive real attention, not just laughs.
                   </p>
                   <p>
-                    I&apos;m not a traditional developer, but I build using modern tools and AI, what people call vibe
-                    coding. Mimly is built the same way: fast, iterative, and focused on what works.
+                    Mimly is my attempt to bring that into a tool for brands, turning their tone and audience into
+                    content that actually feels native to the internet.
                   </p>
                   <p>
-                    This is an early beta, shaped by real use and feedback. If you&apos;re trying it, I want to know what
-                    works, what doesn&apos;t, and where it breaks.
+                    Right now it starts with memes, but the goal is bigger: an engine for all the content formats you
+                    need to stay relevant, slideshows, carousels, and more.
+                  </p>
+                  <p>
+                    This is an early beta, and I&apos;m actively looking for feedback, what works, what doesn&apos;t, and
+                    where it breaks.
                   </p>
                 </div>
-                <div className="mt-6 flex items-center gap-3 border-t border-stone-100 pt-4">
-                  <Image
-                    src="/alex-v2.png"
-                    alt="Alex"
-                    width={56}
-                    height={56}
-                    className="h-14 w-14 rounded-full object-cover"
-                  />
-                  <div>
-                    <p className="text-sm font-semibold text-stone-900">Alex Attinger</p>
-                    <p className="text-xs text-stone-500">Founder, Mimly</p>
-                    <div className="mt-1.5 flex items-center gap-3 text-xs">
-                      <a
-                        href="https://x.com/alexattinger"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="marketing-copy text-stone-700 transition-colors hover:text-stone-900 hover:underline"
-                      >
-                        X
-                      </a>
-                      <a
-                        href="https://www.linkedin.com/in/alexattinger/"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="marketing-copy text-stone-700 transition-colors hover:text-stone-900 hover:underline"
-                      >
-                        LinkedIn
-                      </a>
+                <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-stone-100 pt-4">
+                  <div className="flex items-center gap-3">
+                    <Image
+                      src="/alex-v2.png"
+                      alt="Alex"
+                      width={56}
+                      height={56}
+                      className="h-14 w-14 rounded-full object-cover"
+                    />
+                    <div>
+                      <p className="text-sm font-semibold text-stone-900">Alex Attinger</p>
+                      <p className="text-xs text-stone-500">Founder, Mimly</p>
                     </div>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs">
+                    <a
+                      href="https://x.com/alexattinger"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="rounded-full border border-stone-200 bg-white px-3 py-1.5 text-stone-700 transition-colors hover:bg-stone-50 hover:text-stone-900"
+                    >
+                      X
+                    </a>
+                    <a
+                      href="https://www.linkedin.com/in/alexattinger/"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="rounded-full border border-stone-200 bg-white px-3 py-1.5 text-stone-700 transition-colors hover:bg-stone-50 hover:text-stone-900"
+                    >
+                      LinkedIn
+                    </a>
                   </div>
                 </div>
               </div>
