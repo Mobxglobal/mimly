@@ -38,7 +38,7 @@ export async function compositeSlotBoundingOverlayPng(
     body += `<rect x="${s.x}" y="${s.y}" width="${s.w}" height="${s.h}" fill="none" stroke="rgba(255,59,48,0.92)" stroke-width="3"/>`;
     const label = `slot ${s.n}  x=${s.x} y=${s.y}  ${s.w}×${s.h}  align=${align}`;
     if (!firstLabel) firstLabel = label;
-    body += `<text x="${s.x + 6}" y="${Math.min(s.y + 22, H - 4)}" fill="rgba(255,59,48,0.95)" font-size="18" font-family="sans-serif">${escapeXML(label)}</text>`;
+    body += `<text x="${s.x + 6}" y="${Math.min(s.y + 22, H - 4)}" fill="rgba(255,59,48,0.95)" font-size="18" font-family='InterEmbed'>${escapeXML(label)}</text>`;
   }
 
   if (!body) {

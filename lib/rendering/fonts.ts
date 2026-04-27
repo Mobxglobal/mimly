@@ -1,13 +1,15 @@
+import fs from "fs";
 import path from "path";
 
 let canvasGuardDone = false;
 let renderSharpFontLogDone = false;
+let embeddedInterSvgDefs: string | null = null;
 
 /**
- * Generic family for Sharp/librsvg SVG text — avoids named faces (Arial, Helvetica, Inter)
- * that may be missing or mis-resolve on serverless; fontconfig maps `sans-serif` to a real face.
+ * Family name for Sharp/librsvg SVG text — matches `@font-face` in `getSvgDocumentFontStyleBlock()`.
+ * Embedded TTF avoids fontconfig when `sans-serif` cannot resolve (e.g. serverless).
  */
-export const SHARP_SVG_FONT_FAMILY = "sans-serif";
+export const SHARP_SVG_FONT_FAMILY = "InterEmbed";
 
 /**
  * One-time check: if `canvas` is not resolvable (typical on Vercel), log SVG-only path.
@@ -24,20 +26,38 @@ export function warnCanvasUnavailableOnce() {
   }
 }
 
+function buildEmbeddedInterSvgFontDefs(): string {
+  const fontPath = path.join(process.cwd(), "public", "fonts", "Inter-Bold.ttf");
+  const fontData = fs.readFileSync(fontPath).toString("base64");
+  return `<defs>
+  <style type="text/css"><![CDATA[
+@font-face {
+  font-family: 'InterEmbed';
+  src: url(data:font/truetype;base64,${fontData}) format('truetype');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: block;
+}
+text {
+  font-family: 'InterEmbed';
+}
+]]></style>
+</defs>`;
+}
+
 /**
- * Global SVG rule for all `<text>` nodes — no @font-face (unreliable with Sharp).
+ * Embedded Inter (base64) + global `text` rule for Sharp SVG — no system fontconfig resolution.
  * Logs once per process on first injection.
  */
 export function getSvgDocumentFontStyleBlock(): string {
   if (!renderSharpFontLogDone) {
     renderSharpFontLogDone = true;
-    console.log("[render] using font: sans-serif");
+    console.log("[render] using font: InterEmbed (embedded)");
   }
-  return `<style type="text/css"><![CDATA[
-text {
-  font-family: sans-serif;
-}
-]]></style>`;
+  if (!embeddedInterSvgDefs) {
+    embeddedInterSvgDefs = buildEmbeddedInterSvgFontDefs();
+  }
+  return embeddedInterSvgDefs;
 }
 
 /** Absolute path to bundled bold TTF (e.g. ffmpeg `fontfile`). */

@@ -208,7 +208,7 @@ function buildSquareTextDebugGuidesSvg(layoutRows: TextLineLayoutRow[]): string 
 }
 
 /**
- * Plain 1080×1080 PNG: white background, generic sans-serif (Sharp); wide wrap + phrase scoring; single line
+ * Plain 1080×1080 PNG: white background, embedded Inter (Sharp); wide wrap + phrase scoring; single line
  * centered, multi-line left-aligned in the full margin band.
  *
  * @param params.debug — TEMPORARY: draws calibration guides (safe margins, center, baselines).
@@ -276,7 +276,7 @@ export async function renderSquareTextMemePng(params: {
     .caption {
       fill: ${theme.textPrimary};
       font-size: ${FONT_SIZE}px;
-      font-family: sans-serif;
+      font-family: 'InterEmbed';
     }
   </style>
   ${textElements.join("\n")}

@@ -15,6 +15,7 @@ import {
   svgStringToUtf8Buffer,
 } from "@/lib/rendering/svg-utf8";
 
+/** Sharp SVG captions use embedded Inter from `public/fonts/Inter-Bold.ttf` via `getSvgDocumentFontStyleBlock`. */
 export type MemeTemplateForRender = {
   slug?: string | null;
   /** Present on DB-backed templates; used for mechanic-specific render paths. */
