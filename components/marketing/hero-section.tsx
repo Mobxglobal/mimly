@@ -22,9 +22,6 @@ const PLACEHOLDER_VISIBLE_MS = 1800;
 const PLACEHOLDER_TYPE_MS = 24;
 const PLACEHOLDER_DELETE_MS = 14;
 
-const HERO_SUB_ROTATING_WORDS = ["meme", "post", "carousel"] as const;
-const HERO_SUB_ROTATE_INTERVAL_MS = 700;
-
 /** Single like count that runs from start to end on mount so it clearly increases on load. */
 function LikeCount({
   delayMs = 0,
@@ -78,7 +75,6 @@ export function HeroSection() {
   const [placeholderIndex, setPlaceholderIndex] = useState(0);
   const [typedPlaceholder, setTypedPlaceholder] = useState("");
   const [isPromptFocused, setIsPromptFocused] = useState(false);
-  const [heroSubWordIndex, setHeroSubWordIndex] = useState(0);
   const [heroPromptRows, setHeroPromptRows] = useState(3);
   const promptFormRef = useRef<HTMLFormElement | null>(null);
   const router = useRouter();
@@ -99,20 +95,6 @@ export function HeroSection() {
     return () => cancelAnimationFrame(id);
   }, [mode]);
 
-  useEffect(() => {
-    const sequence = [1, 2, 0];
-    const timeoutIds: number[] = [];
-    sequence.forEach((wordIndex, step) => {
-      const timeoutId = window.setTimeout(() => {
-        setHeroSubWordIndex(wordIndex);
-      }, HERO_SUB_ROTATE_INTERVAL_MS * (step + 1));
-      timeoutIds.push(timeoutId);
-    });
-
-    return () => {
-      timeoutIds.forEach((id) => window.clearTimeout(id));
-    };
-  }, []);
   const chipHoverText: Record<HomepageFamilyChip, string> = {
     Image: "Generate a 1080x1080 image meme designed for social feed posts.",
     Video: "Generate a 1080x1080 video meme designed for social feed posts.",
@@ -193,24 +175,6 @@ export function HeroSection() {
               <span className="underline decoration-stone-900 underline-offset-[0.12em]">seconds</span>
               .
             </h1>
-            <p className="marketing-copy mx-auto mt-3 max-w-lg text-pretty text-[11px] !leading-snug sm:text-xs sm:!leading-snug">
-              <span className="inline-flex items-baseline justify-center">
-                From prompt to
-                <span
-                  className="hero-subheading-rotator-slot relative ml-1 inline-flex text-left font-medium text-stone-900"
-                  aria-live="polite"
-                  aria-atomic="true"
-                >
-                  <span
-                    key={heroSubWordIndex}
-                    className="hero-subheading-rotator-word inline-block italic"
-                  >
-                    {HERO_SUB_ROTATING_WORDS[heroSubWordIndex]}
-                  </span>
-                </span>
-                .
-              </span>
-            </p>
             {/* <div className="mt-5 flex items-center justify-center">
               <div className="flex items-start gap-3 sm:gap-4">
                 <div
@@ -533,7 +497,7 @@ export function HeroSection() {
                           ← Back to prompt
                         </button>
 
-                        <div className="relative">
+                        <div className="relative mx-auto w-full max-w-2xl">
                           <Globe
                             className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-400"
                             aria-hidden
@@ -561,7 +525,7 @@ export function HeroSection() {
                               }
                             }}
                             placeholder="Paste your website URL..."
-                            className="w-full rounded-lg border border-stone-300 py-3 pr-4 pl-10 focus:outline-none focus:ring-2 focus:ring-black/80"
+                            className="w-full rounded-md border border-stone-300/90 bg-stone-50/35 py-2.5 pr-4 pl-10 text-sm text-stone-800 shadow-[0_1px_0_rgba(0,0,0,0.04)] focus:bg-white focus:outline-none focus:ring-2 focus:ring-black/70"
                           />
                         </div>
                       </div>
@@ -583,11 +547,10 @@ export function HeroSection() {
                     </div>
                     <button
                       type="submit"
-                      disabled={isSubmittingPrompt}
-                      aria-label={isSubmittingPrompt ? "Starting workspace" : "Start workspace"}
-                      className="cursor-pointer inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-stone-900 text-lg font-semibold text-white shadow-sm transition hover:bg-stone-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-stone-200/80 focus-visible:ring-offset-2 focus-visible:ring-offset-white disabled:cursor-not-allowed disabled:opacity-60"
+                      aria-label="Start workspace"
+                      className="cursor-pointer inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-stone-900 text-lg font-semibold text-white shadow-sm hover:bg-stone-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-stone-200/80 focus-visible:ring-offset-2 focus-visible:ring-offset-white"
                     >
-                      {isSubmittingPrompt ? "…" : "↑"}
+                      ↑
                     </button>
                   </div>
                 </div>

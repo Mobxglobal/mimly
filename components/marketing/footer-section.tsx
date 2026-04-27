@@ -10,10 +10,6 @@ const FOOTER_LINKS = {
     { label: "Privacy Policy", href: "/privacy-policy" },
     { label: "Terms of Service", href: "/terms-of-service" },
   ],
-  account: [
-    { label: "Log in", href: "/login" },
-    { label: "Sign up", href: "/signup" },
-  ],
 };
 
 interface FooterSectionProps {
@@ -50,23 +46,6 @@ export function FooterSection({ className }: FooterSectionProps) {
             </h3>
             <ul className="mt-2.5 flex flex-col gap-1.5">
               {FOOTER_LINKS.company.map((link) => (
-                <li key={link.href}>
-                  <Link
-                    href={link.href}
-                    className="text-xs text-stone-300 hover:text-white transition-colors"
-                  >
-                    {link.label}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </div>
-          <div>
-            <h3 className="text-xs font-semibold uppercase tracking-[0.16em] text-stone-200">
-              Account
-            </h3>
-            <ul className="mt-2.5 flex flex-col gap-1.5">
-              {FOOTER_LINKS.account.map((link) => (
                 <li key={link.href}>
                   <Link
                     href={link.href}

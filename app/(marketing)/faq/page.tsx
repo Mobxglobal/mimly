@@ -27,11 +27,11 @@ export default function FAQPage() {
               </p>
               <h1
                 id="faq-page-heading"
-                className="mx-auto mt-3 max-w-3xl text-pretty text-3xl font-bold leading-tight tracking-normal text-stone-900 sm:text-4xl md:text-5xl"
+                className="mx-auto mt-3 max-w-3xl text-pretty text-3xl font-[550] leading-tight tracking-normal text-stone-900 sm:text-4xl md:text-5xl"
               >
                 Frequently asked questions
               </h1>
-              <p className="marketing-copy mx-auto mt-3 max-w-lg text-pretty text-[11px] leading-relaxed sm:text-xs">
+              <p className="marketing-copy mx-auto mt-3 max-w-lg text-pretty leading-relaxed">
                 Quick answers to common questions about how Mimly works, what you can expect from generated memes, and
                 how we keep formats current.
               </p>

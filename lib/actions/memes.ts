@@ -9,7 +9,6 @@ import {
 import { createClient as createSupabaseAdminClient } from "@supabase/supabase-js";
 import { randomUUID } from "node:crypto";
 import { renderMemePNGFromTemplate } from "@/renderer/renderMemeTemplate";
-import { renderWowDogeMemePng } from "@/renderer/renderWowDogeMeme";
 import { renderMemeMP4FromTemplate } from "@/renderer/renderMemeVideoTemplate";
 import { renderSquareTextMemePng } from "@/renderer/renderSquareTextMeme";
 import { renderEngagementTextMemePng } from "@/renderer/renderEngagementTextMeme";
@@ -22,12 +21,11 @@ import {
 } from "@/lib/workspace/template-cycle";
 import { sanitizeGeneratedMemeTextFields } from "@/lib/memes/sanitize-meme-text";
 import { normalizeNobodyMeSetupSlots } from "@/lib/memes/normalize-nobody-me-setup-slots";
-import {
-  buildWowDogeUserPromptBlock,
-  getWowDogeRetrySupplement,
-  isWowDogeTemplateSlug,
-  validateWowDogePhrases,
-} from "@/lib/memes/wow-doge";
+
+// wow-doge is explicitly disabled in beta.
+const DISABLED_TEMPLATE_SLUGS = new Set(["wow-doge"]);
+const isWowDogeTemplateSlug = (slug: unknown): boolean =>
+  DISABLED_TEMPLATE_SLUGS.has(String(slug ?? "").trim().toLowerCase());
 
 /** Sanitized text fields returned when {@link generateMockMemes} runs with `qaCaptureSanitizedTextOnly`. */
 export type QaCapturedGeneratedFields = {
@@ -37,7 +35,6 @@ export type QaCapturedGeneratedFields = {
   bottom_text: string | null;
   slot_3_text: string | null;
   names?: string[];
-  wowDogePhrases?: string[];
 };
 
 export async function generateMockMemes(
@@ -691,6 +688,7 @@ export async function generateMockMemes(
     template_id: string;
     template_name: string;
     slug: string;
+    height_bucket?: string | null;
     /** Drives generation/render routing (square_meme | vertical_slideshow | square_text). */
     template_family: string;
     /** Raw DB layout key for family-specific behavior (e.g. finish_sentence, one_word, agree_disagree). */
@@ -1976,13 +1974,6 @@ ${body.trim()}`;
 - Do not include any prose before or after the JSON object.`;
     }
 
-    if (template.slug === "wow-doge") {
-      const wowHint = getWowDogeRetrySupplement(previousFailureRule);
-      if (wowHint) {
-        return `Retry correction:\n${wowHint}`;
-      }
-    }
-
     if (previousFailureRule === "one_slot_bottom_text_not_null") {
       return `Retry correction:
 - This template only supports one text slot.
@@ -2861,7 +2852,6 @@ ${getTemplateTypeRetryShape()}`;
           bottom_text: string | null;
           slot_3_text: string | null;
           names?: string[];
-          wowDogePhrases?: string[];
         };
         failureRule: null;
       }
@@ -2916,103 +2906,7 @@ IMPORTANT DAY WRITING RULES
     }
 
     if (isWowDogeTemplateSlug(template.slug)) {
-      const englishVariantNote = englishVariantPromptInstruction(
-        resolveEffectiveEnglishVariant(profile.english_variant)
-      );
-      const userContent = buildWowDogeUserPromptBlock({
-        brand_name,
-        what_you_do,
-        audience,
-        country,
-        conversationContext: generationContext.conversationContext ?? null,
-        workspaceSummary: generationContext.workspaceContextSummary ?? null,
-        englishVariantNote,
-        variantBlock: variantPromptGuidance,
-        retrySupplement: retryCorrectiveGuidance,
-      });
-
-      const res = await fetch("https://api.openai.com/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-          model: "gpt-4o-mini",
-          temperature: 0.65,
-          response_format: { type: "json_object" },
-          messages: [
-            {
-              role: "system",
-              content:
-                "You are an expert at doge-style meme labels. Return only JSON with keys title and phrases. No markdown. No extra keys.",
-            },
-            { role: "user", content: userContent },
-          ],
-        }),
-      });
-
-      if (!res.ok) {
-        const text = await res.text().catch(() => "");
-        console.error("[meme-gen] OpenAI error (wow-doge)", {
-          template: template.slug,
-          attempt,
-          status: res.status,
-          text,
-        });
-        return { result: null, failureRule: "openai_error" };
-      }
-
-      const json = (await res.json()) as any;
-      const content = json?.choices?.[0]?.message?.content ?? "{}";
-      const parsed = safeJsonParse(String(content));
-      if (!parsed || typeof parsed !== "object") {
-        console.error("[meme-gen] Validation failed (json_parse_failed) wow-doge", {
-          template: template.slug,
-          attempt,
-          content,
-        });
-        return { result: null, failureRule: "json_parse_failed" };
-      }
-
-      const p = parsed as Record<string, unknown>;
-      const titleValidation = validateTitle(p.title);
-      const phraseValidation = validateWowDogePhrases(p.phrases);
-
-      if (!titleValidation.value) {
-        console.error("[meme-gen] wow-doge title validation failed", {
-          template: template.slug,
-          rule: titleValidation.failRule,
-        });
-        return {
-          result: null,
-          failureRule: titleValidation.failRule ?? "title_missing_or_invalid",
-        };
-      }
-
-      if (!phraseValidation.phrases) {
-        console.error("[meme-gen] wow-doge phrase validation failed", {
-          template: template.slug,
-          rule: phraseValidation.failRule,
-        });
-        return {
-          result: null,
-          failureRule: phraseValidation.failRule ?? "wow_doge_phrases_count",
-        };
-      }
-
-      const phrases = phraseValidation.phrases;
-      const topJoin = phrases.join(" · ");
-      return {
-        result: {
-          title: titleValidation.value,
-          top_text: topJoin,
-          bottom_text: null,
-          slot_3_text: null,
-          wowDogePhrases: phrases,
-        },
-        failureRule: null,
-      };
+      return { result: null, failureRule: "forbidden_template_wow_doge" };
     }
 
     const { topIdeal, bottomIdeal } = getIdealSlotTargets(template, attempt);
@@ -3682,7 +3576,6 @@ ${isThreeSlot
           bottom_text: string | null;
           slot_3_text: string | null;
           names?: string[];
-          wowDogePhrases?: string[];
         }
       | null = null;
     let previousFailureRule: string | null = null;
@@ -3763,9 +3656,6 @@ ${isThreeSlot
         slot_3_text: generated.slot_3_text,
         ...(Array.isArray(generated.names) && generated.names.length > 0
           ? { names: generated.names }
-          : {}),
-        ...(Array.isArray(generated.wowDogePhrases) && generated.wowDogePhrases.length > 0
-          ? { wowDogePhrases: generated.wowDogePhrases }
           : {}),
       };
       break;
@@ -3887,21 +3777,13 @@ ${isThreeSlot
           const arrayBuffer = await (baseBlob as any).arrayBuffer();
           const baseImageBuffer = Buffer.from(arrayBuffer);
 
-          const pngBuffer =
-            isWowDogeTemplateSlug(template.slug) &&
-            Array.isArray(generated.wowDogePhrases) &&
-            generated.wowDogePhrases.length >= 4
-              ? await renderWowDogeMemePng({
-                  baseImageBuffer,
-                  phrases: generated.wowDogePhrases,
-                })
-              : await renderMemePNGFromTemplate({
-                  baseImageBuffer,
-                  template,
-                  topText: generated.top_text,
-                  bottomText: generated.bottom_text,
-                  slot_3_text: generated.slot_3_text ?? undefined,
-                });
+          const pngBuffer = await renderMemePNGFromTemplate({
+            baseImageBuffer,
+            template,
+            topText: generated.top_text,
+            bottomText: generated.bottom_text,
+            slot_3_text: generated.slot_3_text ?? undefined,
+          });
 
           const objectPath = `generated_memes/${workspaceContext?.storagePathNamespace ?? actorUserId ?? "anonymous"}/${template.template_id}/${randomUUID()}.png`;
 
@@ -3963,14 +3845,6 @@ ${isThreeSlot
         : {}),
       ...(template.template_family === "square_text"
         ? { engagement_style: "classic" as const }
-        : {}),
-      ...(isWowDogeTemplateSlug(template.slug) &&
-      Array.isArray(generated.wowDogePhrases) &&
-      generated.wowDogePhrases.length > 0
-        ? {
-            phrases: generated.wowDogePhrases,
-            overlay_variant: "wow_doge" as const,
-          }
         : {}),
       selection_strategy:
         outputFormat === "square_text"

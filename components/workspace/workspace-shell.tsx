@@ -16,6 +16,7 @@ import { MessageList } from "@/components/workspace/message-list";
 import { OutputPanel } from "@/components/workspace/output-panel";
 import { PromptComposer } from "@/components/workspace/prompt-composer";
 import { getLatestSidebarTurn } from "@/lib/workspace/sidebar-turn";
+import { FeedbackModal } from "@/components/feedback/feedback-modal";
 import chatIcon from "@/assets/icons/chat.png";
 
 export function WorkspaceShell({
@@ -34,6 +35,19 @@ export function WorkspaceShell({
   const [newIdeaUrl, setNewIdeaUrl] = useState("");
   const [newIdeaSubmitting, setNewIdeaSubmitting] = useState(false);
   const [newIdeaError, setNewIdeaError] = useState<string | null>(null);
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
+  const [feedbackSubmitting, setFeedbackSubmitting] = useState(false);
+  const [feedbackAnswers, setFeedbackAnswers] = useState<{
+    firstMemeThought: "good" | "average" | "awful" | null;
+    wouldUseAgain: "yes" | "no" | "maybe" | null;
+    looksLikeAiSlop: "yes" | "no" | "a_bit" | null;
+  }>({
+    firstMemeThought: null,
+    wouldUseAgain: null,
+    looksLikeAiSlop: null,
+  });
+  const pendingGenerationActionRef = useRef<null | (() => Promise<void>)>(null);
+  const processedCompletedJobIdsRef = useRef<Set<string>>(new Set());
   const bootedQueuedStart = useRef(false);
 
   const latestJob = state.latestJob;
@@ -59,6 +73,62 @@ export function WorkspaceShell({
     }, 2500);
     return () => clearInterval(timer);
   }, [isJobActive, workspaceId]);
+
+  const getGenerationCount = () => {
+    if (typeof window === "undefined") return 0;
+    const raw = window.localStorage.getItem("mimly_generation_count");
+    const parsed = Number(raw ?? "0");
+    return Number.isFinite(parsed) ? Math.max(0, parsed) : 0;
+  };
+
+  const isFeedbackCompleted = () => {
+    if (typeof window === "undefined") return false;
+    return window.localStorage.getItem("mimly_feedback_completed") === "true";
+  };
+
+  const ensureSessionId = () => {
+    if (typeof window === "undefined") return "";
+    const existing = window.localStorage.getItem("mimly_session_id");
+    if (existing) return existing;
+    const next = crypto.randomUUID();
+    window.localStorage.setItem("mimly_session_id", next);
+    return next;
+  };
+
+  const runWithFeedbackGate = async (action: () => Promise<void>) => {
+    const generationCount = getGenerationCount();
+    if (generationCount >= 1 && !isFeedbackCompleted()) {
+      pendingGenerationActionRef.current = action;
+      setShowFeedbackModal(true);
+      return;
+    }
+    await action();
+  };
+
+  useEffect(() => {
+    if (latestJob?.status !== "completed" || !latestJob.id) return;
+    if (processedCompletedJobIdsRef.current.has(latestJob.id)) return;
+    processedCompletedJobIdsRef.current.add(latestJob.id);
+    if (typeof window === "undefined") return;
+    const countedRaw = window.localStorage.getItem("mimly_counted_generation_job_ids");
+    let countedIds: string[] = [];
+    try {
+      const parsed = countedRaw ? (JSON.parse(countedRaw) as unknown) : [];
+      countedIds = Array.isArray(parsed)
+        ? parsed.map((v) => String(v)).filter(Boolean)
+        : [];
+    } catch {
+      countedIds = [];
+    }
+    if (countedIds.includes(latestJob.id)) return;
+    const nextCount = getGenerationCount() + 1;
+    window.localStorage.setItem("mimly_generation_count", String(nextCount));
+    const nextIds = [...countedIds, latestJob.id].slice(-50);
+    window.localStorage.setItem(
+      "mimly_counted_generation_job_ids",
+      JSON.stringify(nextIds)
+    );
+  }, [latestJob?.id, latestJob?.status]);
 
   const planLabel = useMemo(() => {
     if (state.workspace.current_plan === "starter_pack") return "Starter Pack";
@@ -116,65 +186,108 @@ export function WorkspaceShell({
     if (newIdeaMode === "url" && !newIdeaUrl.trim()) return;
     if (isJobActive) return;
 
-    setNewIdeaError(null);
-    setNewIdeaSubmitting(true);
+    await runWithFeedbackGate(async () => {
+      setNewIdeaError(null);
+      setNewIdeaSubmitting(true);
+      try {
+        const res = await fetch("/api/workspace/new-idea", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "same-origin",
+          body: JSON.stringify({
+            workspaceId,
+            inputType: newIdeaMode,
+            prompt: newIdeaMode === "prompt" ? newIdeaPrompt : undefined,
+            url: newIdeaMode === "url" ? newIdeaUrl : undefined,
+          }),
+        });
+        const data = (await res.json().catch(() => ({}))) as { error?: string };
+        if (!res.ok) {
+          setNewIdeaError(data.error ?? "Could not start a new idea.");
+          return;
+        }
+        setChatInputMode("thread");
+        setNewIdeaPrompt("");
+        setNewIdeaUrl("");
+        const next = await getWorkspaceState(workspaceId);
+        if (!next.error && next.state) setState(next.state);
+      } catch {
+        setNewIdeaError("Something went wrong. Try again.");
+      } finally {
+        setNewIdeaSubmitting(false);
+      }
+    });
+  };
+
+  const submitMessage = async (prompt: string) => {
+    await runWithFeedbackGate(async () => {
+      setError(null);
+      const result = await sendWorkspaceMessage(workspaceId, prompt, {});
+      if (result.error || !result.state) {
+        setError(result.error ?? "Failed to send message.");
+        return;
+      }
+      setState(result.state);
+    });
+  };
+
+  const submitFeedback = async () => {
+    if (
+      feedbackAnswers.firstMemeThought === null ||
+      feedbackAnswers.wouldUseAgain === null ||
+      feedbackAnswers.looksLikeAiSlop === null
+    ) {
+      return;
+    }
+    setFeedbackSubmitting(true);
     try {
-      console.log("NEW IDEA SUBMIT", {
-        mode: newIdeaMode,
-        promptValue: newIdeaPrompt,
-        urlValue: newIdeaUrl,
-        workspaceId,
-      });
-      const res = await fetch("/api/workspace/new-idea", {
+      const sessionId = ensureSessionId();
+      await fetch("/api/feedback", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "same-origin",
         body: JSON.stringify({
           workspaceId,
-          inputType: newIdeaMode,
-          prompt: newIdeaMode === "prompt" ? newIdeaPrompt : undefined,
-          url: newIdeaMode === "url" ? newIdeaUrl : undefined,
+          sessionId,
+          wasContentGood: feedbackAnswers.firstMemeThought === "good",
+          wouldUseAgain: feedbackAnswers.wouldUseAgain === "yes",
+          looksLikeAiSlop:
+            feedbackAnswers.looksLikeAiSlop === "no" ? "not_really" : "a_bit",
         }),
       });
-      console.log("NEW IDEA RESPONSE STATUS", res.status);
-      const responseText = await res.text();
-      console.log("NEW IDEA RESPONSE BODY", responseText);
-      let data: { error?: string } = {};
-      try {
-        data = responseText
-          ? (JSON.parse(responseText) as { error?: string })
-          : {};
-      } catch {
-        data = {};
-      }
-      if (!res.ok) {
-        setNewIdeaError(data.error ?? "Could not start a new idea.");
-        return;
-      }
-      setChatInputMode("thread");
-      setNewIdeaPrompt("");
-      setNewIdeaUrl("");
-      const next = await getWorkspaceState(workspaceId);
-      if (!next.error && next.state) setState(next.state);
     } catch {
-      setNewIdeaError("Something went wrong. Try again.");
+      // Fail-safe: never block progression if feedback API fails.
     } finally {
-      setNewIdeaSubmitting(false);
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem("mimly_feedback_completed", "true");
+      }
+      setShowFeedbackModal(false);
+      setFeedbackSubmitting(false);
+      const pending = pendingGenerationActionRef.current;
+      pendingGenerationActionRef.current = null;
+      if (pending) {
+        await pending();
+      }
     }
-  };
-
-  const submitMessage = async (prompt: string) => {
-    setError(null);
-    const result = await sendWorkspaceMessage(workspaceId, prompt, {});
-    if (result.error || !result.state) {
-      setError(result.error ?? "Failed to send message.");
-      return;
-    }
-    setState(result.state);
   };
 
   return (
     <div className="space-y-4">
+      <FeedbackModal
+        open={showFeedbackModal}
+        submitting={feedbackSubmitting}
+        answers={feedbackAnswers}
+        onSelectFirstMemeThought={(value) =>
+          setFeedbackAnswers((prev) => ({ ...prev, firstMemeThought: value }))
+        }
+        onSelectWouldUseAgain={(value) =>
+          setFeedbackAnswers((prev) => ({ ...prev, wouldUseAgain: value }))
+        }
+        onSelectLooksLikeAiSlop={(value) =>
+          setFeedbackAnswers((prev) => ({ ...prev, looksLikeAiSlop: value }))
+        }
+        onSubmit={() => void submitFeedback()}
+      />
       <header className="flex min-h-14 flex-wrap items-center justify-between gap-2 rounded-2xl border border-white/45 bg-white/45 px-3 py-2 shadow-[0_6px_20px_rgba(20,20,20,0.05)] backdrop-blur-md sm:h-14 sm:flex-nowrap sm:px-4 sm:py-0 lg:sticky lg:top-4 lg:z-30">
         <div className="flex items-center gap-2 sm:gap-3">
           <Link

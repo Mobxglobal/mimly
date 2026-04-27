@@ -34,27 +34,20 @@ export default function ContactPage() {
             <HeroNav />
           </div>
 
-          <div className="flex w-full flex-1 flex-col items-center justify-start gap-6 px-4 pb-4 pt-2 text-center sm:pt-3 md:pt-4">
-            <div className="relative w-full max-w-3xl">
-              <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-stone-500 sm:text-xs">
-                Contact
-              </p>
-              <h1 className="mx-auto mt-3 max-w-3xl text-pretty text-3xl font-bold leading-tight tracking-normal text-stone-900 sm:text-4xl md:text-5xl">
-                Let&apos;s talk about
-                <br />
-                your meme engine.
-              </h1>
-              <p className="marketing-copy mx-auto mt-3 max-w-lg text-pretty text-[11px] leading-relaxed sm:text-xs">
-                Whether you have product questions, partnership ideas, or just want
-                to understand how Mimly works, this page gives you a simple way to
-                reach out.
-              </p>
-            </div>
-          </div>
+          <div className="w-full px-4 pb-4 pt-2 sm:pt-3 md:pt-4">
+            <div className="mx-auto w-full max-w-4xl rounded-[30px] border border-stone-200/90 bg-gradient-to-b from-white to-stone-50 p-2 shadow-[0_12px_36px_rgba(20,24,40,0.12)] ring-1 ring-white/80">
+              <div className="rounded-[24px] border border-stone-200/80 bg-white/95 p-4 sm:p-5 md:p-6">
+                <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-stone-500 sm:text-xs">
+                  Contact
+                </p>
+                <h1 className="mt-3 text-pretty text-3xl font-[550] leading-tight tracking-normal text-stone-900 sm:text-4xl md:text-5xl">
+                  Let&apos;s talk about your meme engine.
+                </h1>
+                <p className="marketing-copy mt-3 max-w-2xl text-pretty leading-relaxed text-stone-700">
+                  Have a question? Reach out and we&apos;ll get back to you.
+                </p>
 
-          <div className="mx-auto mt-8 w-full max-w-xl px-4">
-            <div className="relative overflow-hidden rounded-[30px] border border-stone-200/90 bg-gradient-to-b from-white to-stone-50 p-2 shadow-[0_12px_36px_rgba(20,24,40,0.12)] ring-1 ring-white/80">
-              <div className="rounded-[24px] border border-stone-200/80 bg-white/95 p-4 sm:p-5">
+                <div className="mt-6">
                 {submitted ? (
                   <div className="rounded-[1.5rem] border border-emerald-200 bg-emerald-50/90 p-5">
                     <p className="text-sm font-medium text-emerald-900">
@@ -128,6 +121,7 @@ export default function ContactPage() {
                     </button>
                   </form>
                 )}
+                </div>
               </div>
             </div>
           </div>

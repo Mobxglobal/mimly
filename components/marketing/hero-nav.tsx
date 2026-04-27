@@ -149,10 +149,10 @@ export function HeroNav({ onFixedChange }: HeroNavProps) {
           ) : (
             <>
               <Link
-                href="/login"
+                href="/about"
                 className="cta-funky rounded-full bg-stone-900 px-2.5 py-1 text-xs font-medium !text-white shadow-sm hover:bg-stone-800 transition-colors font-display"
               >
-                Log in
+                About
               </Link>
             </>
           )}
@@ -235,11 +235,11 @@ export function HeroNav({ onFixedChange }: HeroNavProps) {
               ) : (
                 <>
                   <Link
-                    href="/login"
+                    href="/about"
                     onClick={closeMenu}
                     className="cta-funky flex-1 rounded-full bg-stone-900 py-2.5 text-center text-sm font-medium !text-white shadow-sm hover:bg-stone-800 transition-colors font-display"
                   >
-                    Log in
+                    About
                   </Link>
                 </>
               )}

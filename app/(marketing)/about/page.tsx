@@ -1,31 +1,12 @@
 "use client";
 
 import Image from "next/image";
-import Link from "next/link";
 import { PageShell } from "@/components/marketing/page-shell";
 import { FramedSection } from "@/components/marketing/framed-section";
 import { HeroNav } from "@/components/marketing/hero-nav";
 import { FooterSection } from "@/components/marketing/footer-section";
 import { HERO_BACKGROUND_IMAGE_SRC } from "@/lib/marketing/hero-background";
 import { MARKETING_SECTION_GAP_CLASS } from "@/lib/marketing/marketing-layout";
-
-const BELIEFS = [
-  {
-    title: "Built for speed",
-    copy:
-      "Brands should be able to move at internet speed without waiting on a full content production cycle.",
-  },
-  {
-    title: "Grounded in context",
-    copy:
-      "The best memes are not random. They work when they reflect your audience, offer, tone, and timing.",
-  },
-  {
-    title: "Made to be useful",
-    copy:
-      "Mimly is designed to help teams publish faster, test more often, and stay culturally relevant.",
-  },
-];
 
 export default function AboutPage() {
   return (
@@ -41,124 +22,72 @@ export default function AboutPage() {
             <HeroNav />
           </div>
 
-          <div className="flex w-full flex-1 flex-col items-center justify-start gap-6 px-4 pb-4 pt-2 text-center sm:pt-3 md:pt-4">
-            <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-stone-500 sm:text-xs">
-              About Mimly
-            </p>
-            <h1 className="mx-auto mt-3 max-w-3xl text-pretty text-3xl font-bold leading-tight tracking-normal text-stone-900 sm:text-4xl md:text-5xl">
-              Built for brands
-              <br />
-              that want to speak internet.
-            </h1>
-            <p className="marketing-copy mx-auto mt-3 max-w-lg text-pretty text-[11px] leading-relaxed sm:text-xs">
-              Mimly helps businesses turn their brand context into memes that
-              feel current, platform-native, and ready to post. The goal is
-              simple: make it easier for brands to create social content people
-              actually want to share.
-            </p>
-            <div className="mt-8 flex flex-col items-center gap-3 sm:flex-row">
-              <Link
-                href="/onboarding/manual"
-                className="cta-funky rounded-full bg-stone-900 px-5 py-2.5 text-sm font-medium !text-white shadow-sm transition-colors hover:bg-stone-800 font-display"
-              >
-                Get started
-              </Link>
-              <Link
-                href="/contact"
-                className="rounded-full border border-stone-200 bg-white/85 px-5 py-2.5 text-sm font-medium text-stone-700 transition-colors hover:bg-white hover:text-stone-900"
-              >
-                Contact us
-              </Link>
-            </div>
-          </div>
-        </div>
-      </FramedSection>
-
-      <FramedSection variant="default" backgroundVariant="gallery" className="w-full">
-        <div className="mx-auto max-w-3xl text-center">
-          <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-stone-500 sm:text-xs">
-            What we believe
-          </p>
-          <h2 className="mt-3 text-3xl font-bold tracking-normal text-stone-900 sm:text-4xl md:text-5xl">
-            Great meme marketing needs both taste and context
-          </h2>
-          <p className="marketing-copy mx-auto mt-3 max-w-2xl text-[11px] leading-relaxed sm:text-xs">
-            Internet-native content only works when it feels right for the
-            brand, the moment, and the audience. That balance is what Mimly is
-            built to support.
-          </p>
-        </div>
-
-        <div className="mx-auto mt-8 grid max-w-5xl gap-4 md:grid-cols-3">
-          {BELIEFS.map((item) => (
-            <article
-              key={item.title}
-              className="rounded-[2rem] border border-stone-200/80 bg-white/85 p-5 shadow-[0_14px_30px_rgba(0,0,0,0.05)]"
-            >
-              <h3 className="text-lg font-semibold tracking-normal text-stone-900">
-                {item.title}
-              </h3>
-              <p className="marketing-copy mt-2.5 text-xs leading-relaxed text-stone-700">
-                {item.copy}
-              </p>
-            </article>
-          ))}
-        </div>
-      </FramedSection>
-
-      <FramedSection variant="default" backgroundVariant="founder" className="w-full">
-        <div className="grid gap-8 lg:grid-cols-[1.05fr_0.95fr] lg:items-center">
-          <div className="max-w-2xl">
-            <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-stone-500 sm:text-xs">
-              Founder story
-            </p>
-            <h2 className="mt-3 text-3xl font-bold tracking-normal text-stone-900 sm:text-4xl md:text-5xl">
-              Built by someone who understands what makes memes travel
-            </h2>
-            <div className="mt-4 space-y-3.5">
-              <p className="marketing-copy text-xs leading-relaxed text-stone-700">
-                More than a decade ago, Alex grew a Facebook page to over two
-                million followers by sharing memes and internet-native content.
-              </p>
-              <p className="marketing-copy text-xs leading-relaxed text-stone-700">
-                Since then, he has worked with some of the biggest social media
-                publishers and seen first-hand how fast culture moves online and
-                how hard it is for brands to keep up.
-              </p>
-              <p className="marketing-copy text-xs leading-relaxed text-stone-700">
-                Mimly was created to bridge that gap: combining brand context,
-                timing, and meme literacy into a product that helps businesses
-                publish with more confidence and speed.
-              </p>
-            </div>
-          </div>
-
-          <div className="rounded-[2rem] border border-stone-200/80 bg-white/80 p-5 shadow-[0_14px_32px_rgba(0,0,0,0.06)] sm:p-6">
-            <div className="mx-auto w-full max-w-[220px]">
-              <div className="relative aspect-square overflow-hidden rounded-full bg-stone-100 ring-1 ring-stone-200/70">
-              <Image
-                src="/founder/mLwsIoTp_400x400.jpg"
-                alt="Alex Attinger"
-                fill
-                sizes="(min-width: 1024px) 220px, 100vw"
-                className="object-cover"
-              />
-            </div>
-            <div className="mt-4 text-center">
-              <p className="text-base font-semibold leading-tight text-stone-900">
-                Alex Attinger
-              </p>
-              <p className="mt-0.5 text-xs text-stone-500">Founder, Mimly</p>
-
-              <a
-                href="https://x.com/alexattinger"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="mt-3 inline-flex w-full items-center justify-center rounded-full border border-stone-200 bg-white px-4 py-2 text-xs font-medium text-stone-700 transition-colors hover:bg-stone-50 hover:text-stone-900"
-              >
-                Follow on X
-              </a>
-            </div>
+          <div className="w-full px-4 pb-4 pt-2 sm:pt-3 md:pt-4">
+            <div className="mx-auto w-full max-w-4xl rounded-[30px] border border-stone-200/90 bg-gradient-to-b from-white to-stone-50 p-2 shadow-[0_12px_36px_rgba(20,24,40,0.12)] ring-1 ring-white/80">
+              <div className="rounded-[24px] border border-stone-200/80 bg-white/95 p-4 sm:p-5 md:p-6">
+                <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-stone-500 sm:text-xs">
+                  About Mimly
+                </p>
+                <h1 className="mt-3 text-pretty text-3xl font-[550] leading-tight tracking-normal text-stone-900 sm:text-4xl md:text-5xl">
+                  About Mimly
+                </h1>
+                <div className="marketing-copy mt-4 space-y-3.5 text-left leading-relaxed text-stone-700">
+                  <p>Mimly came from years of watching how the internet actually behaves.</p>
+                  <p>
+                    I&apos;m Alex, the person behind it. About 14 years ago, I accidentally grew a Facebook page to 2M+
+                    followers just posting memes, then sold it to a retailer in the same niche. That&apos;s when it clicked:
+                    memes don&apos;t just entertain, they drive real attention and real business.
+                  </p>
+                  <p>
+                    Since then, I&apos;ve worked closely with social content and seen how hard it is for brands to show up
+                    in a way that feels natural. Most either overthink it, move too slowly, or miss the tone completely.
+                  </p>
+                  <p>Mimly is my attempt to fix that.</p>
+                  <p>
+                    The goal isn&apos;t random memes. It&apos;s turning a brand&apos;s tone, audience, and offer into content that
+                    actually feels native to the internet, the kind people share without thinking.
+                  </p>
+                  <p>
+                    I&apos;m not a traditional developer, but I build using modern tools and AI, what people call vibe
+                    coding. Mimly is built the same way: fast, iterative, and focused on what works.
+                  </p>
+                  <p>
+                    This is an early beta, shaped by real use and feedback. If you&apos;re trying it, I want to know what
+                    works, what doesn&apos;t, and where it breaks.
+                  </p>
+                </div>
+                <div className="mt-6 flex items-center gap-3 border-t border-stone-100 pt-4">
+                  <Image
+                    src="/alex-v2.png"
+                    alt="Alex"
+                    width={56}
+                    height={56}
+                    className="h-14 w-14 rounded-full object-cover"
+                  />
+                  <div>
+                    <p className="text-sm font-semibold text-stone-900">Alex Attinger</p>
+                    <p className="text-xs text-stone-500">Founder, Mimly</p>
+                    <div className="mt-1.5 flex items-center gap-3 text-xs">
+                      <a
+                        href="https://x.com/alexattinger"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="marketing-copy text-stone-700 transition-colors hover:text-stone-900 hover:underline"
+                      >
+                        X
+                      </a>
+                      <a
+                        href="https://www.linkedin.com/in/alexattinger/"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="marketing-copy text-stone-700 transition-colors hover:text-stone-900 hover:underline"
+                      >
+                        LinkedIn
+                      </a>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>

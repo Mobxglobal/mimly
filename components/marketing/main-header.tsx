@@ -11,10 +11,10 @@ export function MainHeader() {
           Meme Builder
         </Link>
         <Link
-          href="/login"
+          href="/about"
           className="rounded-lg bg-[var(--canvas-heading)] px-3 py-1.5 text-xs font-medium text-white shadow-sm transition-opacity hover:opacity-90"
         >
-          Sign in
+          About
         </Link>
       </div>
     </header>
