@@ -41,6 +41,12 @@ export function WorkspaceShell({
   const [newIdeaUrl, setNewIdeaUrl] = useState("");
   const [newIdeaSubmitting, setNewIdeaSubmitting] = useState(false);
   const [newIdeaError, setNewIdeaError] = useState<string | null>(null);
+  const [v2Submitting, setV2Submitting] = useState(false);
+  const [v2Error, setV2Error] = useState<string | null>(null);
+  const [v2ResultUrl, setV2ResultUrl] = useState<string | null>(null);
+  const [selectedFormat, setSelectedFormat] = useState<
+    "square_image" | "square_video" | "square_text"
+  >("square_image");
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
   const [feedbackSubmitting, setFeedbackSubmitting] = useState(false);
   const [feedbackAnswers, setFeedbackAnswers] = useState<{
@@ -431,6 +437,57 @@ export function WorkspaceShell({
     });
   };
 
+  const handleRunV2Test = async () => {
+    const prompt = newIdeaPrompt;
+    const url = newIdeaUrl;
+    const input = (prompt || url || "").trim();
+    if (!input) {
+      setV2Error("Please enter a prompt or URL first");
+      return;
+    }
+    if (isJobActive) return;
+
+    setV2Error(null);
+    setV2ResultUrl(null);
+    setV2Submitting(true);
+    try {
+      console.log("V2 SEND:", {
+        workspaceId,
+        input,
+        outputFormat: selectedFormat,
+      });
+
+      const res = await fetch("/api/workspace/generate-v2", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          workspaceId,
+          input,
+          outputFormat: selectedFormat || "square_image",
+        }),
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        setV2Error(`V2 failed: ${text}`);
+        return;
+      }
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        result?: { finalMediaUrl?: string };
+      };
+      const mediaUrl = String(data?.result?.finalMediaUrl ?? "").trim();
+      if (!mediaUrl) {
+        setV2Error("V2 test succeeded but returned no media URL.");
+        return;
+      }
+      setV2ResultUrl(mediaUrl);
+    } catch {
+      setV2Error("Could not run V2 test.");
+    } finally {
+      setV2Submitting(false);
+    }
+  };
+
   const submitMessage = async (prompt: string) => {
     await runWithFeedbackGate(async () => {
       setError(null);
@@ -723,7 +780,58 @@ export function WorkspaceShell({
                     {newIdeaError ? (
                       <p className="text-[11px] text-rose-600">{newIdeaError}</p>
                     ) : null}
+                    {v2Error ? (
+                      <p className="text-[11px] text-rose-600">{v2Error}</p>
+                    ) : null}
+                    {v2ResultUrl ? (
+                      <p className="text-[11px] text-emerald-700">
+                        V2 output ready:{" "}
+                        <a
+                          href={v2ResultUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="underline decoration-emerald-400 underline-offset-2"
+                        >
+                          Open preview
+                        </a>
+                      </p>
+                    ) : null}
                     <div className="flex flex-col gap-2 pt-0.5 sm:flex-row sm:items-center sm:justify-end">
+                      <div className="flex w-full flex-col gap-1 sm:w-auto">
+                      <button
+                        type="button"
+                        disabled={
+                          v2Submitting ||
+                          newIdeaSubmitting ||
+                          isJobActive ||
+                          isAuthLocked ||
+                          isPlanLocked ||
+                          (newIdeaMode === "prompt" && !newIdeaPrompt.trim()) ||
+                          (newIdeaMode === "url" && !newIdeaUrl.trim())
+                        }
+                        onClick={() => void handleRunV2Test()}
+                        className="inline-flex h-10 w-full shrink-0 items-center justify-center rounded-full border border-emerald-300 bg-emerald-50 px-3.5 text-xs font-semibold text-emerald-700 shadow-sm transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50 sm:h-9 sm:w-auto"
+                        title="Run the new synchronous V2 pipeline (square image) for side-by-side testing."
+                      >
+                        {v2Submitting ? "Running V2…" : "Run V2 test"}
+                      </button>
+                        <select
+                          value={selectedFormat}
+                          onChange={(e) =>
+                            setSelectedFormat(
+                              e.target.value as
+                                | "square_image"
+                                | "square_video"
+                                | "square_text"
+                            )
+                          }
+                          className="border rounded px-2 py-1 text-sm"
+                        >
+                          <option value="square_image">Image</option>
+                          <option value="square_video">Video</option>
+                          <option value="square_text">Text</option>
+                        </select>
+                      </div>
                       <button
                         type="button"
                         disabled={

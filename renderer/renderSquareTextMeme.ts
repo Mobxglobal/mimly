@@ -1,6 +1,4 @@
 import sharp from "sharp";
-import { wrapSquareTextMemeLines } from "@/renderer/caption-wrap";
-import { measureSquareTextLineWidthPx } from "@/renderer/square-text-measure";
 import { interTextToPathElement, interTextToPathWithAnchor } from "@/lib/rendering/text-to-path";
 import { SVG_UTF8_XML_DECL, logSvgDebugSample, svgStringToUtf8Buffer } from "@/lib/rendering/svg-utf8";
 import {
@@ -57,50 +55,24 @@ function normalizeText(text: string): string {
     .trim();
 }
 
-/**
- * Combine template slot max lines with pixel width: long/wide copy may need more lines than
- * the template minimum so we never render one ultra-wide line when wrapping can split it.
- */
-function effectiveMaxLines(requestedMaxLines: number, text: string): number {
-  const t = normalizeText(text);
-  if (!t) return Math.min(16, Math.max(1, requestedMaxLines));
+function wrapTextSquareSimple(text: string): string[] {
+  const maxChars = 37;
+  const maxLines = 4;
+  const lines: string[] = [];
+  let i = 0;
 
-  const cap = Math.min(16, Math.max(1, requestedMaxLines));
-  const w = measureSquareTextLineWidthPx(t);
-  let minLines = Math.max(1, Math.ceil(w / SQUARE_TEXT_MAX_LINE_WIDTH_PX));
-  if (w > SQUARE_TEXT_MAX_LINE_WIDTH_PX) {
-    minLines = Math.max(minLines, 2);
+  while (i < text.length && lines.length < maxLines) {
+    lines.push(text.slice(i, i + maxChars));
+    i += maxChars;
   }
 
-  return Math.min(16, Math.max(cap, minLines));
+  return lines;
 }
 
-/**
- * Prefer 2–3 lines for medium copy (meme-wide lines); allow more only when length needs it.
- * `minNeeded` is derived from measured full-text width vs the 896px line budget.
- */
-function wrapLineBudget(text: string, requestedMaxLines: number): number {
-  const t = normalizeText(text);
-  if (!t) return Math.min(16, Math.max(1, requestedMaxLines));
-
-  const base = effectiveMaxLines(requestedMaxLines, t);
-  const w = measureSquareTextLineWidthPx(t);
-  const minNeeded = Math.max(1, Math.ceil(w / SQUARE_TEXT_MAX_LINE_WIDTH_PX));
-  const softPreferMax =
-    t.length <= 140 ? 3 : t.length <= 260 ? 4 : t.length <= 400 ? 5 : 16;
-
-  return Math.max(minNeeded, Math.min(base, softPreferMax));
-}
-
-/**
- * Phrase-scored word-boundary layouts (`wrapSquareTextMemeLines`) for natural meme breaks.
- */
-function wrapSquareTextBlock(text: string, requestedMaxLines: number): string[] {
+function wrapSquareTextBlock(text: string, _requestedMaxLines: number): string[] {
   const t = normalizeText(text);
   if (!t) return [];
-
-  const maxLines = wrapLineBudget(t, requestedMaxLines);
-  return wrapSquareTextMemeLines(t, SQUARE_TEXT_MAX_LINE_WIDTH_PX, maxLines);
+  return wrapTextSquareSimple(t);
 }
 
 function blockLineHeight(lines: string[]): number {

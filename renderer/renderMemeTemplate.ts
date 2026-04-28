@@ -2,7 +2,7 @@
  * Slot meme PNGs: SVG text as vector paths + Sharp composite (no `<text>`, no fontconfig).
  */
 import sharp from "sharp";
-import { wrapCaptionWithSoftEarlySplit, wrapSquareTopCaptionScoped } from "@/renderer/caption-wrap";
+import { wrapCaptionWithSoftEarlySplit } from "@/renderer/caption-wrap";
 import { normalizeNobodyMeSetupSlots } from "@/lib/memes/normalize-nobody-me-setup-slots";
 import { interTextToPathElement } from "@/lib/rendering/text-to-path";
 import {
@@ -133,6 +133,21 @@ function renderLines(
     .join("");
 }
 
+function wrapTextTopCaptionStandard(text: string): string[] {
+  const maxChars = 37;
+  const maxLines = 2;
+
+  const lines: string[] = [];
+  let i = 0;
+
+  while (i < text.length && lines.length < maxLines) {
+    lines.push(text.slice(i, i + maxChars));
+    i += maxChars;
+  }
+
+  return lines;
+}
+
 function wrapImageSlotText(params: {
   text: string;
   maxChars: number;
@@ -144,70 +159,32 @@ function wrapImageSlotText(params: {
 }): string[] {
   if (!params.text) return [];
 
-  // Keep image slot-1 behavior aligned with video wrapping:
-  // medium + top_caption uses one fixed wrapping strategy for consistency.
-  if (params.slotIndex === 0) {
-    const templateSlug = (params.template as { slug?: string | null }).slug ?? null;
-    const isMediumTopCaption =
-      String(params.template.height_bucket ?? "").trim().toLowerCase() === "medium" &&
-      String(params.template.text_layout_type ?? "").trim().toLowerCase() === "top_caption";
-    if (isMediumTopCaption) {
-      const lines = wrapCaptionWithSoftEarlySplit(params.text, 37, 2);
-      console.log("VIDEO WRAP PATH", {
-        file: "renderer/renderMemeTemplate.ts",
-        function: "wrapImageSlotText",
-        slug: templateSlug,
-        height_bucket: params.template.height_bucket ?? null,
-        layout: params.template.text_layout_type ?? null,
-        family: params.template.template_family ?? null,
-        text: params.text,
-        selectedStrategy: "medium_top_caption_forced_fallback_37x2",
-        lines,
-      });
-      return lines;
-    }
+  const isTopCaption =
+    String(params.template.text_layout_type ?? "").trim().toLowerCase() === "top_caption";
 
-    const scoped = wrapSquareTopCaptionScoped({
-      text: params.text,
-      maxChars: params.maxChars,
-      maxLines: params.maxLines,
-      slotWidthPx: params.slotWidth,
-      fontSize: params.fontSize,
-      fontFamily: params.template.font ?? null,
-      templateFamily: params.template.template_family ?? null,
-      textLayoutType: params.template.text_layout_type ?? null,
-    });
-    const lines =
-      scoped && scoped.length > 0
-        ? scoped
-        : wrapCaptionWithSoftEarlySplit(params.text, params.maxChars, params.maxLines);
-    console.log("VIDEO WRAP PATH", {
-      file: "renderer/renderMemeTemplate.ts",
-      function: "wrapImageSlotText",
-      slug: templateSlug,
-      height_bucket: params.template.height_bucket ?? null,
-      layout: params.template.text_layout_type ?? null,
-      family: params.template.template_family ?? null,
-      text: params.text,
-      selectedStrategy: scoped && scoped.length > 0 ? "scoped" : "fallback",
-      lines,
-    });
+  if (isTopCaption && params.slotIndex === 0) {
+    const lines = wrapTextTopCaptionStandard(params.text);
+    console.log("TOP_CAPTION_STANDARD", lines);
     return lines;
+  }
+
+  if (params.slotIndex === 0) {
+    return wrapCaptionWithSoftEarlySplit(params.text, params.maxChars, params.maxLines);
   }
 
   return wrapCaptionWithSoftEarlySplit(params.text, params.maxChars, params.maxLines);
 }
 
 function buildSVG(template: MemeTemplateForRender, slotTexts: SlotTexts) {
-  const fontSize = template.font_size ?? 46;
+  const isTopCaption =
+    String(template.text_layout_type ?? "").trim().toLowerCase() === "top_caption";
+  const fontSize = isTopCaption ? 54 : template.font_size ?? 46;
   console.log("IMAGE FONT SIZE", {
     slug: template.slug,
     fontSize: fontSize,
   });
-  const isTopCaptionLayout =
-    String(template.text_layout_type ?? "").trim().toLowerCase() === "top_caption";
-  const horizontalInset = isTopCaptionLayout ? 8 : 0;
-  const alignment = isTopCaptionLayout
+  const horizontalInset = isTopCaption ? 8 : 0;
+  const alignment = isTopCaption
     ? "left"
     : template.alignment || "center";
   const textColor = template.text_color || "#000000";
