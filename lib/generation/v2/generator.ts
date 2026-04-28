@@ -44,6 +44,13 @@ function coerceGeneratedSlots(
     throw new Error("Model returned empty top_text.");
   }
   if (!isStructured) {
+    if (
+      !clean.includes("you") &&
+      !clean.includes("your") &&
+      !clean.toLowerCase().includes("when")
+    ) {
+      throw new Error("Top caption lacks relatable framing.");
+    }
     // top_caption -> sentence required
     if (clean.length < 20) {
       throw new Error("Top caption too short.");
