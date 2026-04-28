@@ -28,12 +28,16 @@ export function WorkspaceShell({
   >("square_image");
   const [hasQueryInput, setHasQueryInput] = useState(false);
   const [showOutput, setShowOutput] = useState(Boolean(initialState.outputs[0]?.image_url));
-  const [latestMediaUrl, setLatestMediaUrl] = useState<string | null>(
-    initialState.outputs[0]?.image_url ?? null
+  const [media, setMedia] = useState<{ type: "image" | "video"; url: string } | null>(
+    initialState.outputs[0]?.image_url
+      ? {
+          type: /\.(mp4|webm|m4v)(\?|#|$)/i.test(initialState.outputs[0].image_url)
+            ? "video"
+            : "image",
+          url: initialState.outputs[0].image_url,
+        }
+      : null
   );
-  const [latestMediaFormat, setLatestMediaFormat] = useState<
-    "square_image" | "square_video" | "square_text"
-  >("square_image");
 
   const planLabel = useMemo(() => {
     if (state.workspace.current_plan === "starter_pack") return "Starter Pack";
@@ -90,7 +94,12 @@ export function WorkspaceShell({
         setWorkspaceError("Generation succeeded but returned no media URL.");
         return;
       }
-      setLatestMediaUrl(mediaUrl);
+      const isVideo = mediaUrl.includes(".mp4") || /\.(mp4|webm|m4v)(\?|#|$)/i.test(mediaUrl);
+      setMedia(null);
+      setMedia({
+        type: isVideo ? "video" : "image",
+        url: mediaUrl,
+      });
       setLastInput(input);
       setLastFormat(outputFormat);
     } catch {
@@ -170,10 +179,15 @@ export function WorkspaceShell({
           return;
         }
         if (!cancelled) {
-          setLatestMediaUrl(mediaUrl);
+          const isVideo =
+            mediaUrl.includes(".mp4") || /\.(mp4|webm|m4v)(\?|#|$)/i.test(mediaUrl);
+          setMedia(null);
+          setMedia({
+            type: isVideo ? "video" : "image",
+            url: mediaUrl,
+          });
           setLastInput(input);
           setLastFormat(outputFormat);
-          setLatestMediaFormat(outputFormat);
           setHasGeneratedYet(true);
           router.replace(`/workspace/${workspaceId}`);
         }
@@ -190,14 +204,14 @@ export function WorkspaceShell({
   }, [hasGeneratedYet, router, workspaceId]);
 
   useEffect(() => {
-    if (!latestMediaUrl) {
+    if (!media?.url) {
       setShowOutput(false);
       return;
     }
     setShowOutput(false);
     const id = window.requestAnimationFrame(() => setShowOutput(true));
     return () => window.cancelAnimationFrame(id);
-  }, [latestMediaUrl]);
+  }, [media?.url]);
 
   return (
     <div className="space-y-4">
@@ -241,7 +255,7 @@ export function WorkspaceShell({
                   isGenerating ? "opacity-85" : "opacity-100"
                 }`}
               >
-                {!latestMediaUrl ? (
+                {!media?.url ? (
                   isGenerating ? (
                     <div className="text-center py-12">
                       <div className="flex justify-center">
@@ -257,21 +271,23 @@ export function WorkspaceShell({
                       Enter an idea to generate your first meme
                     </p>
                   )
-                ) : latestMediaFormat === "square_video" ||
-                  /\.(mp4|webm|m4v)(\?|#|$)/i.test(latestMediaUrl) ? (
+                ) : media.type === "video" ? (
                   <div
                     className={`w-full space-y-3 transition-opacity duration-150 ${
                       showOutput ? "opacity-100" : "opacity-0"
                     }`}
                   >
                     <video
-                      src={latestMediaUrl}
+                      key={media.url}
+                      src={media.url}
                       controls
+                      autoPlay
+                      loop
                       className="mx-auto max-h-[70vh] w-full rounded-2xl bg-black shadow-[0_4px_16px_rgba(15,23,42,0.14)]"
                     />
                   <button
                     type="button"
-                    onClick={() => void handleDownloadOutput(latestMediaUrl)}
+                    onClick={() => void handleDownloadOutput(media.url)}
                       className="inline-flex rounded-md border border-stone-300 bg-white px-4 py-2 text-xs font-semibold text-stone-700 hover:bg-stone-100"
                     >
                     Download
@@ -285,13 +301,14 @@ export function WorkspaceShell({
                   >
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
-                      src={latestMediaUrl}
+                      key={media.url}
+                      src={media.url}
                       alt="Latest generated output"
                       className="mx-auto max-h-[70vh] w-full rounded-2xl object-contain shadow-[0_4px_16px_rgba(15,23,42,0.14)]"
                     />
                   <button
                     type="button"
-                    onClick={() => void handleDownloadOutput(latestMediaUrl)}
+                    onClick={() => void handleDownloadOutput(media.url)}
                       className="inline-flex rounded-md border border-stone-300 bg-white px-4 py-2 text-xs font-semibold text-stone-700 hover:bg-stone-100"
                     >
                     Download
