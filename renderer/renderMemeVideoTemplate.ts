@@ -84,14 +84,12 @@ export async function renderMemeMP4FromTemplate(params: {
   topText: string;
 }): Promise<Buffer> {
   warnCanvasUnavailableOnce();
-  console.log("FFMPEG PATH", ffmpegPath);
-  if (ffmpegPath) {
-    try {
-      fs.chmodSync(ffmpegPath, 0o755);
-    } catch (err) {
-      console.warn("Failed to chmod ffmpeg", err);
-    }
+  const runtimeFfmpegPath = "/tmp/ffmpeg";
+  if (ffmpegPath && !fs.existsSync(runtimeFfmpegPath)) {
+    fs.copyFileSync(ffmpegPath as string, runtimeFfmpegPath);
+    fs.chmodSync(runtimeFfmpegPath, 0o755);
   }
+  console.log("FFMPEG RUNTIME PATH", runtimeFfmpegPath);
 
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "meme-video-"));
   const inputPath = path.join(tempDir, "input.mp4");
@@ -117,7 +115,7 @@ export async function renderMemeMP4FromTemplate(params: {
     // Debug probe: save one composed frame before final ffmpeg video processing.
     try {
       execFileSync(
-        ffmpegPath as string,
+        runtimeFfmpegPath,
         [
           "-y",
           "-i",
@@ -139,7 +137,7 @@ export async function renderMemeMP4FromTemplate(params: {
     }
 
     execFileSync(
-      ffmpegPath as string,
+      runtimeFfmpegPath,
       [
         "-y",
         "-i",
