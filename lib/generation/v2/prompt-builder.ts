@@ -5,6 +5,7 @@ export function buildSimplePrompt(input: string, template: TemplateRow): string 
   const templateName = String(template.template_name ?? template.slug ?? "template").trim();
   const memeMechanic = String(template.meme_mechanic ?? "general meme").trim();
   const isStructured = template.text_layout_type !== "top_caption";
+  const patternType = String(template.pattern_type ?? "").trim();
   const templateLogic = String(template.template_logic ?? "").trim();
   const hasSecondSlot =
     template.slot_2_max_chars != null || template.slot_2_max_lines != null;
@@ -19,23 +20,53 @@ export function buildSimplePrompt(input: string, template: TemplateRow): string 
   };
 
   if (isStructured) {
-    return [
-      "Write meme copy as valid JSON only.",
+    const base = [
+      "Write meme content as valid JSON only.",
       `Template: ${templateName}`,
-      `Mechanic: ${memeMechanic}`,
       `User input: ${userInput}`,
-      "This template has a specific structure. You must follow it.",
-      "Each text field represents a different part of the meme.",
-      "Do NOT write a single sentence split across lines.",
-      "Each slot must be a distinct idea or role in the meme.",
-      "The combination of all slots should create the humour.",
-      "Example pattern:",
-      "- Slot 1: setup",
-      "- Slot 2: contrast or distraction",
-      "- Slot 3: punchline or escalation",
-      "Make the meme feel like a real, specific situation.",
+      "Each slot is a short label (1–4 words).",
+      "Do NOT write sentences.",
+    ];
+
+    let structureRules: string[] = [];
+
+    if (patternType === "contrast" || patternType === "comparison") {
+      structureRules = [
+        "The slots must directly contrast each other.",
+        "They should feel like A vs B.",
+        "Make the difference clear and relatable.",
+      ];
+    }
+
+    if (patternType === "character_dialogue") {
+      structureRules = [
+        "Each slot represents a different perspective.",
+        "They should feel like opposing opinions or takes.",
+      ];
+    }
+
+    if (template.meme_mechanic === "temptation_shift") {
+      structureRules = [
+        "One slot is the tempting distraction.",
+        "One slot is the person or decision maker.",
+        "One slot is what is being ignored.",
+      ];
+    }
+
+    return [
+      ...base,
+      "Follow these roles exactly:",
+      template.slot_1_role ? `Slot 1: ${String(template.slot_1_role)}` : null,
+      template.slot_2_role ? `Slot 2: ${String(template.slot_2_role)}` : null,
+      template.slot_3_role ? `Slot 3: ${String(template.slot_3_role)}` : null,
+      ...structureRules,
+      template.example_output
+        ? `Example: ${String(template.example_output)}`
+        : null,
       `JSON schema: ${JSON.stringify(slotSchema)}`,
-    ].join("\n");
+    ]
+      .filter(Boolean)
+      .join("\n");
   }
 
   return [
