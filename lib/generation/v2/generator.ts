@@ -28,6 +28,54 @@ function parseJsonObject(raw: string): Record<string, unknown> {
   return JSON.parse(candidate) as Record<string, unknown>;
 }
 
+function isIncompleteEnding(text: string): boolean {
+  const lower = text.toLowerCase().trim();
+
+  const badEndings = [
+    "before you",
+    "while the",
+    "like youre",
+    "like you are",
+    "as you",
+    "just as",
+    "right as",
+    "about to",
+    "in the middle of",
+    "when you",
+  ];
+
+  return badEndings.some((e) => lower.endsWith(e));
+}
+
+function isCompleteSentence(text: string): boolean {
+  const lower = text.toLowerCase().trim();
+
+  const badEndings = [
+    "for a",
+    "with a",
+    "to a",
+    "of a",
+    "in a",
+    "on a",
+    "while the",
+    "before you",
+    "like youre",
+    "like you are",
+    "about to",
+    "as you",
+  ];
+
+  if (badEndings.some((e) => lower.endsWith(e))) {
+    return false;
+  }
+
+  if (text.split(" ").filter(Boolean).length < 6) {
+    return false;
+  }
+
+  return true;
+}
+
 function coerceGeneratedSlots(
   raw: Record<string, unknown>,
   template: TemplateShape
@@ -40,7 +88,11 @@ function coerceGeneratedSlots(
   const clean = top.replace(/[.,…]+$/g, "").trim();
   let bottomText = cleanSlotText(rawBottom);
   let slot3 = cleanSlotText(rawSlot3);
-  const isStructured = template.text_layout_type !== "top_caption";
+  const mechanicGroup = normalizeText(template.mechanic_group);
+  const isStructured =
+    mechanicGroup === "spatial_roles" ||
+    mechanicGroup === "contrast_binary" ||
+    mechanicGroup === "contrast_multi";
   const memeMechanic = normalizeText(template.meme_mechanic).toLowerCase();
   const slug = normalizeText(template.slug).toLowerCase();
   const templateName = normalizeText(template.template_name).toLowerCase();
@@ -108,6 +160,16 @@ function coerceGeneratedSlots(
     // top_caption -> sentence required
     if (clean.length < 20) {
       isWeak = true;
+    }
+
+    if (isIncompleteEnding(clean)) {
+      return {
+        title: title || clean.slice(0, 45),
+        top_text: clean,
+        bottom_text: bottomText || null,
+        slot_3_text: slot3 || null,
+        __weak: true,
+      };
     }
   } else {
     // structured templates -> short labels allowed
@@ -191,6 +253,10 @@ export async function generateTextFromTemplate(
     "Fix structure exactly. No labels, no quotes, no line breaks.",
     "Return concise slot values only and satisfy all slot limits.",
   ];
+  const pickBest = (items: GeneratedSlots[]): GeneratedSlots =>
+    items.reduce((best, current) =>
+      current.top_text.length > best.top_text.length ? current : best
+    );
 
   const results: GeneratedSlots[] = [];
   let lastError: unknown = null;
@@ -205,11 +271,19 @@ export async function generateTextFromTemplate(
   }
 
   if (results.length > 0) {
-    const strong = results.filter((result) => result.__weak !== true);
-    const pool = strong.length > 0 ? strong : results;
-    return pool.reduce((best, current) =>
-      current.top_text.length > best.top_text.length ? current : best
+    const strong = results.filter(
+      (result) => result.__weak !== true && isCompleteSentence(result.top_text)
     );
+    if (strong.length > 0) {
+      return pickBest(strong);
+    }
+
+    const usable = results.filter((result) => isCompleteSentence(result.top_text));
+    if (usable.length > 0) {
+      return pickBest(usable);
+    }
+
+    return pickBest(results);
   }
 
   if (isWizardsTalkingSubject) {

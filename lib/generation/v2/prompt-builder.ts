@@ -14,6 +14,7 @@ export function buildSimplePrompt(input: string, template: TemplateRow): string 
   const isNobodyMe = memeMechanic === "nobody_me_setup";
   const isWizardsTalkingSubject =
     templateSlug.includes("wizard") || templateNameLower.includes("wizard");
+  const isEightyFourYears = templateSlug === "it-has-been-84-years";
   const patternType = String(template.pattern_type ?? "").trim();
   const templateLogic = String(template.template_logic ?? "").trim();
   const emotionStyle = String(template.emotion_style ?? "").trim();
@@ -145,6 +146,18 @@ export function buildSimplePrompt(input: string, template: TemplateRow): string 
     "Do not stop at the obvious version of the idea.",
     "Make it feel like a real moment someone would recognise instantly.",
     "The sentence should hint at what goes wrong, feels awkward, or creates pressure.",
+    isEightyFourYears
+      ? "The image already contains the phrase 'It's been 84 years'. Do NOT repeat this phrase or reference specific numbers of years. Instead, describe a long delay or something that feels overdue in a natural, modern way."
+      : null,
+    isEightyFourYears
+      ? "Avoid using specific time durations like '84 years', '100 years', or exaggerated numeric time references."
+      : null,
+    isEightyFourYears ? "Good: When you finally open the email you’ve been ignoring for weeks" : null,
+    isEightyFourYears
+      ? "Good: When you come back to a project after leaving it too long"
+      : null,
+    isEightyFourYears ? "Bad: It has been 84 years since..." : null,
+    isEightyFourYears ? "Bad: 100 years later..." : null,
     templateLogic ? `Guidance: ${templateLogic}` : null,
     emotionStyle ? `Tone: ${emotionStyle}` : null,
     "The sentence should feel conversational and realistic.",
