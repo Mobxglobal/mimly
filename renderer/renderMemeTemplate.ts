@@ -140,7 +140,8 @@ function renderLines(
     : slot.y + (slot.height - totalTextHeight) / 2 + fontSize;
   if (style.isVideo && style.isTopCaption) {
     const topRegionHeight = style.topRegionHeight ?? 200;
-    startY = (topRegionHeight - totalTextHeight) / 2 + fontSize;
+    const TOP_BIAS = topRegionHeight * 0.08;
+    startY = (topRegionHeight - totalTextHeight) / 2 + fontSize + TOP_BIAS;
   }
 
   return lines
