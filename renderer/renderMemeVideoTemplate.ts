@@ -85,6 +85,13 @@ export async function renderMemeMP4FromTemplate(params: {
 }): Promise<Buffer> {
   warnCanvasUnavailableOnce();
   console.log("FFMPEG PATH", ffmpegPath);
+  if (ffmpegPath) {
+    try {
+      fs.chmodSync(ffmpegPath, 0o755);
+    } catch (err) {
+      console.warn("Failed to chmod ffmpeg", err);
+    }
+  }
 
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "meme-video-"));
   const inputPath = path.join(tempDir, "input.mp4");
