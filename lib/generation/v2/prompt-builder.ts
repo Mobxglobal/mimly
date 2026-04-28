@@ -7,6 +7,7 @@ export function buildSimplePrompt(input: string, template: TemplateRow): string 
   const isStructured = template.text_layout_type !== "top_caption";
   const patternType = String(template.pattern_type ?? "").trim();
   const templateLogic = String(template.template_logic ?? "").trim();
+  const emotionStyle = String(template.emotion_style ?? "").trim();
   const hasSecondSlot =
     template.slot_2_max_chars != null || template.slot_2_max_lines != null;
   const hasThirdSlot =
@@ -72,42 +73,19 @@ export function buildSimplePrompt(input: string, template: TemplateRow): string 
   return [
     "Write meme copy as valid JSON only.",
     `Template: ${templateName}`,
-    `Mechanic: ${memeMechanic}`,
-    `Template instructions:\n${templateLogic}`,
     `User input: ${userInput}`,
-    "top_text must be a full, natural sentence that makes sense on its own.",
-    "It must not feel cut off or incomplete.",
-    "Prefer formats like:",
-    "- 'When X happens, and Y...'",
-    "- 'That moment when...'",
-    "- 'POV: ...'",
-    "- 'You: ... / Also you: ...'",
-    "First, think of a specific real-world situation related to this input.",
-    "The situation must be:",
-    "- specific",
-    "- realistic",
-    "- immediately recognisable",
-    "Then write the meme based on that situation.",
-    "The meme must:",
-    "- feel like a real moment",
-    "- not be generic",
-    "- not sound like a caption or description",
-    "- feel like something someone would share",
-    "If the output could apply to any situation, it is invalid.",
-    "Be specific.",
-    "The meme must be a complete thought with a clear setup and payoff.",
-    "It should feel like a real, relatable situation with a twist, reaction, or punchline.",
-    "Avoid unfinished sentences or vague statements.",
-    "Avoid generic phrases like 'make it bold' or 'something funny'.",
-    "The meme must describe a specific, real-world situation.",
-    "It should include concrete details (e.g. work tasks, tools, behaviors, scenarios).",
-    "Avoid vague situations like 'when things go wrong' or 'when something happens'.",
-    "If the meme could apply to any job or any situation, it is too generic.",
-    "Make it feel like an insider moment.",
-    "The second half of the sentence should create contrast, escalation, or irony.",
-    "Example:",
-    "'When the client says it’s a quick change but you’re rebuilding the entire dashboard'",
-    "No hashtags. No markdown. No extra keys.",
+    "Write one complete, natural sentence.",
+    "It must describe a specific, relatable situation.",
+    "Include a concrete detail (e.g. timing, action, or situation).",
+    templateLogic ? `Guidance: ${templateLogic}` : null,
+    emotionStyle ? `Tone: ${emotionStyle}` : null,
+    "The sentence should feel conversational and realistic.",
+    "Avoid generic phrasing or vague statements.",
+    "Do NOT end with a comma.",
+    "Do NOT use ellipses.",
+    "Do NOT leave the sentence unfinished.",
     `JSON schema: ${JSON.stringify(slotSchema)}`,
-  ].join("\n");
+  ]
+    .filter(Boolean)
+    .join("\n");
 }

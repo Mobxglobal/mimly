@@ -24,28 +24,29 @@ function coerceGeneratedSlots(
 ): GeneratedSlots {
   const title = normalizeText(raw.title);
   const top = normalizeText(raw.top_text);
+  const clean = top.replace(/[.,…]+$/g, "").trim();
   const bottom = normalizeText(raw.bottom_text);
   const slot3 = normalizeText(raw.slot_3_text);
   const isStructured = template.text_layout_type !== "top_caption";
 
-  if (!top) {
+  if (!clean) {
     throw new Error("Model returned empty top_text.");
   }
   if (!isStructured) {
     // top_caption -> sentence required
-    if (top.length < 20) {
+    if (clean.length < 20) {
       throw new Error("Top caption too short.");
     }
   } else {
     // structured templates -> short labels allowed
-    if (top.length < 2) {
+    if (clean.length < 2) {
       throw new Error("Slot text too short.");
     }
   }
 
   return {
-    title: title || top.slice(0, 45),
-    top_text: top,
+    title: title || clean.slice(0, 45),
+    top_text: clean,
     bottom_text: bottom || null,
     slot_3_text: slot3 || null,
   };
