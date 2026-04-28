@@ -4,7 +4,7 @@
 import sharp from "sharp";
 import { wrapCaptionWithSoftEarlySplit } from "@/renderer/caption-wrap";
 import { normalizeNobodyMeSetupSlots } from "@/lib/memes/normalize-nobody-me-setup-slots";
-import { interTextToPathElement } from "@/lib/rendering/text-to-path";
+import { interTextToPathElement, interTextWidthPx } from "@/lib/rendering/text-to-path";
 import {
   SVG_UTF8_XML_DECL,
   logSvgDebugSample,
@@ -105,12 +105,22 @@ function renderLines(
     strokeColor: string;
     strokeWidth: number;
     isTopCaption?: boolean;
+    isOverlayOrSideCaption?: boolean;
   }
 ) {
   if (!lines.length) return "";
 
   const TOP_CAPTION_FIXED_Y = 65;
-  const fontSize = style.fontSize;
+  let fontSize = style.fontSize;
+  if (style.isOverlayOrSideCaption && !style.isTopCaption) {
+    const maxLineWidth = Math.max(...lines.map((line) => interTextWidthPx(line, fontSize)));
+    const slotWidth = slot.width;
+    if (maxLineWidth > slotWidth) {
+      const scale = slotWidth / maxLineWidth;
+      const newFontSize = Math.max(Math.floor(fontSize * scale), 32);
+      fontSize = newFontSize;
+    }
+  }
   const lineHeight = Math.round(fontSize * 1.15);
   const inset = style.horizontalInset;
   const x = getXPosition({ x: slot.x, width: slot.width }, style.alignment, inset);
@@ -214,8 +224,10 @@ function wrapImageSlotText(params: {
 }
 
 function buildSVG(template: MemeTemplateForRender, slotTexts: SlotTexts) {
-  const isTopCaption =
-    String(template.text_layout_type ?? "").trim().toLowerCase() === "top_caption";
+  const textLayoutType = String(template.text_layout_type ?? "").trim().toLowerCase();
+  const isTopCaption = textLayoutType === "top_caption";
+  const isOverlayOrSideCaption =
+    textLayoutType === "overlay" || textLayoutType === "side_caption";
   const fontSize = isTopCaption ? 54 : template.font_size ?? 46;
   console.log("IMAGE FONT SIZE", {
     slug: template.slug,
@@ -323,6 +335,7 @@ function buildSVG(template: MemeTemplateForRender, slotTexts: SlotTexts) {
         ...style,
         alignment: style.alignment,
         isTopCaption,
+        isOverlayOrSideCaption,
       });
     })
     .join("");
