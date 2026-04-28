@@ -11,6 +11,8 @@ import { warnCanvasUnavailableOnce } from "@/lib/rendering/fonts";
 
 type MemeVideoTemplateForRender = {
   slug?: string | null;
+  meme_mechanic?: string | null;
+  mechanic_group?: string | null;
   height_bucket?: string | null;
   template_family?: string | null;
   text_layout_type?: string | null;
@@ -35,6 +37,8 @@ function toMemeTemplateForRender(
 ): MemeTemplateForRender {
   return {
     slug: t.slug ?? null,
+    meme_mechanic: t.meme_mechanic ?? null,
+    mechanic_group: t.mechanic_group ?? null,
     canvas_width: t.canvas_width ?? 1080,
     canvas_height: t.canvas_height ?? 1080,
     height_bucket: t.height_bucket ?? null,
@@ -85,8 +89,14 @@ export async function renderMemeMP4FromTemplate(params: {
 
   try {
     fs.writeFileSync(inputPath, params.baseVideoBuffer);
+    const renderTemplate = toMemeTemplateForRender(params.template);
+    console.log("VIDEO TEMPLATE DEBUG", {
+      slug: renderTemplate.slug,
+      mechanic_group: renderTemplate.mechanic_group,
+      text_layout_type: renderTemplate.text_layout_type,
+    });
     const overlayBuf = await renderTopCaptionOverlayPng({
-      template: toMemeTemplateForRender(params.template),
+      template: renderTemplate,
       topText: params.topText,
     });
     fs.writeFileSync(overlayPath, overlayBuf);
