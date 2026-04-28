@@ -100,6 +100,32 @@ export function WorkspaceShell({
     }
   }
 
+  async function handleDownloadOutput(url: string) {
+    try {
+      const response = await fetch(url);
+      if (!response.ok) throw new Error("Download failed");
+      const blob = await response.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      const extension =
+        blob.type === "video/mp4"
+          ? "mp4"
+          : blob.type === "image/png"
+            ? "png"
+            : blob.type === "image/jpeg"
+              ? "jpg"
+              : "bin";
+      a.href = objectUrl;
+      a.download = `mimly-output.${extension}`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(objectUrl);
+    } catch {
+      setWorkspaceError("Could not download output.");
+    }
+  }
+
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (hasGeneratedYet) return;
@@ -209,70 +235,70 @@ export function WorkspaceShell({
       <section className="min-h-[calc(100vh-9.5rem)] rounded-3xl border border-stone-200/90 bg-white/95 p-4 shadow-[0_8px_30px_rgba(10,10,10,0.05)] sm:p-5 lg:p-6">
         <div className="mx-auto w-full max-w-[720px] px-4">
           <div className="mb-6">
-            <div
-              className={`flex min-h-[44vh] items-center justify-center rounded-2xl border border-stone-200 bg-stone-50 p-5 text-center text-sm text-stone-600 shadow-[0_6px_20px_rgba(15,23,42,0.06)] transition-opacity sm:min-h-[52vh] ${
-                isGenerating ? "opacity-70" : "opacity-100"
-              }`}
-            >
-              {!latestMediaUrl ? (
-                isGenerating && hasQueryInput ? (
-                  <div className="text-center py-12">
-                    <p className="text-lg font-medium text-stone-800">Generating your meme...</p>
-                    <div className="mt-3 flex justify-center">
-                      <span
-                        className="inline-block h-5 w-5 animate-spin rounded-full border-2 border-stone-300 border-t-stone-700"
-                        aria-hidden="true"
-                      />
+            <div className="relative">
+              <div
+                className={`flex min-h-[44vh] items-center justify-center rounded-2xl border border-stone-200 bg-stone-50 p-5 text-center text-sm text-stone-600 shadow-[0_6px_20px_rgba(15,23,42,0.06)] transition-opacity duration-150 sm:min-h-[52vh] ${
+                  isGenerating ? "opacity-85" : "opacity-100"
+                }`}
+              >
+                {!latestMediaUrl ? (
+                  isGenerating ? (
+                    <div className="text-center py-12">
+                      <div className="flex justify-center">
+                        <span
+                          className="inline-block h-5 w-5 animate-spin rounded-full border-2 border-stone-300 border-t-stone-700"
+                          aria-hidden="true"
+                        />
+                      </div>
+                      <p className="mt-3 text-stone-500">Generating your meme...</p>
                     </div>
+                  ) : (
+                    <p className="text-center text-stone-500">
+                      Enter an idea to generate your first meme
+                    </p>
+                  )
+                ) : latestMediaFormat === "square_video" ||
+                  /\.(mp4|webm|m4v)(\?|#|$)/i.test(latestMediaUrl) ? (
+                  <div
+                    className={`w-full space-y-3 transition-opacity duration-150 ${
+                      showOutput ? "opacity-100" : "opacity-0"
+                    }`}
+                  >
+                    <video
+                      src={latestMediaUrl}
+                      controls
+                      className="mx-auto max-h-[70vh] w-full rounded-2xl bg-black shadow-[0_4px_16px_rgba(15,23,42,0.14)]"
+                    />
+                  <button
+                    type="button"
+                    onClick={() => void handleDownloadOutput(latestMediaUrl)}
+                      className="inline-flex rounded-md border border-stone-300 bg-white px-4 py-2 text-xs font-semibold text-stone-700 hover:bg-stone-100"
+                    >
+                    Download
+                  </button>
                   </div>
                 ) : (
-                  <p className="text-center text-stone-500">
-                    Enter an idea to generate your first meme
-                  </p>
-                )
-              ) : latestMediaFormat === "square_video" ||
-                /\.(mp4|webm|m4v)(\?|#|$)/i.test(latestMediaUrl) ? (
-                <div
-                  className={`w-full space-y-3 transition-opacity duration-200 ${
-                    showOutput ? "opacity-100" : "opacity-0"
-                  }`}
-                >
-                  <video
-                    src={latestMediaUrl}
-                    controls
-                    className="mx-auto max-h-[70vh] w-full rounded-2xl bg-black shadow-[0_4px_16px_rgba(15,23,42,0.14)]"
-                  />
-                  <a
-                    href={latestMediaUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex rounded-md border border-stone-300 bg-white px-4 py-2 text-xs font-semibold text-stone-700 hover:bg-stone-100"
+                  <div
+                    className={`w-full space-y-3 transition-opacity duration-150 ${
+                      showOutput ? "opacity-100" : "opacity-0"
+                    }`}
                   >
-                    Open in new tab
-                  </a>
-                </div>
-              ) : (
-                <div
-                  className={`w-full space-y-3 transition-opacity duration-200 ${
-                    showOutput ? "opacity-100" : "opacity-0"
-                  }`}
-                >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={latestMediaUrl}
-                    alt="Latest generated output"
-                    className="mx-auto max-h-[70vh] w-full rounded-2xl object-contain shadow-[0_4px_16px_rgba(15,23,42,0.14)]"
-                  />
-                  <a
-                    href={latestMediaUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex rounded-md border border-stone-300 bg-white px-4 py-2 text-xs font-semibold text-stone-700 hover:bg-stone-100"
-                  >
-                    Open in new tab
-                  </a>
-                </div>
-              )}
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={latestMediaUrl}
+                      alt="Latest generated output"
+                      className="mx-auto max-h-[70vh] w-full rounded-2xl object-contain shadow-[0_4px_16px_rgba(15,23,42,0.14)]"
+                    />
+                  <button
+                    type="button"
+                    onClick={() => void handleDownloadOutput(latestMediaUrl)}
+                      className="inline-flex rounded-md border border-stone-300 bg-white px-4 py-2 text-xs font-semibold text-stone-700 hover:bg-stone-100"
+                    >
+                    Download
+                  </button>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
@@ -291,15 +317,7 @@ export function WorkspaceShell({
               disabled={isGenerating || isAuthLocked || isPlanLocked}
               className="inline-flex h-10 items-center justify-center rounded-md border border-stone-300 bg-stone-100 px-4 text-xs font-semibold text-stone-700 shadow-sm transition hover:bg-stone-200 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              🎥 Video
-            </button>
-            <button
-              type="button"
-              onClick={() => void generateWithFormat("square_text", "fresh")}
-              disabled={isGenerating || isAuthLocked || isPlanLocked}
-              className="inline-flex h-10 items-center justify-center rounded-md border border-stone-300 bg-stone-100 px-4 text-xs font-semibold text-stone-700 shadow-sm transition hover:bg-stone-200 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              📝 Text
+              {isGenerating ? "Generating..." : "🎥 Video"}
             </button>
             <button
               type="button"
@@ -307,7 +325,7 @@ export function WorkspaceShell({
               disabled={isGenerating || isAuthLocked || isPlanLocked}
               className="inline-flex h-10 items-center justify-center rounded-md border border-stone-300 bg-stone-100 px-4 text-xs font-semibold text-stone-700 shadow-sm transition hover:bg-stone-200 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              📸 Image
+              {isGenerating ? "Generating..." : "📸 Image"}
             </button>
           </div>
 

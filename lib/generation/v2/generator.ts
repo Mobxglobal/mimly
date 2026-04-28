@@ -25,6 +25,9 @@ function coerceGeneratedSlots(raw: Record<string, unknown>): GeneratedSlots {
   if (!top) {
     throw new Error("Model returned empty top_text.");
   }
+  if (top.length < 25) {
+    throw new Error("Model returned top_text that is too short.");
+  }
 
   return {
     title: title || top.slice(0, 45),
@@ -89,7 +92,7 @@ export async function generateTextFromTemplate(
     console.warn("[v2] first generation attempt failed, retrying once", firstError);
     return requestSlots(
       prompt,
-      "Your previous output was too generic. Make it more specific and grounded in a real situation."
+      "Make the meme more specific and complete."
     );
   }
 }

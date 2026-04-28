@@ -135,16 +135,35 @@ function renderLines(
 
 function wrapTextTopCaptionStandard(text: string): string[] {
   const maxChars = 37;
-  const maxLines = 2;
-
+  const maxLines = 3;
+  const words = text.split(" ");
   const lines: string[] = [];
-  let i = 0;
+  let currentLine = "";
 
-  while (i < text.length && lines.length < maxLines) {
-    lines.push(text.slice(i, i + maxChars));
-    i += maxChars;
+  for (const word of words) {
+    const testLine = currentLine ? currentLine + " " + word : word;
+
+    if (testLine.length <= maxChars) {
+      currentLine = testLine;
+    } else {
+      if (currentLine) lines.push(currentLine);
+      currentLine = word;
+    }
   }
 
+  if (currentLine) {
+    lines.push(currentLine);
+  }
+
+  if (lines.length > maxLines) {
+    const merged = lines.slice(0, maxLines - 1).concat([
+      lines.slice(maxLines - 1).join(" "),
+    ]);
+    console.log("TOP_CAPTION_FINAL_LINES", merged);
+    return merged;
+  }
+
+  console.log("TOP_CAPTION_FINAL_LINES", lines);
   return lines;
 }
 

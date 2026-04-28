@@ -64,7 +64,7 @@ export function HeroSection() {
   const [urlValue, setUrlValue] = useState("");
   const [promptError, setPromptError] = useState<string | null>(null);
   const [isSubmittingPrompt, setIsSubmittingPrompt] = useState(false);
-  type HomepageFamilyChip = "Image" | "Video" | "Text";
+  type HomepageFamilyChip = "Image" | "Video";
   const [selectedFamilyChip, setSelectedFamilyChip] = useState<HomepageFamilyChip | null>(
     null
   );
@@ -97,7 +97,6 @@ export function HeroSection() {
   const chipHoverText: Record<HomepageFamilyChip, string> = {
     Image: "Generate a 1080x1080 image meme designed for social feed posts.",
     Video: "Generate a 1080x1080 video meme designed for social feed posts.",
-    Text: "Generate a 1080x1080 text-only meme designed for social feed posts.",
   };
 
   useEffect(() => {
@@ -299,11 +298,7 @@ export function HeroSection() {
                       ? {
                           outputFormat: "square_video" as const,
                         }
-                      : selectedFamilyChip === "Text"
-                        ? {
-                            outputFormat: "square_text" as const,
-                          }
-                        : null;
+                      : null;
 
                 try {
                   const sessionId = getOrCreateSessionId();
@@ -351,7 +346,7 @@ export function HeroSection() {
                       </div>
                     ) : null}
                     <div className="flex flex-wrap gap-2">
-                    {(["Image", "Video", "Text"] as HomepageFamilyChip[]).map(
+                    {(["Image", "Video"] as HomepageFamilyChip[]).map(
                       (label) => {
                       const isActive = selectedFamilyChip === label;
                       const hasAnySelection = selectedFamilyChip !== null;
