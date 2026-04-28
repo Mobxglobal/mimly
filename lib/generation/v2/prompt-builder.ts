@@ -3,9 +3,17 @@ type TemplateRow = Record<string, unknown>;
 export function buildSimplePrompt(input: string, template: TemplateRow): string {
   const userInput = String(input ?? "").replace(/\s+/g, " ").trim();
   const templateName = String(template.template_name ?? template.slug ?? "template").trim();
+  const templateSlug = String(template.slug ?? "").trim().toLowerCase();
+  const templateNameLower = templateName.toLowerCase();
   const memeMechanic = String(template.meme_mechanic ?? "general meme").trim();
-  const isStructured = template.text_layout_type !== "top_caption";
+  const mechanicGroup = template.mechanic_group;
+  const isStructured =
+    mechanicGroup === "spatial_roles" ||
+    mechanicGroup === "contrast_binary" ||
+    mechanicGroup === "contrast_multi";
   const isNobodyMe = memeMechanic === "nobody_me_setup";
+  const isWizardsTalkingSubject =
+    templateSlug.includes("wizard") || templateNameLower.includes("wizard");
   const patternType = String(template.pattern_type ?? "").trim();
   const templateLogic = String(template.template_logic ?? "").trim();
   const emotionStyle = String(template.emotion_style ?? "").trim();
@@ -21,6 +29,27 @@ export function buildSimplePrompt(input: string, template: TemplateRow): string 
     slot_3_text: hasThirdSlot ? "optional slot 3 text if needed" : null,
   };
 
+  if (isWizardsTalkingSubject) {
+    return [
+      "Write meme content as valid JSON only.",
+      `Template: ${templateName}`,
+      `User input: ${userInput}`,
+      "This is a structured contrast meme.",
+      "Return EXACTLY 3 slots mapped as:",
+      "top_text = slot_1",
+      "bottom_text = slot_2",
+      "slot_3_text = slot_3",
+      "Each slot must be a short phrase, NOT a sentence.",
+      "slot_2 must be 1-2 words max.",
+      "slot_1 and slot_3 must contrast.",
+      "Do NOT include labels like Left:, Right:, Center:, Slot 1:, Slot 2:, Slot 3:.",
+      "Do NOT include quotes.",
+      "Do NOT include line breaks.",
+      "Example: Organic growth | Ads | Retention",
+      `JSON schema: ${JSON.stringify(slotSchema)}`,
+    ].join("\n");
+  }
+
   if (isNobodyMe) {
     return [
       "Write meme content as valid JSON only.",
@@ -28,18 +57,21 @@ export function buildSimplePrompt(input: string, template: TemplateRow): string 
       `User input: ${userInput}`,
       "",
       "This is a Nobody / Me format meme.",
+      "slot_1 is fixed and must ALWAYS be exactly: Nobody:",
       "",
-      "Output EXACTLY two lines:",
-      "Nobody:",
-      "Me: [one specific behaviour]",
+      "Output using JSON fields:",
+      'top_text: "Nobody:"',
+      'bottom_text: "Me: [one specific behaviour]"',
       "",
       "Rules:",
-      "- Only ONE 'Me:' line",
-      "- Do NOT repeat 'Me:'",
-      "- Do NOT include multiple behaviours",
-      "- Keep the 'Me:' line to one clear idea",
+      "- Do NOT generate dynamic text for top_text",
+      "- Generate ONLY bottom_text content",
+      "- bottom_text must start with 'Me:'",
+      "- Keep bottom_text concise and immediate",
+      "- Make the behavior specific, slightly irrational, and relatable",
+      "- No line breaks, labels, or quotes",
       "",
-      "The humour comes from the 'Me' line being specific, unnecessary, or slightly obsessive.",
+      "Example: Me: checks the dashboard again 5 seconds later",
       "",
       `JSON schema: ${JSON.stringify(slotSchema)}`,
     ].join("\n");

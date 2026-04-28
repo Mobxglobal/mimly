@@ -3,12 +3,22 @@ type GeneratedSlots = {
   top_text: string;
   bottom_text: string | null;
   slot_3_text: string | null;
+  __weak?: boolean;
 };
 
 type TemplateShape = Record<string, unknown>;
 
 function normalizeText(value: unknown): string {
   return String(value ?? "").replace(/\s+/g, " ").trim();
+}
+
+function cleanSlotText(value: unknown): string {
+  return String(value ?? "")
+    .replace(/[\r\n]+/g, " ")
+    .replace(/["'`]/g, "")
+    .replace(/^(?:left|right|center|slot\s*[123])\s*:\s*/i, "")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function parseJsonObject(raw: string): Record<string, unknown> {
@@ -23,37 +33,81 @@ function coerceGeneratedSlots(
   template: TemplateShape
 ): GeneratedSlots {
   const title = normalizeText(raw.title);
-  const top = normalizeText(raw.top_text);
+  const rawTop = String(raw.top_text ?? "");
+  const rawBottom = String(raw.bottom_text ?? "");
+  const rawSlot3 = String(raw.slot_3_text ?? "");
+  const top = cleanSlotText(rawTop);
   const clean = top.replace(/[.,…]+$/g, "").trim();
-  let bottomText = normalizeText(raw.bottom_text);
-  const slot3 = normalizeText(raw.slot_3_text);
+  let bottomText = cleanSlotText(rawBottom);
+  let slot3 = cleanSlotText(rawSlot3);
   const isStructured = template.text_layout_type !== "top_caption";
   const memeMechanic = normalizeText(template.meme_mechanic).toLowerCase();
+  const slug = normalizeText(template.slug).toLowerCase();
+  const templateName = normalizeText(template.template_name).toLowerCase();
   const isNobodyMe = memeMechanic === "nobody_me_setup";
+  const isWizardsTalkingSubject =
+    slug.includes("wizard") || templateName.includes("wizard");
 
-  if (isNobodyMe && bottomText) {
+  if (isNobodyMe) {
     const parts = bottomText.split(/Me:/i).filter(Boolean);
     bottomText = parts.length > 0 ? `Me: ${parts[0].trim()}` : bottomText;
+    if (!bottomText.startsWith("Me:")) {
+      throw new Error("Nobody/Me slot_2 must start with Me:");
+    }
+    if (bottomText.length <= 15) {
+      throw new Error("Nobody/Me slot_2 too short.");
+    }
+    if (/[\r\n]/.test(rawBottom) || /[\r\n]/.test(bottomText)) {
+      throw new Error("Nobody/Me slot_2 contains line breaks.");
+    }
+    if (bottomText.length > 80) {
+      bottomText = bottomText.slice(0, 80).trim();
+    }
+    return {
+      title: title || "Nobody / Me",
+      top_text: "Nobody:",
+      bottom_text: bottomText,
+      slot_3_text: null,
+    };
   }
 
-  if (isNobodyMe && bottomText.length > 80) {
-    bottomText = bottomText.slice(0, 80).trim();
+  if (isWizardsTalkingSubject) {
+    const hasBadChars = (value: string) =>
+      /[\r\n]/.test(value) ||
+      /["'`]/.test(value) ||
+      /^(?:left|right|center|slot\s*[123])\s*:/i.test(value);
+    if (!clean || !bottomText || !slot3) {
+      throw new Error("Wizards requires all 3 slots.");
+    }
+    if (clean.length > 24 || slot3.length > 24 || bottomText.length > 12) {
+      throw new Error("Wizards slot length exceeds limits.");
+    }
+    if (hasBadChars(rawTop) || hasBadChars(rawBottom) || hasBadChars(rawSlot3)) {
+      throw new Error("Wizards slots contain labels, quotes, or newlines.");
+    }
+    return {
+      title: title || clean.slice(0, 45),
+      top_text: clean,
+      bottom_text: bottomText,
+      slot_3_text: slot3,
+    };
   }
 
   if (!clean) {
     throw new Error("Model returned empty top_text.");
   }
+  let isWeak = false;
   if (!isStructured) {
     if (
       !clean.includes("you") &&
       !clean.includes("your") &&
       !clean.toLowerCase().includes("when")
     ) {
-      throw new Error("Top caption lacks relatable framing.");
+      isWeak = true;
     }
     // top_caption -> sentence required
     if (clean.length < 20) {
-      throw new Error("Top caption too short.");
+      isWeak = true;
     }
   } else {
     // structured templates -> short labels allowed
@@ -67,6 +121,7 @@ function coerceGeneratedSlots(
     top_text: clean,
     bottom_text: bottomText || null,
     slot_3_text: slot3 || null,
+    __weak: isWeak ? true : undefined,
   };
 }
 
@@ -124,16 +179,58 @@ export async function generateTextFromTemplate(
   prompt: string,
   template: TemplateShape
 ): Promise<GeneratedSlots> {
-  try {
-    return await requestSlots(prompt, template);
-  } catch (firstError) {
-    console.warn("[v2] first generation attempt failed, retrying once", firstError);
-    return requestSlots(
-      prompt,
-      template,
-      "Make the meme more specific and complete."
+  const memeMechanic = normalizeText(template.meme_mechanic).toLowerCase();
+  const slug = normalizeText(template.slug).toLowerCase();
+  const templateName = normalizeText(template.template_name).toLowerCase();
+  const isNobodyMe = memeMechanic === "nobody_me_setup";
+  const isWizardsTalkingSubject =
+    slug.includes("wizard") || templateName.includes("wizard");
+
+  const retryHints = [
+    undefined,
+    "Fix structure exactly. No labels, no quotes, no line breaks.",
+    "Return concise slot values only and satisfy all slot limits.",
+  ];
+
+  const results: GeneratedSlots[] = [];
+  let lastError: unknown = null;
+  for (let i = 0; i < retryHints.length; i += 1) {
+    try {
+      const res = await requestSlots(prompt, template, retryHints[i]);
+      results.push(res);
+    } catch (error) {
+      lastError = error;
+      console.warn(`[v2] generation attempt ${i + 1} failed`, error);
+    }
+  }
+
+  if (results.length > 0) {
+    const strong = results.filter((result) => result.__weak !== true);
+    const pool = strong.length > 0 ? strong : results;
+    return pool.reduce((best, current) =>
+      current.top_text.length > best.top_text.length ? current : best
     );
   }
+
+  if (isWizardsTalkingSubject) {
+    return {
+      title: "Wizards Contrast",
+      top_text: "Organic growth",
+      bottom_text: "Ads",
+      slot_3_text: "Retention",
+    };
+  }
+
+  if (isNobodyMe) {
+    return {
+      title: "Nobody / Me",
+      top_text: "Nobody:",
+      bottom_text: "Me: checks it again anyway",
+      slot_3_text: null,
+    };
+  }
+
+  throw lastError instanceof Error ? lastError : new Error("V2 generation failed.");
 }
 
 export type { GeneratedSlots };
