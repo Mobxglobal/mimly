@@ -34,7 +34,7 @@ function coerceGeneratedSlots(raw: Record<string, unknown>): GeneratedSlots {
   };
 }
 
-async function requestSlots(prompt: string): Promise<GeneratedSlots> {
+async function requestSlots(prompt: string, retryHint?: string): Promise<GeneratedSlots> {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
     throw new Error("Missing OPENAI_API_KEY.");
@@ -49,13 +49,16 @@ async function requestSlots(prompt: string): Promise<GeneratedSlots> {
     },
     body: JSON.stringify({
       model,
-      temperature: 0.8,
+      temperature: 0.6,
       messages: [
         {
           role: "system",
           content: "Return only JSON with keys: title, top_text, bottom_text, slot_3_text.",
         },
-        { role: "user", content: prompt },
+        {
+          role: "user",
+          content: retryHint ? `${prompt}\n\n${retryHint}` : prompt,
+        },
       ],
       response_format: { type: "json_object" },
     }),
@@ -84,7 +87,10 @@ export async function generateTextFromTemplate(
     return await requestSlots(prompt);
   } catch (firstError) {
     console.warn("[v2] first generation attempt failed, retrying once", firstError);
-    return requestSlots(prompt);
+    return requestSlots(
+      prompt,
+      "Your previous output was too generic. Make it more specific and grounded in a real situation."
+    );
   }
 }
 
