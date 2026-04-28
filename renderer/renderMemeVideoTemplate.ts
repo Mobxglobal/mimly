@@ -9,6 +9,33 @@ import {
 } from "@/renderer/renderMemeTemplate";
 import { warnCanvasUnavailableOnce } from "@/lib/rendering/fonts";
 
+// Force Vercel to bundle ffmpeg binary
+const __ffmpeg_bundle_hint = path.join(process.cwd(), "public/bin/ffmpeg");
+
+function resolveFfmpegPath(): string {
+  // Local dev (Mac)
+  if (process.platform === "darwin") {
+    return "ffmpeg";
+  }
+
+  // Vercel / Linux
+  const sourcePath = __ffmpeg_bundle_hint;
+  const targetPath = "/tmp/ffmpeg";
+
+  console.log("🚨 CHECKING FFMPEG SOURCE", sourcePath, fs.existsSync(sourcePath));
+
+  if (!fs.existsSync(sourcePath)) {
+    throw new Error(`FFMPEG NOT FOUND at ${sourcePath}`);
+  }
+
+  if (!fs.existsSync(targetPath)) {
+    fs.copyFileSync(sourcePath, targetPath);
+    fs.chmodSync(targetPath, 0o755);
+  }
+
+  return targetPath;
+}
+
 type MemeVideoTemplateForRender = {
   slug?: string | null;
   meme_mechanic?: string | null;
@@ -87,16 +114,8 @@ export async function renderMemeMP4FromTemplate(params: {
   topText: string;
 }): Promise<Buffer> {
   warnCanvasUnavailableOnce();
-  const runtimeFfmpegPath = "/tmp/ffmpeg";
-  if (!fs.existsSync(runtimeFfmpegPath)) {
-    const bundledPath = path.join(process.cwd(), "public/bin/ffmpeg");
-    if (!fs.existsSync(bundledPath)) {
-      throw new Error("Bundled ffmpeg not found at public/bin/ffmpeg");
-    }
-    fs.copyFileSync(bundledPath, runtimeFfmpegPath);
-    fs.chmodSync(runtimeFfmpegPath, 0o755);
-  }
-  console.log("FFMPEG USING", runtimeFfmpegPath);
+  const ffmpegPath = resolveFfmpegPath();
+  console.log("🚨 USING FFMPEG PATH", ffmpegPath);
 
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "meme-video-"));
   const inputPath = path.join(tempDir, "input.mp4");
@@ -122,7 +141,7 @@ export async function renderMemeMP4FromTemplate(params: {
     // Debug probe: save one composed frame before final ffmpeg video processing.
     try {
       execFileSync(
-        runtimeFfmpegPath,
+        ffmpegPath,
         [
           "-y",
           "-i",
@@ -144,7 +163,7 @@ export async function renderMemeMP4FromTemplate(params: {
     }
 
     execFileSync(
-      runtimeFfmpegPath,
+      ffmpegPath,
       [
         "-y",
         "-i",
