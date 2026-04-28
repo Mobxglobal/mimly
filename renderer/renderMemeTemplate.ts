@@ -109,6 +109,7 @@ function renderLines(
 ) {
   if (!lines.length) return "";
 
+  const TOP_CAPTION_FIXED_Y = 65;
   const fontSize = style.fontSize;
   const lineHeight = Math.round(fontSize * 1.15);
   const inset = style.horizontalInset;
@@ -116,7 +117,7 @@ function renderLines(
   const textAnchor = getTextAnchor(style.alignment);
   const totalTextHeight = lines.length * lineHeight;
   const startY = style.isTopCaption
-    ? slot.y + fontSize
+    ? TOP_CAPTION_FIXED_Y + fontSize
     : slot.y + (slot.height - totalTextHeight) / 2 + fontSize;
 
   return lines
@@ -144,6 +145,22 @@ function wrapTextTopCaptionStandard(text: string): string[] {
   let currentLine = "";
 
   for (const word of words) {
+    if (word.length > maxChars) {
+      if (currentLine) {
+        lines.push(currentLine);
+        currentLine = "";
+      }
+      const chunks = word.match(new RegExp(`.{1,${maxChars}}`, "g")) ?? [];
+      for (const chunk of chunks) {
+        if (lines.length >= maxLines) {
+          console.log("TOP_CAPTION_FINAL_LINES", lines.slice(0, maxLines));
+          return lines.slice(0, maxLines).map((line) => line.trim());
+        }
+        lines.push(chunk);
+      }
+      continue;
+    }
+
     const testLine = currentLine ? currentLine + " " + word : word;
 
     if (testLine.length <= maxChars) {
@@ -159,15 +176,14 @@ function wrapTextTopCaptionStandard(text: string): string[] {
   }
 
   if (lines.length > maxLines) {
-    const merged = lines.slice(0, maxLines - 1).concat([
-      lines.slice(maxLines - 1).join(" "),
-    ]);
-    console.log("TOP_CAPTION_FINAL_LINES", merged);
-    return merged;
+    const capped = lines.slice(0, maxLines).map((line) => line.trim());
+    console.log("TOP_CAPTION_FINAL_LINES", capped);
+    return capped;
   }
 
-  console.log("TOP_CAPTION_FINAL_LINES", lines);
-  return lines;
+  const strict = lines.map((line) => line.slice(0, maxChars).trim());
+  console.log("TOP_CAPTION_FINAL_LINES", strict);
+  return strict;
 }
 
 function wrapImageSlotText(params: {
