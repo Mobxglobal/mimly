@@ -9,7 +9,7 @@ import {
 const CANVAS = 1080;
 const MARGIN_X = 96;
 
-const FONT_SIZE = 52;
+const FONT_SIZE = 54;
 
 /** Inner offset from canvas edge for multi-line left edge (keeps type off the margin hairline). */
 const MULTI_LINE_PAD_X = 16;

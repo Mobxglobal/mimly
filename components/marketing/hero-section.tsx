@@ -64,7 +64,7 @@ export function HeroSection() {
   const [urlValue, setUrlValue] = useState("");
   const [promptError, setPromptError] = useState<string | null>(null);
   const [isSubmittingPrompt, setIsSubmittingPrompt] = useState(false);
-  type HomepageFamilyChip = "Image" | "Video" | "Text" | "Engagement";
+  type HomepageFamilyChip = "Image" | "Video" | "Text";
   const [selectedFamilyChip, setSelectedFamilyChip] = useState<HomepageFamilyChip | null>(
     null
   );
@@ -98,8 +98,6 @@ export function HeroSection() {
     Image: "Generate a 1080x1080 image meme designed for social feed posts.",
     Video: "Generate a 1080x1080 video meme designed for social feed posts.",
     Text: "Generate a 1080x1080 text-only meme designed for social feed posts.",
-    Engagement:
-      "Generate a post designed to boost engagement on Facebook, Instagram, or LinkedIn.",
   };
 
   useEffect(() => {
@@ -281,20 +279,12 @@ export function HeroSection() {
                 event.preventDefault();
                 if (isSubmittingPrompt) return;
 
-                const input =
-                  mode === "prompt" ? promptText.trim() : urlValue.trim();
+                const prompt = promptText;
+                const url = urlValue;
+                const rawInput = prompt?.trim() || url?.trim() || "";
+                const input = rawInput.length > 0 ? rawInput : null;
                 if (!input) {
-                  setPromptError(
-                    mode === "prompt"
-                      ? "Please enter a prompt."
-                      : "Please paste your website URL."
-                  );
-                  return;
-                }
-                if (mode === "prompt" && input.length < 8) {
-                  setPromptError(
-                    "Please enter a longer prompt so we can generate better results."
-                  );
+                  console.warn("Homepage submit blocked: empty input");
                   return;
                 }
 
@@ -303,49 +293,19 @@ export function HeroSection() {
                 const familyMapping =
                   selectedFamilyChip === "Image"
                     ? {
-                        preferredOutputFormat: "square_image" as const,
-                        templateFamilyPreference: null,
+                        outputFormat: "square_image" as const,
                       }
                     : selectedFamilyChip === "Video"
                       ? {
-                          preferredOutputFormat: "square_video" as const,
-                          templateFamilyPreference: null,
+                          outputFormat: "square_video" as const,
                         }
                       : selectedFamilyChip === "Text"
                         ? {
-                            preferredOutputFormat: "square_text" as const,
-                            templateFamilyPreference: null,
+                            outputFormat: "square_text" as const,
                           }
-                        : selectedFamilyChip === "Engagement"
-                          ? {
-                              preferredOutputFormat: "square_text" as const,
-                              templateFamilyPreference: "engagement_text" as const,
-                            }
-                          : null;
+                        : null;
 
                 try {
-                  const intentPayload = {
-                    inputType: mode,
-                    value: input,
-                    ...(familyMapping ?? {}),
-                  };
-                  if (typeof window !== "undefined") {
-                    window.sessionStorage.setItem(
-                      "homepage-workspace-intent",
-                      JSON.stringify(intentPayload)
-                    );
-                    console.log("[homepage] intent stored", {
-                      inputType: mode,
-                      hasPreferredOutputFormat: Boolean(
-                        (intentPayload as { preferredOutputFormat?: string }).preferredOutputFormat
-                      ),
-                      hasTemplateFamilyPreference: Boolean(
-                        (intentPayload as { templateFamilyPreference?: string | null })
-                          .templateFamilyPreference
-                      ),
-                    });
-                  }
-
                   const sessionId = getOrCreateSessionId();
                   console.log("[session] id:", sessionId);
 
@@ -364,7 +324,13 @@ export function HeroSection() {
                     setIsSubmittingPrompt(false);
                     return;
                   }
-                  router.push(`/workspace/${bootstrapData.workspaceId}`);
+
+                  const outputFormat = familyMapping?.outputFormat ?? "square_image";
+                  router.push(
+                    `/workspace/${bootstrapData.workspaceId}?input=${encodeURIComponent(
+                      input
+                    )}&format=${outputFormat}`
+                  );
                   return;
                 } catch {
                   setPromptError("Something went wrong. Try again.");
@@ -385,7 +351,7 @@ export function HeroSection() {
                       </div>
                     ) : null}
                     <div className="flex flex-wrap gap-2">
-                    {(["Image", "Video", "Text", "Engagement"] as HomepageFamilyChip[]).map(
+                    {(["Image", "Video", "Text"] as HomepageFamilyChip[]).map(
                       (label) => {
                       const isActive = selectedFamilyChip === label;
                       const hasAnySelection = selectedFamilyChip !== null;
@@ -582,20 +548,19 @@ export function HeroSection() {
                       aria-busy={isSubmittingPrompt}
                       disabled={isSubmittingPrompt}
                       className={cn(
-                        "inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-stone-900 text-lg font-semibold text-white shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-stone-200/80 focus-visible:ring-offset-2 focus-visible:ring-offset-white",
+                        "inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-full bg-stone-900 px-4 text-sm font-semibold text-white shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-stone-200/80 focus-visible:ring-offset-2 focus-visible:ring-offset-white",
                         isSubmittingPrompt
-                          ? "cursor-default scale-[0.98] bg-stone-800/95 opacity-90 transition-all"
+                          ? "cursor-default scale-[0.98] bg-stone-800/95 opacity-80 transition-all"
                           : "cursor-pointer hover:bg-stone-800"
                       )}
                     >
-                      <span
-                        className={cn(
-                          "inline-flex items-center justify-center transition-transform duration-150",
-                          isSubmittingPrompt && "animate-pulse"
-                        )}
-                      >
-                        {isSubmittingPrompt ? "…" : "↑"}
-                      </span>
+                      <span>Generate</span>
+                      {isSubmittingPrompt ? (
+                        <span
+                          className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/30 border-t-white"
+                          aria-hidden="true"
+                        />
+                      ) : null}
                     </button>
                   </div>
                 </div>
