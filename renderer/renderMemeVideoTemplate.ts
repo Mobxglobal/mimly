@@ -3,6 +3,7 @@ import os from "os";
 import path from "path";
 import { execFileSync } from "child_process";
 import sharp from "sharp";
+import ffmpegPath from "ffmpeg-static";
 import {
   renderTopCaptionOverlayPng,
   type MemeTemplateForRender,
@@ -83,6 +84,7 @@ export async function renderMemeMP4FromTemplate(params: {
   topText: string;
 }): Promise<Buffer> {
   warnCanvasUnavailableOnce();
+  console.log("FFMPEG PATH", ffmpegPath);
 
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "meme-video-"));
   const inputPath = path.join(tempDir, "input.mp4");
@@ -108,7 +110,7 @@ export async function renderMemeMP4FromTemplate(params: {
     // Debug probe: save one composed frame before final ffmpeg video processing.
     try {
       execFileSync(
-        "ffmpeg",
+        ffmpegPath as string,
         [
           "-y",
           "-i",
@@ -130,7 +132,7 @@ export async function renderMemeMP4FromTemplate(params: {
     }
 
     execFileSync(
-      "ffmpeg",
+      ffmpegPath as string,
       [
         "-y",
         "-i",
