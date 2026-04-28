@@ -72,7 +72,7 @@ function normalizeRenderableText(value: unknown): string {
     .trim();
 }
 
-function getTextAnchor(alignment: string | null | undefined) {
+function getTextAnchor(alignment: string): "start" | "middle" | "end" {
   if (alignment === "left") return "start";
   if (alignment === "right") return "end";
   return "middle";
@@ -109,6 +109,7 @@ function renderLines(
     isOverlayOrSideCaption?: boolean;
     topCaptionOffsetY?: number;
     topCaptionX?: number;
+    templateSlug?: string | null;
   }
 ) {
   if (!lines.length) return "";
@@ -137,7 +138,16 @@ function renderLines(
   return lines
     .map((line, i) => {
       const y = startY + i * lineHeight;
-      const ta = textAnchor === "start" ? "start" : textAnchor === "end" ? "end" : "middle";
+      const ta = textAnchor;
+      console.log("🚨 FINAL_TEXT_RENDER_VALUES", {
+        slug: style.templateSlug ?? null,
+        lines,
+        x,
+        y,
+        alignment: style.alignment,
+        textAnchor: ta,
+        isTopCaption: Boolean(style.isTopCaption),
+      });
       return interTextToPathElement(String(line), {
         x,
         y,
@@ -317,6 +327,9 @@ function buildSVG(template: MemeTemplateForRender, slotTexts: SlotTexts) {
     textColor,
     strokeColor,
     strokeWidth,
+    isTopCaption,
+    topCaptionX,
+    topCaptionOffsetY,
   };
 
   const slot1Text = normalizeRenderableText(slotTexts.slot_1_text);
@@ -325,6 +338,17 @@ function buildSVG(template: MemeTemplateForRender, slotTexts: SlotTexts) {
 
   const mechanic = String(template.meme_mechanic ?? "").trim().toLowerCase();
   const slug = String(template.slug ?? "").trim();
+  console.log("TEMPLATE DEBUG - IN RENDER", {
+    slug: template.slug,
+    mechanic_group: template.mechanic_group,
+    text_layout_type: template.text_layout_type,
+  });
+  console.log("🚨 ACTIVE_RENDER_FILE", {
+    file: "renderer/renderMemeTemplate.ts::buildSVG",
+    slug: template.slug ?? null,
+    mechanic_group: template.mechanic_group ?? null,
+    text_layout_type: template.text_layout_type ?? null,
+  });
   if (mechanic === "nobody_me_setup" || slug === "victorian-nobody-me") {
     console.log("NOBODY_ME_RENDER", {
       slot_1_text: slot1Text,
@@ -402,11 +426,9 @@ function buildSVG(template: MemeTemplateForRender, slotTexts: SlotTexts) {
       }
       return renderLines(lines, slot as any, {
         ...style,
-        alignment: style.alignment,
-        isTopCaption,
+        alignment: style.isTopCaption ? "left" : style.alignment,
         isOverlayOrSideCaption,
-        topCaptionOffsetY,
-        topCaptionX,
+        templateSlug: template.slug ?? null,
       });
     })
     .join("");
@@ -421,12 +443,21 @@ function buildSVG(template: MemeTemplateForRender, slotTexts: SlotTexts) {
   logSvgDebugSample(slot1Text || slot2Text || slot3Text);
 
   console.log("[render] SVG text as paths (Inter outlines, no fontconfig)");
-
-  return `${SVG_UTF8_XML_DECL}
+  const svgBody = `${renderedText}`;
+  const svg = `${SVG_UTF8_XML_DECL}
 <svg xmlns="http://www.w3.org/2000/svg" width="${template.canvas_width}" height="${template.canvas_height}">
   ${renderedText}
 </svg>
   `;
+  console.log("🚨 SVG_RENDER_DEBUG", {
+    slug: template.slug ?? null,
+    svgLength: svg.length,
+    renderedTextLength: svgBody.length,
+    hasTextAnchorStart: svg.includes('text-anchor="start"'),
+    hasPathElements: svg.includes("<path"),
+  });
+
+  return svg;
 }
 
 export async function renderMemePNGFromTemplate(params: {

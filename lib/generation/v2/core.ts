@@ -38,6 +38,7 @@ async function renderByFormat(params: {
   slot3Text: string | null;
 }): Promise<{ mediaBuffer: Buffer; contentType: string; extension: "png" | "mp4" }> {
   const { admin, template, outputFormat, topText, bottomText, slot3Text } = params;
+  console.log("TEMPLATE DEBUG - BEFORE RENDER", template);
   const memeTemplatesBucket = process.env.MEME_TEMPLATES_BUCKET ?? "meme-templates";
   const renderTemplate = mapMemeTemplateRowForRender(template);
 
@@ -126,6 +127,7 @@ export async function generateFromInput(params: GenerateFromInputParams): Promis
   if (templatesError) throw new Error(templatesError.message);
   const templates = (templatesRaw ?? []) as TemplateRow[];
   const template = pickTemplateSimple(outputFormat, templates);
+  console.log("TEMPLATE DEBUG - SELECTED", template);
 
   const prompt = buildSimplePrompt(input, template);
   const generated = await generateTextFromTemplate(prompt, template);
