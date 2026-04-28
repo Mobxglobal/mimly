@@ -104,6 +104,7 @@ function renderLines(
     textColor: string;
     strokeColor: string;
     strokeWidth: number;
+    isTopCaption?: boolean;
   }
 ) {
   if (!lines.length) return "";
@@ -114,7 +115,9 @@ function renderLines(
   const x = getXPosition({ x: slot.x, width: slot.width }, style.alignment, inset);
   const textAnchor = getTextAnchor(style.alignment);
   const totalTextHeight = lines.length * lineHeight;
-  const startY = slot.y + (slot.height - totalTextHeight) / 2 + fontSize;
+  const startY = style.isTopCaption
+    ? slot.y + fontSize
+    : slot.y + (slot.height - totalTextHeight) / 2 + fontSize;
 
   return lines
     .map((line, i) => {
@@ -303,6 +306,7 @@ function buildSVG(template: MemeTemplateForRender, slotTexts: SlotTexts) {
       return renderLines(lines, slot as any, {
         ...style,
         alignment: style.alignment,
+        isTopCaption,
       });
     })
     .join("");

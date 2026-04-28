@@ -25,9 +25,20 @@ function coerceGeneratedSlots(
   const title = normalizeText(raw.title);
   const top = normalizeText(raw.top_text);
   const clean = top.replace(/[.,…]+$/g, "").trim();
-  const bottom = normalizeText(raw.bottom_text);
+  let bottomText = normalizeText(raw.bottom_text);
   const slot3 = normalizeText(raw.slot_3_text);
   const isStructured = template.text_layout_type !== "top_caption";
+  const memeMechanic = normalizeText(template.meme_mechanic).toLowerCase();
+  const isNobodyMe = memeMechanic === "nobody_me_setup";
+
+  if (isNobodyMe && bottomText) {
+    const parts = bottomText.split(/Me:/i).filter(Boolean);
+    bottomText = parts.length > 0 ? `Me: ${parts[0].trim()}` : bottomText;
+  }
+
+  if (isNobodyMe && bottomText.length > 80) {
+    bottomText = bottomText.slice(0, 80).trim();
+  }
 
   if (!clean) {
     throw new Error("Model returned empty top_text.");
@@ -47,7 +58,7 @@ function coerceGeneratedSlots(
   return {
     title: title || clean.slice(0, 45),
     top_text: clean,
-    bottom_text: bottom || null,
+    bottom_text: bottomText || null,
     slot_3_text: slot3 || null,
   };
 }

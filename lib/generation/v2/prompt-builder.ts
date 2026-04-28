@@ -5,6 +5,7 @@ export function buildSimplePrompt(input: string, template: TemplateRow): string 
   const templateName = String(template.template_name ?? template.slug ?? "template").trim();
   const memeMechanic = String(template.meme_mechanic ?? "general meme").trim();
   const isStructured = template.text_layout_type !== "top_caption";
+  const isNobodyMe = memeMechanic === "nobody_me_setup";
   const patternType = String(template.pattern_type ?? "").trim();
   const templateLogic = String(template.template_logic ?? "").trim();
   const emotionStyle = String(template.emotion_style ?? "").trim();
@@ -19,6 +20,30 @@ export function buildSimplePrompt(input: string, template: TemplateRow): string 
     bottom_text: hasSecondSlot ? "secondary text for slot 2" : null,
     slot_3_text: hasThirdSlot ? "optional slot 3 text if needed" : null,
   };
+
+  if (isNobodyMe) {
+    return [
+      "Write meme content as valid JSON only.",
+      `Template: ${templateName}`,
+      `User input: ${userInput}`,
+      "",
+      "This is a Nobody / Me format meme.",
+      "",
+      "Output EXACTLY two lines:",
+      "Nobody:",
+      "Me: [one specific behaviour]",
+      "",
+      "Rules:",
+      "- Only ONE 'Me:' line",
+      "- Do NOT repeat 'Me:'",
+      "- Do NOT include multiple behaviours",
+      "- Keep the 'Me:' line to one clear idea",
+      "",
+      "The humour comes from the 'Me' line being specific, unnecessary, or slightly obsessive.",
+      "",
+      `JSON schema: ${JSON.stringify(slotSchema)}`,
+    ].join("\n");
+  }
 
   if (isStructured) {
     const base = [
@@ -80,6 +105,12 @@ export function buildSimplePrompt(input: string, template: TemplateRow): string 
     "Focus on the uncomfortable, ironic, or exaggerated part of the situation.",
     "The humour should come from tension, contrast, or an implied problem.",
     "Avoid stating obvious or neutral situations.",
+    "The situation must imply that something is slightly wrong, stressful, or uncomfortable.",
+    "Avoid neutral situations where nothing is at stake.",
+    "The sentence should hint at a consequence, mistake, or awkward outcome.",
+    "Push the situation slightly further than reality to make it feel more intense or noticeable.",
+    "Avoid safe or predictable phrasing.",
+    "Do not stop at the obvious version of the idea.",
     "Make it feel like a real moment someone would recognise instantly.",
     "The sentence should hint at what goes wrong, feels awkward, or creates pressure.",
     templateLogic ? `Guidance: ${templateLogic}` : null,
