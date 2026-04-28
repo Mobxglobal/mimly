@@ -112,6 +112,7 @@ function renderLines(
     topCaptionOffsetY?: number;
     topCaptionX?: number;
     templateSlug?: string | null;
+    isImage?: boolean;
     isVideo?: boolean;
     topRegionHeight?: number;
   }
@@ -138,6 +139,14 @@ function renderLines(
   let startY = style.isTopCaption
     ? (style.topCaptionOffsetY ?? 0) + fontSize
     : slot.y + (slot.height - totalTextHeight) / 2 + fontSize;
+  if (style.isImage && style.isTopCaption) {
+    const slotTop = slot.y;
+    const slotHeight = slot.height;
+    startY = slotTop + (slotHeight - totalTextHeight) / 2 + fontSize;
+    const TOP_BIAS = slotHeight * 0.08;
+    startY = startY - TOP_BIAS;
+    startY = Math.max(slotTop + 20, startY);
+  }
   if (style.isVideo && style.isTopCaption) {
     const topRegionHeight = style.topRegionHeight ?? 200;
     const TOP_BIAS = topRegionHeight * 0.08;
@@ -277,6 +286,7 @@ function wrapImageSlotText(params: {
 
 function buildSVG(template: MemeTemplateForRender, slotTexts: SlotTexts) {
   const textLayoutType = String(template.text_layout_type ?? "").trim().toLowerCase();
+  const isImage = String(template.asset_type ?? "").trim().toLowerCase() === "image";
   const isVideo = String(template.asset_type ?? "").trim().toLowerCase() === "video";
   const topRegionHeight =
     typeof template.content_region_y === "number" ? template.content_region_y : 200;
@@ -439,6 +449,7 @@ function buildSVG(template: MemeTemplateForRender, slotTexts: SlotTexts) {
         alignment: style.isTopCaption ? "left" : style.alignment,
         isOverlayOrSideCaption,
         templateSlug: template.slug ?? null,
+        isImage,
         isVideo,
         topRegionHeight,
       });
