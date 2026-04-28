@@ -3,7 +3,6 @@ import os from "os";
 import path from "path";
 import { execFileSync } from "child_process";
 import sharp from "sharp";
-import ffmpegPath from "ffmpeg-static";
 import {
   renderTopCaptionOverlayPng,
   type MemeTemplateForRender,
@@ -69,9 +68,13 @@ const H264_QUICKTIME_FRIENDLY = [
   "-c:v",
   "libx264",
   "-preset",
-  "veryfast",
+  "ultrafast",
   "-crf",
-  "18",
+  "28",
+  "-tune",
+  "zerolatency",
+  "-threads",
+  "0",
   "-pix_fmt",
   "yuv420p",
   "-movflags",
@@ -85,11 +88,15 @@ export async function renderMemeMP4FromTemplate(params: {
 }): Promise<Buffer> {
   warnCanvasUnavailableOnce();
   const runtimeFfmpegPath = "/tmp/ffmpeg";
-  if (ffmpegPath && !fs.existsSync(runtimeFfmpegPath)) {
-    fs.copyFileSync(ffmpegPath as string, runtimeFfmpegPath);
+  if (!fs.existsSync(runtimeFfmpegPath)) {
+    const bundledPath = path.join(process.cwd(), "public/bin/ffmpeg");
+    if (!fs.existsSync(bundledPath)) {
+      throw new Error("Bundled ffmpeg not found at public/bin/ffmpeg");
+    }
+    fs.copyFileSync(bundledPath, runtimeFfmpegPath);
     fs.chmodSync(runtimeFfmpegPath, 0o755);
   }
-  console.log("FFMPEG RUNTIME PATH", runtimeFfmpegPath);
+  console.log("FFMPEG USING", runtimeFfmpegPath);
 
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "meme-video-"));
   const inputPath = path.join(tempDir, "input.mp4");
