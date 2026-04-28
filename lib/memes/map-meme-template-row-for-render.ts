@@ -17,6 +17,8 @@ export function mapMemeTemplateRowForRender(
     slug: t.slug ? String(t.slug).trim() : null,
     meme_mechanic: t.meme_mechanic ? String(t.meme_mechanic).trim() : null,
     mechanic_group: t.mechanic_group ? String(t.mechanic_group).trim() : null,
+    asset_type: t.asset_type ? String(t.asset_type).trim() : null,
+    content_region_y: toNullableInt(t.content_region_y),
     canvas_width: toNullableInt(t.canvas_width) ?? 1080,
     canvas_height: toNullableInt(t.canvas_height) ?? 1080,
     height_bucket: t.height_bucket ? String(t.height_bucket).trim() : null,

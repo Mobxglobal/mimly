@@ -15,7 +15,9 @@ function normalizeText(value: unknown): string {
 function cleanSlotText(value: unknown): string {
   return String(value ?? "")
     .replace(/[\r\n]+/g, " ")
-    .replace(/["'`]/g, "")
+    .replace(/[’]/g, "'")
+    // Remove only wrapping quote characters, preserve internal apostrophes.
+    .replace(/^["'`]+|["'`]+$/g, "")
     .replace(/^(?:left|right|center|slot\s*[123])\s*:\s*/i, "")
     .replace(/\s+/g, " ")
     .trim();

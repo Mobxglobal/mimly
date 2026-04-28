@@ -13,6 +13,8 @@ type MemeVideoTemplateForRender = {
   slug?: string | null;
   meme_mechanic?: string | null;
   mechanic_group?: string | null;
+  asset_type?: string | null;
+  content_region_y?: number | null;
   height_bucket?: string | null;
   template_family?: string | null;
   text_layout_type?: string | null;
@@ -39,6 +41,8 @@ function toMemeTemplateForRender(
     slug: t.slug ?? null,
     meme_mechanic: t.meme_mechanic ?? null,
     mechanic_group: t.mechanic_group ?? null,
+    asset_type: t.asset_type ?? null,
+    content_region_y: t.content_region_y ?? null,
     canvas_width: t.canvas_width ?? 1080,
     canvas_height: t.canvas_height ?? 1080,
     height_bucket: t.height_bucket ?? null,

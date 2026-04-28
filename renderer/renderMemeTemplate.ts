@@ -17,6 +17,8 @@ export type MemeTemplateForRender = {
   /** Present on DB-backed templates; used for mechanic-specific render paths. */
   meme_mechanic?: string | null;
   mechanic_group?: string | null;
+  asset_type?: string | null;
+  content_region_y?: number | null;
   canvas_width: number;
   canvas_height: number;
   height_bucket?: string | null;
@@ -110,6 +112,8 @@ function renderLines(
     topCaptionOffsetY?: number;
     topCaptionX?: number;
     templateSlug?: string | null;
+    isVideo?: boolean;
+    topRegionHeight?: number;
   }
 ) {
   if (!lines.length) return "";
@@ -131,9 +135,13 @@ function renderLines(
     : getXPosition({ x: slot.x, width: slot.width }, style.alignment, inset);
   const textAnchor = getTextAnchor(style.alignment);
   const totalTextHeight = lines.length * lineHeight;
-  const startY = style.isTopCaption
+  let startY = style.isTopCaption
     ? (style.topCaptionOffsetY ?? 0) + fontSize
     : slot.y + (slot.height - totalTextHeight) / 2 + fontSize;
+  if (style.isVideo && style.isTopCaption) {
+    const topRegionHeight = style.topRegionHeight ?? 200;
+    startY = (topRegionHeight - totalTextHeight) / 2 + fontSize;
+  }
 
   return lines
     .map((line, i) => {
@@ -219,42 +227,40 @@ function wrapImageSlotText(params: {
     const LEFT_PADDING = canvasWidth * 0.06;
     const RIGHT_PADDING = canvasWidth * 0.06;
     const MAX_TEXT_WIDTH = canvasWidth - LEFT_PADDING - RIGHT_PADDING;
-    let lines = wrapTextByWidth(params.text, MAX_TEXT_WIDTH, params.fontSize);
+    const fitToLineLimit = (text: string, maxLines: number): string[] => {
+      let lines = wrapTextByWidth(text, MAX_TEXT_WIDTH, params.fontSize);
 
-    if (lines.length > 3) {
-      const words = params.text.split(" ").filter(Boolean);
-      while (true) {
-        const candidate = words.join(" ");
-        const testLines = wrapTextByWidth(candidate, MAX_TEXT_WIDTH, params.fontSize);
+      if (lines.length > maxLines) {
+        const words = text.split(" ").filter(Boolean);
+        while (true) {
+          const candidate = words.join(" ");
+          const testLines = wrapTextByWidth(candidate, MAX_TEXT_WIDTH, params.fontSize);
 
-        if (testLines.length <= 3) {
-          lines = testLines;
-          break;
-        }
+          if (testLines.length <= maxLines) {
+            lines = testLines;
+            break;
+          }
 
-        words.pop();
-        if (words.length < 5) {
-          lines = wrapTextByWidth(words.join(" "), MAX_TEXT_WIDTH, params.fontSize);
-          break;
+          words.pop();
+          if (words.length < 5) {
+            lines = wrapTextByWidth(words.join(" "), MAX_TEXT_WIDTH, params.fontSize);
+            break;
+          }
         }
       }
-    }
+
+      return lines;
+    };
+
+    const defaultMaxLines = 3;
+    let lines = fitToLineLimit(params.text, defaultMaxLines);
+    const fallbackFourLines = fitToLineLimit(params.text, 4);
 
     const lastLine = lines[lines.length - 1] ?? "";
     if (isIncompleteEnding(lastLine)) {
-      const words = params.text.split(" ").filter(Boolean).slice(0, -1);
-      while (true) {
-        const candidate = words.join(" ");
-        const testLines = wrapTextByWidth(candidate, MAX_TEXT_WIDTH, params.fontSize);
-        if (testLines.length <= 3) {
-          lines = testLines;
-          break;
-        }
-        words.pop();
-        if (words.length < 5) {
-          lines = wrapTextByWidth(words.join(" "), MAX_TEXT_WIDTH, params.fontSize);
-          break;
-        }
+      const fallbackLastLine = fallbackFourLines[fallbackFourLines.length - 1] ?? "";
+      if (!isIncompleteEnding(fallbackLastLine) && fallbackFourLines.length <= 4) {
+        lines = fallbackFourLines;
       }
     }
     console.log("TOP_CAPTION_STANDARD", lines);
@@ -270,6 +276,9 @@ function wrapImageSlotText(params: {
 
 function buildSVG(template: MemeTemplateForRender, slotTexts: SlotTexts) {
   const textLayoutType = String(template.text_layout_type ?? "").trim().toLowerCase();
+  const isVideo = String(template.asset_type ?? "").trim().toLowerCase() === "video";
+  const topRegionHeight =
+    typeof template.content_region_y === "number" ? template.content_region_y : 200;
   const mechanicGroup = String(template.mechanic_group ?? "").trim().toLowerCase();
   let renderMode:
     | "top_caption"
@@ -429,6 +438,8 @@ function buildSVG(template: MemeTemplateForRender, slotTexts: SlotTexts) {
         alignment: style.isTopCaption ? "left" : style.alignment,
         isOverlayOrSideCaption,
         templateSlug: template.slug ?? null,
+        isVideo,
+        topRegionHeight,
       });
     })
     .join("");
