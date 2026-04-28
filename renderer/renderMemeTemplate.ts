@@ -237,41 +237,10 @@ function wrapImageSlotText(params: {
     const LEFT_PADDING = canvasWidth * 0.06;
     const RIGHT_PADDING = canvasWidth * 0.06;
     const MAX_TEXT_WIDTH = canvasWidth - LEFT_PADDING - RIGHT_PADDING;
-    const fitToLineLimit = (text: string, maxLines: number): string[] => {
-      let lines = wrapTextByWidth(text, MAX_TEXT_WIDTH, params.fontSize);
-
-      if (lines.length > maxLines) {
-        const words = text.split(" ").filter(Boolean);
-        while (true) {
-          const candidate = words.join(" ");
-          const testLines = wrapTextByWidth(candidate, MAX_TEXT_WIDTH, params.fontSize);
-
-          if (testLines.length <= maxLines) {
-            lines = testLines;
-            break;
-          }
-
-          words.pop();
-          if (words.length < 5) {
-            lines = wrapTextByWidth(words.join(" "), MAX_TEXT_WIDTH, params.fontSize);
-            break;
-          }
-        }
-      }
-
-      return lines;
-    };
-
-    const defaultMaxLines = 3;
-    let lines = fitToLineLimit(params.text, defaultMaxLines);
-    const fallbackFourLines = fitToLineLimit(params.text, 4);
-
+    const lines = wrapTextByWidth(params.text, MAX_TEXT_WIDTH, params.fontSize);
     const lastLine = lines[lines.length - 1] ?? "";
     if (isIncompleteEnding(lastLine)) {
-      const fallbackLastLine = fallbackFourLines[fallbackFourLines.length - 1] ?? "";
-      if (!isIncompleteEnding(fallbackLastLine) && fallbackFourLines.length <= 4) {
-        lines = fallbackFourLines;
-      }
+      console.warn("Top caption ends incompletely; preserving full text without trimming.");
     }
     console.log("TOP_CAPTION_STANDARD", lines);
     return lines;

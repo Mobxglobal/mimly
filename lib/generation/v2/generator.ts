@@ -1,3 +1,5 @@
+import { interTextWidthPx } from "@/lib/rendering/text-to-path";
+
 type GeneratedSlots = {
   title: string;
   top_text: string;
@@ -78,6 +80,92 @@ function isCompleteSentence(text: string): boolean {
   return true;
 }
 
+function wrapTextByWidth(text: string, maxWidth: number, fontSize: number): string[] {
+  const words = text.split(" ").filter(Boolean);
+  const lines: string[] = [];
+  let currentLine = "";
+
+  for (const word of words) {
+    const candidate = currentLine ? `${currentLine} ${word}` : word;
+    if (interTextWidthPx(candidate, fontSize) <= maxWidth) {
+      currentLine = candidate;
+      continue;
+    }
+    if (currentLine) {
+      lines.push(currentLine);
+    }
+    currentLine = word;
+  }
+
+  if (currentLine) lines.push(currentLine);
+  return lines;
+}
+
+function isTopCaptionTemplate(template: TemplateShape): boolean {
+  const mechanicGroup = normalizeText(template.mechanic_group).toLowerCase();
+  return mechanicGroup === "caption_relatable" || mechanicGroup === "reaction_implication";
+}
+
+function doesCaptionFitTopCaption(text: string, template: TemplateShape): boolean {
+  const canvasWidth =
+    typeof template.canvas_width === "number" && template.canvas_width > 0
+      ? template.canvas_width
+      : 1080;
+  const fontSize = 54;
+  const leftPadding = canvasWidth * 0.06;
+  const rightPadding = canvasWidth * 0.06;
+  const maxWidth = canvasWidth - leftPadding - rightPadding;
+  const maxLines =
+    typeof template.slot_1_max_lines === "number" && template.slot_1_max_lines > 0
+      ? template.slot_1_max_lines
+      : 3;
+  const lines = wrapTextByWidth(text, maxWidth, fontSize);
+  if (!lines.length || lines.length > maxLines) return false;
+  if (lines.some((line) => interTextWidthPx(line, fontSize) > maxWidth)) return false;
+  const connectorWords = new Set([
+    "a",
+    "an",
+    "the",
+    "to",
+    "and",
+    "of",
+    "or",
+    "but",
+    "for",
+    "with",
+    "at",
+    "by",
+    "from",
+    "in",
+    "on",
+    "about",
+    "into",
+    "after",
+    "before",
+    "over",
+    "under",
+    "as",
+    "if",
+    "than",
+  ]);
+  const normalized = text.toLowerCase().replace(/[^\w\s']/g, " ").trim();
+  const words = normalized.split(/\s+/).filter(Boolean);
+  const finalWord = words[words.length - 1] ?? "";
+  if (!finalWord || connectorWords.has(finalWord)) return false;
+  return true;
+}
+
+function buildTopCaptionFallback(prompt: string, template: TemplateShape): string {
+  const templateName = normalizeText(template.template_name || template.slug || "this moment");
+  const inputFromPrompt = prompt.match(/User input:\s*(.+)/i)?.[1] ?? "";
+  const input = normalizeText(inputFromPrompt).replace(/[.!?]+$/g, "");
+  if (input) {
+    const shortIdea = input.split(" ").filter(Boolean).slice(0, 10).join(" ").toLowerCase();
+    return `When ${shortIdea} goes slightly off the rails`;
+  }
+  return `When your ${templateName.toLowerCase()} workaround turns into the real problem`;
+}
+
 function coerceGeneratedSlots(
   raw: Record<string, unknown>,
   template: TemplateShape
@@ -149,6 +237,9 @@ function coerceGeneratedSlots(
 
   if (!clean) {
     throw new Error("Model returned empty top_text.");
+  }
+  if (isTopCaptionTemplate(template) && !doesCaptionFitTopCaption(clean, template)) {
+    throw new Error("Caption does not fit layout constraints.");
   }
   let isWeak = false;
   if (!isStructured) {
@@ -249,12 +340,15 @@ export async function generateTextFromTemplate(
   const isNobodyMe = memeMechanic === "nobody_me_setup";
   const isWizardsTalkingSubject =
     slug.includes("wizard") || templateName.includes("wizard");
+  const isTopCaption = isTopCaptionTemplate(template);
 
   const retryHints = [
     undefined,
     "Fix structure exactly. No labels, no quotes, no line breaks.",
     "Return concise slot values only and satisfy all slot limits.",
   ];
+  const fitRetryHint =
+    "Rewrite the same caption idea in a shorter, tighter form that fits within 2–3 lines. Keep the meaning and joke intact.";
   const pickBest = (items: GeneratedSlots[]): GeneratedSlots =>
     items.reduce((best, current) =>
       current.top_text.length > best.top_text.length ? current : best
@@ -264,10 +358,21 @@ export async function generateTextFromTemplate(
   let lastError: unknown = null;
   for (let i = 0; i < retryHints.length; i += 1) {
     try {
-      const res = await requestSlots(prompt, template, retryHints[i]);
+      const hint = retryHints[i];
+      const res = await requestSlots(prompt, template, hint);
       results.push(res);
     } catch (error) {
       lastError = error;
+      const message = error instanceof Error ? error.message : String(error);
+      if (
+        isTopCaption &&
+        message.includes("Caption does not fit layout constraints.") &&
+        i + 1 < retryHints.length
+      ) {
+        retryHints[i + 1] = retryHints[i + 1]
+          ? `${retryHints[i + 1]}\n${fitRetryHint}`
+          : fitRetryHint;
+      }
       console.warn(`[v2] generation attempt ${i + 1} failed`, error);
     }
   }
@@ -302,6 +407,16 @@ export async function generateTextFromTemplate(
       title: "Nobody / Me",
       top_text: "Nobody:",
       bottom_text: "Me: checks it again anyway",
+      slot_3_text: null,
+    };
+  }
+
+  if (isTopCaptionTemplate(template)) {
+    const fallback = buildTopCaptionFallback(prompt, template);
+    return {
+      title: fallback.slice(0, 45),
+      top_text: fallback,
+      bottom_text: null,
       slot_3_text: null,
     };
   }
