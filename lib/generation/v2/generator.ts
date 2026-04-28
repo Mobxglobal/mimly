@@ -5,6 +5,8 @@ type GeneratedSlots = {
   slot_3_text: string | null;
 };
 
+type TemplateShape = Record<string, unknown>;
+
 function normalizeText(value: unknown): string {
   return String(value ?? "").replace(/\s+/g, " ").trim();
 }
@@ -16,17 +18,29 @@ function parseJsonObject(raw: string): Record<string, unknown> {
   return JSON.parse(candidate) as Record<string, unknown>;
 }
 
-function coerceGeneratedSlots(raw: Record<string, unknown>): GeneratedSlots {
+function coerceGeneratedSlots(
+  raw: Record<string, unknown>,
+  template: TemplateShape
+): GeneratedSlots {
   const title = normalizeText(raw.title);
   const top = normalizeText(raw.top_text);
   const bottom = normalizeText(raw.bottom_text);
   const slot3 = normalizeText(raw.slot_3_text);
+  const isStructured = template.text_layout_type !== "top_caption";
 
   if (!top) {
     throw new Error("Model returned empty top_text.");
   }
-  if (top.length < 25) {
-    throw new Error("Model returned top_text that is too short.");
+  if (!isStructured) {
+    // top_caption -> sentence required
+    if (top.length < 20) {
+      throw new Error("Top caption too short.");
+    }
+  } else {
+    // structured templates -> short labels allowed
+    if (top.length < 2) {
+      throw new Error("Slot text too short.");
+    }
   }
 
   return {
@@ -37,7 +51,11 @@ function coerceGeneratedSlots(raw: Record<string, unknown>): GeneratedSlots {
   };
 }
 
-async function requestSlots(prompt: string, retryHint?: string): Promise<GeneratedSlots> {
+async function requestSlots(
+  prompt: string,
+  template: TemplateShape,
+  retryHint?: string
+): Promise<GeneratedSlots> {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
     throw new Error("Missing OPENAI_API_KEY.");
@@ -80,18 +98,20 @@ async function requestSlots(prompt: string, retryHint?: string): Promise<Generat
   }
 
   const parsed = parseJsonObject(content);
-  return coerceGeneratedSlots(parsed);
+  return coerceGeneratedSlots(parsed, template);
 }
 
 export async function generateTextFromTemplate(
-  prompt: string
+  prompt: string,
+  template: TemplateShape
 ): Promise<GeneratedSlots> {
   try {
-    return await requestSlots(prompt);
+    return await requestSlots(prompt, template);
   } catch (firstError) {
     console.warn("[v2] first generation attempt failed, retrying once", firstError);
     return requestSlots(
       prompt,
+      template,
       "Make the meme more specific and complete."
     );
   }

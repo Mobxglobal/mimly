@@ -128,7 +128,7 @@ export async function generateFromInput(params: GenerateFromInputParams): Promis
   const template = pickTemplateSimple(outputFormat, templates);
 
   const prompt = buildSimplePrompt(input, template);
-  const generated = await generateTextFromTemplate(prompt);
+  const generated = await generateTextFromTemplate(prompt, template);
 
   const { mediaBuffer, contentType, extension } = await renderByFormat({
     admin,
