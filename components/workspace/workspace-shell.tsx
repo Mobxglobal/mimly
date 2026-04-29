@@ -1,10 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
+import { FeedbackModal } from "@/components/feedback/feedback-modal";
 import {
   type WorkspaceState,
 } from "@/lib/actions/workspace";
@@ -26,7 +27,6 @@ export function WorkspaceShell({
   const [lastFormat, setLastFormat] = useState<
     "square_image" | "square_video" | "square_text"
   >("square_image");
-  const [hasQueryInput, setHasQueryInput] = useState(false);
   const [showOutput, setShowOutput] = useState(Boolean(initialState.outputs[0]?.image_url));
   const [media, setMedia] = useState<{ type: "image" | "video"; url: string } | null>(
     initialState.outputs[0]?.image_url
@@ -38,6 +38,29 @@ export function WorkspaceShell({
         }
       : null
   );
+  const loadingMessages = useMemo(
+    () => [
+      "Understanding your idea...",
+      "Selecting the best meme formats...",
+      "Writing captions that fit...",
+      "Finalising your memes...",
+    ],
+    []
+  );
+  const [loadingMessageIndex, setLoadingMessageIndex] = useState(0);
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
+  const [hasTriggeredFeedback, setHasTriggeredFeedback] = useState(false);
+  const [feedbackSubmitting, setFeedbackSubmitting] = useState(false);
+  const [feedbackAnswers, setFeedbackAnswers] = useState<{
+    firstMemeThought: "good" | "average" | "awful" | null;
+    wouldUseAgain: "yes" | "no" | "maybe" | null;
+    looksLikeAiSlop: "yes" | "no" | "a_bit" | null;
+  }>({
+    firstMemeThought: null,
+    wouldUseAgain: null,
+    looksLikeAiSlop: null,
+  });
+  const feedbackTimeoutRef = useRef<number | null>(null);
 
   const planLabel = useMemo(() => {
     if (state.workspace.current_plan === "starter_pack") return "Starter Pack";
@@ -55,6 +78,15 @@ export function WorkspaceShell({
   }, [state.workspace.current_plan]);
   const isAuthLocked = state.workspace.gate_state === "anonymous_blocked";
   const isPlanLocked = state.workspace.gate_state === "authenticated_plan_required";
+
+  function scheduleFeedbackModal() {
+    if (hasTriggeredFeedback || typeof window === "undefined") return;
+    setHasTriggeredFeedback(true);
+    feedbackTimeoutRef.current = window.setTimeout(() => {
+      setShowFeedbackModal(true);
+      window.localStorage.setItem("hasSeenFeedbackModal", "true");
+    }, 3000);
+  }
 
   async function generateWithFormat(
     outputFormat: "square_image" | "square_video" | "square_text",
@@ -102,6 +134,7 @@ export function WorkspaceShell({
       });
       setLastInput(input);
       setLastFormat(outputFormat);
+      scheduleFeedbackModal();
     } catch {
       setWorkspaceError("Something went wrong. Try again.");
     } finally {
@@ -142,7 +175,6 @@ export function WorkspaceShell({
     const params = new URLSearchParams(window.location.search);
     const input = params.get("input");
     const format = params.get("format") || "square_image";
-    setHasQueryInput(Boolean(input && input.trim()));
     if (!input) return;
 
     const outputFormat =
@@ -189,6 +221,7 @@ export function WorkspaceShell({
           setLastInput(input);
           setLastFormat(outputFormat);
           setHasGeneratedYet(true);
+          scheduleFeedbackModal();
           router.replace(`/workspace/${workspaceId}`);
         }
       } catch {
@@ -204,6 +237,14 @@ export function WorkspaceShell({
   }, [hasGeneratedYet, router, workspaceId]);
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
+    const seen = window.localStorage.getItem("hasSeenFeedbackModal");
+    if (seen === "true") {
+      setHasTriggeredFeedback(true);
+    }
+  }, []);
+
+  useEffect(() => {
     if (!media?.url) {
       setShowOutput(false);
       return;
@@ -212,6 +253,57 @@ export function WorkspaceShell({
     const id = window.requestAnimationFrame(() => setShowOutput(true));
     return () => window.cancelAnimationFrame(id);
   }, [media?.url]);
+
+  useEffect(() => {
+    if (!isGenerating) {
+      setLoadingMessageIndex(0);
+      return;
+    }
+    const id = window.setInterval(() => {
+      setLoadingMessageIndex((prev) => (prev + 1) % loadingMessages.length);
+    }, 1250);
+    return () => window.clearInterval(id);
+  }, [isGenerating, loadingMessages.length]);
+
+  useEffect(() => {
+    return () => {
+      if (feedbackTimeoutRef.current != null) {
+        window.clearTimeout(feedbackTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  async function handleSubmitFeedback() {
+    setFeedbackSubmitting(true);
+    try {
+      const existingSessionId =
+        typeof window !== "undefined" ? window.localStorage.getItem("mimlyFeedbackSessionId") : null;
+      const sessionId = existingSessionId && existingSessionId.trim()
+        ? existingSessionId
+        : `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+      if (typeof window !== "undefined" && !existingSessionId) {
+        window.localStorage.setItem("mimlyFeedbackSessionId", sessionId);
+      }
+
+      await fetch("/api/feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          workspaceId,
+          sessionId,
+          wasContentGood: feedbackAnswers.firstMemeThought === "good",
+          wouldUseAgain: feedbackAnswers.wouldUseAgain === "yes",
+          looksLikeAiSlop:
+            feedbackAnswers.looksLikeAiSlop === "a_bit" ? "a_bit" : "not_really",
+        }),
+      });
+    } catch {
+      // keep flow non-blocking
+    } finally {
+      setFeedbackSubmitting(false);
+      setShowFeedbackModal(false);
+    }
+  }
 
   return (
     <div className="space-y-4">
@@ -248,11 +340,18 @@ export function WorkspaceShell({
 
       <section className="min-h-[calc(100vh-9.5rem)] rounded-3xl border border-stone-200/90 bg-white/95 p-4 shadow-[0_8px_30px_rgba(10,10,10,0.05)] sm:p-5 lg:p-6">
         <div className="mx-auto w-full max-w-[720px] px-4">
-          <div className="mb-6">
+          {isGenerating && media?.url ? (
+            <div className="mb-4 text-center">
+              <p className="text-sm text-stone-500 transition-opacity duration-300">
+                {loadingMessages[loadingMessageIndex]}
+              </p>
+            </div>
+          ) : null}
+          <div className="mb-8">
             <div className="relative">
               <div
                 className={`flex min-h-[44vh] items-center justify-center rounded-2xl border border-stone-200 bg-stone-50 p-5 text-center text-sm text-stone-600 shadow-[0_6px_20px_rgba(15,23,42,0.06)] transition-opacity duration-150 sm:min-h-[52vh] ${
-                  isGenerating ? "opacity-85" : "opacity-100"
+                  isGenerating ? "opacity-80" : "opacity-100"
                 }`}
               >
                 {!media?.url ? (
@@ -264,7 +363,7 @@ export function WorkspaceShell({
                           aria-hidden="true"
                         />
                       </div>
-                      <p className="mt-3 text-stone-500">Generating your meme...</p>
+                      <p className="mt-3 text-stone-500">{loadingMessages[loadingMessageIndex]}</p>
                     </div>
                   ) : (
                     <p className="text-center text-stone-500">
@@ -319,50 +418,68 @@ export function WorkspaceShell({
             </div>
           </div>
 
-          <div className="flex gap-2 justify-center flex-wrap">
+          <div className="mt-2 flex gap-2 justify-center flex-wrap">
             <button
               type="button"
               onClick={() => void generateWithFormat(lastFormat, "regenerate")}
+              aria-busy={isGenerating}
               disabled={isGenerating || isAuthLocked || isPlanLocked}
-              className="inline-flex h-10 items-center justify-center rounded-md border border-sky-300 bg-sky-50 px-4 text-xs font-semibold text-sky-700 shadow-sm transition hover:bg-sky-100 disabled:cursor-not-allowed disabled:opacity-50"
+              className={`inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-full bg-stone-900 px-4 text-sm font-semibold text-white shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-stone-200/80 focus-visible:ring-offset-2 focus-visible:ring-offset-white ${
+                isGenerating || isAuthLocked || isPlanLocked
+                  ? "cursor-default scale-[0.98] bg-stone-800/95 opacity-80 transition-all"
+                  : "cursor-pointer hover:bg-stone-800"
+              }`}
             >
-              🔁 {isGenerating ? "Generating..." : "Regenerate"}
-            </button>
-            <button
-              type="button"
-              onClick={() => void generateWithFormat("square_video", "fresh")}
-              disabled={isGenerating || isAuthLocked || isPlanLocked}
-              className="inline-flex h-10 items-center justify-center rounded-md border border-stone-300 bg-stone-100 px-4 text-xs font-semibold text-stone-700 shadow-sm transition hover:bg-stone-200 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {isGenerating ? "Generating..." : "🎥 Video"}
+              <span>Generate more</span>
             </button>
             <button
               type="button"
               onClick={() => void generateWithFormat("square_image", "fresh")}
               disabled={isGenerating || isAuthLocked || isPlanLocked}
-              className="inline-flex h-10 items-center justify-center rounded-md border border-stone-300 bg-stone-100 px-4 text-xs font-semibold text-stone-700 shadow-sm transition hover:bg-stone-200 disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex h-10 items-center justify-center rounded-full border border-stone-200 bg-white px-4 text-xs font-semibold text-stone-600 shadow-sm transition hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {isGenerating ? "Generating..." : "📸 Image"}
+              Image
+            </button>
+            <button
+              type="button"
+              onClick={() => void generateWithFormat("square_video", "fresh")}
+              disabled={isGenerating || isAuthLocked || isPlanLocked}
+              className="inline-flex h-10 items-center justify-center rounded-full border border-stone-200 bg-white px-4 text-xs font-semibold text-stone-600 shadow-sm transition hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Video
             </button>
           </div>
 
-          <div className="mt-4">
-            <p className="mb-2 text-center text-sm text-stone-500">
-              Edit or create something new
+          <div className="mt-12 flex justify-center">
+            <p className="max-w-[420px] rounded-2xl border border-stone-200/80 bg-white/85 px-5 py-3 text-center text-sm text-stone-500/80 shadow-[0_8px_22px_rgba(16,24,40,0.06)] backdrop-blur-sm">
+              Click above to <span className="font-semibold text-stone-700">generate more</span> from
+              this idea, or{" "}
+              <Link href="/" className="font-medium text-sky-700 underline-offset-2 hover:underline">
+                head home
+              </Link>{" "}
+              to start something new.
             </p>
-            <input
-              value={inputValue}
-              onChange={(e) => setInputValue(e.target.value)}
-              placeholder="Describe what you want next..."
-              className="w-full rounded-lg border border-stone-200/90 bg-stone-50/50 px-4 py-3 text-[14px] text-stone-800 placeholder:text-stone-400 focus:border-sky-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-sky-200/70"
-              disabled={isGenerating || isAuthLocked || isPlanLocked}
-            />
-            {workspaceError ? (
-              <p className="mt-2 text-[11px] text-rose-600">{workspaceError}</p>
-            ) : null}
           </div>
+          {workspaceError ? (
+            <p className="mt-3 text-center text-[11px] text-rose-600">{workspaceError}</p>
+          ) : null}
         </div>
       </section>
+      <FeedbackModal
+        open={showFeedbackModal}
+        submitting={feedbackSubmitting}
+        answers={feedbackAnswers}
+        onSelectFirstMemeThought={(value) =>
+          setFeedbackAnswers((prev) => ({ ...prev, firstMemeThought: value }))
+        }
+        onSelectWouldUseAgain={(value) =>
+          setFeedbackAnswers((prev) => ({ ...prev, wouldUseAgain: value }))
+        }
+        onSelectLooksLikeAiSlop={(value) =>
+          setFeedbackAnswers((prev) => ({ ...prev, looksLikeAiSlop: value }))
+        }
+        onSubmit={() => void handleSubmitFeedback()}
+      />
     </div>
   );
 }
