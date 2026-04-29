@@ -119,56 +119,26 @@ function isTopCaptionTemplate(template: TemplateShape): boolean {
 }
 
 export function hasBadEnding(text: string): boolean {
-  if (!text) return false;
+  const clean = String(text ?? "").trim().toLowerCase();
+  if (!clean) return true;
 
-  const clean = text.trim().toLowerCase();
+  const words = clean.split(/\s+/).filter(Boolean);
+  const lastWord = words[words.length - 1] ?? "";
+
   if (/['",\u2013\u2014-]\s*$/.test(clean)) {
     return true;
   }
 
-  const words = clean.split(/\s+/).filter(Boolean);
-  if (words.length === 0) return false;
-
-  const lastWord = words[words.length - 1];
-
-  const badLastWords = [
-    "of",
-    "for",
-    "with",
-    "to",
-    "in",
-    "on",
-    "after",
-    "before",
-    "during",
-    "and",
-    "but",
-    "so",
-  ];
-
-  if (badLastWords.includes(lastWord)) {
+  if (/^(and|but|so|or)$/.test(lastWord)) {
     return true;
   }
 
-  if (words.length >= 2) {
-    const lastTwo = words.slice(-2).join(" ");
-    const badTwoWordPatterns = [
-      "years of",
-      "type of",
-      "kind of",
-      "part of",
-      "experience in",
-      "because of",
-      "due to",
-      "such as",
-      "when you",
-      "and realize",
-      "on the",
-      "at the",
-    ];
-    if (badTwoWordPatterns.includes(lastTwo)) {
-      return true;
-    }
+  if (/^(of|to|in|on|for|with|by|after|before|during|without)$/.test(lastWord)) {
+    return true;
+  }
+
+  if (/(years of|type of|kind of|part of|because of|due to)$/.test(clean)) {
+    return true;
   }
 
   return false;
