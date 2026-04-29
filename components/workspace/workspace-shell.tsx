@@ -83,7 +83,7 @@ export function WorkspaceShell({
     feedbackTimeoutRef.current = window.setTimeout(() => {
       setShowFeedbackModal(true);
       window.localStorage.setItem("hasSeenFeedbackModal", "true");
-    }, 3000);
+    }, 5000);
   }
 
   async function generateWithFormat(
