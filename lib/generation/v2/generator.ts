@@ -117,6 +117,17 @@ function isIncompleteCaptionEnding(text: string): boolean {
   return false;
 }
 
+function hasGenericFillerEnding(text: string): boolean {
+  const value = String(text ?? "").trim().toLowerCase();
+  if (!value) return false;
+  return (
+    /\band it's over$/.test(value) ||
+    /\band you're done$/.test(value) ||
+    /\band that's it$/.test(value) ||
+    /\band everything is done$/.test(value)
+  );
+}
+
 function doesCaptionFitTopCaption(text: string, template: TemplateShape): boolean {
   const canvasWidth =
     typeof template.canvas_width === "number" && template.canvas_width > 0
@@ -276,6 +287,9 @@ function coerceGeneratedSlots(
   if (isTopCaptionTemplate(template) && isIncompleteCaptionEnding(clean)) {
     throw new Error("Caption is incomplete.");
   }
+  if (isTopCaptionTemplate(template) && hasGenericFillerEnding(clean)) {
+    throw new Error("Caption has generic filler ending.");
+  }
   if (isTopCaptionTemplate(template) && !doesCaptionFitTopCaption(clean, template)) {
     throw new Error("Caption does not fit layout constraints.");
   }
@@ -390,6 +404,8 @@ export async function generateTextFromTemplate(
     "Rewrite the same caption idea in a shorter, tighter form that fits within 2–3 lines. Keep the meaning and joke intact.";
   const completeSentenceRetryHint =
     "Your previous caption was incomplete. Rewrite it as a full, complete sentence that makes sense on its own.";
+  const specificEndingRetryHint =
+    "Avoid generic or filler endings. Make the ending specific, relatable, or meaningful.";
   const singleIdeaRetryHint =
     "Your previous answer included multiple ideas in one slot. Rewrite each slot as a single, clear idea.";
   const pickBest = (items: GeneratedSlots[]): GeneratedSlots =>
@@ -420,6 +436,15 @@ export async function generateTextFromTemplate(
         retryHints[i + 1] = retryHints[i + 1]
           ? `${retryHints[i + 1]}\n${completeSentenceRetryHint}`
           : completeSentenceRetryHint;
+      }
+      if (
+        isTopCaption &&
+        message.includes("Caption has generic filler ending.") &&
+        i + 1 < retryHints.length
+      ) {
+        retryHints[i + 1] = retryHints[i + 1]
+          ? `${retryHints[i + 1]}\n${specificEndingRetryHint}`
+          : specificEndingRetryHint;
       }
       if (
         isContrastBinary &&
