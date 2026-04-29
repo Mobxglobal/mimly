@@ -43,6 +43,33 @@ function hasUsableMetadata(metadata: {
   );
 }
 
+function toNaturalBusinessDescription(structuredContext: string): string {
+  const lines = String(structuredContext ?? "")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const read = (prefix: string) =>
+    lines.find((line) => line.toLowerCase().startsWith(prefix.toLowerCase()))?.slice(prefix.length).trim() ??
+    "";
+
+  const business = read("Business:");
+  const industry = read("Industry:");
+  const audience = read("Audience:");
+  const painPoints = read("Pain points:");
+  const angles = read("Content angles:");
+
+  const parts = [
+    business ? `${business}` : "",
+    industry ? `in the ${industry} space` : "",
+    audience ? `serving ${audience}` : "",
+    painPoints ? `focused on challenges like ${painPoints}` : "",
+    angles ? `with themes around ${angles}` : "",
+  ].filter(Boolean);
+
+  if (!parts.length) return structuredContext;
+  return parts.join(", ");
+}
+
 function assertSupportedOutputFormat(outputFormat: string): asserts outputFormat is MemeOutputFormat {
   if (outputFormat !== "square_image" && outputFormat !== "square_video" && outputFormat !== "square_text") {
     throw new Error(`Unsupported outputFormat "${outputFormat}" for v2.`);
@@ -166,7 +193,7 @@ export async function generateFromInput(params: GenerateFromInputParams): Promis
         const enriched = await enrichContext(metadata);
         const context = buildPromptFromEnrichment(enriched).trim();
         if (context) {
-          promptInput = context;
+          promptInput = toNaturalBusinessDescription(context);
         }
       }
     } catch (error) {
