@@ -179,11 +179,12 @@ function doesCaptionFitTopCaption(text: string, template: TemplateShape): boolea
   const maxWidth = canvasWidth - leftPadding - rightPadding;
   const maxLines =
     typeof template.slot_1_max_lines === "number" && template.slot_1_max_lines > 0
-      ? template.slot_1_max_lines
+      ? Math.max(template.slot_1_max_lines, 3)
       : 3;
   const lines = wrapTextByWidth(text, maxWidth, fontSize);
   if (!lines.length || lines.length > maxLines) return false;
-  if (lines.some((line) => interTextWidthPx(line, fontSize) > maxWidth)) return false;
+  const overflowTolerance = maxWidth * 1.08;
+  if (lines.some((line) => interTextWidthPx(line, fontSize) > overflowTolerance)) return false;
   const connectorWords = new Set([
     "a",
     "an",
@@ -356,7 +357,10 @@ function coerceGeneratedSlots(
     throw new Error("Caption has generic filler ending.");
   }
   if (isTopCaptionTemplate(template) && !doesCaptionFitTopCaption(clean, template)) {
-    throw new Error("Caption does not fit layout constraints.");
+    console.warn("[v2] top-caption layout fit warning (non-blocking)", {
+      slug: normalizeText(template.slug) || null,
+      caption: clean,
+    });
   }
   let isWeak = false;
   if (!isStructured) {
@@ -463,13 +467,7 @@ export async function generateTextFromTemplate(
   const isTopCaption = isTopCaptionTemplate(template);
   const productConcept = detectProductConceptFromPrompt(prompt);
 
-  const retryHints = [
-    undefined,
-    "Fix structure exactly. No labels, no quotes, no line breaks.",
-    "Return concise slot values only and satisfy all slot limits.",
-  ];
-  const fitRetryHint =
-    "Rewrite the same caption idea in a shorter, tighter form that fits within 2–3 lines. Keep the meaning and joke intact.";
+  const retryHints = [undefined, "Fix structure exactly. No labels, no quotes, no line breaks."];
   const completeSentenceRetryHint =
     "Your previous caption was incomplete. Rewrite it as a full, complete sentence that makes sense on its own.";
   const specificEndingRetryHint =
@@ -495,15 +493,6 @@ export async function generateTextFromTemplate(
     } catch (error) {
       lastError = error;
       const message = error instanceof Error ? error.message : String(error);
-      if (
-        isTopCaption &&
-        message.includes("Caption does not fit layout constraints.") &&
-        i + 1 < retryHints.length
-      ) {
-        retryHints[i + 1] = retryHints[i + 1]
-          ? `${retryHints[i + 1]}\n${fitRetryHint}`
-          : fitRetryHint;
-      }
       if (isTopCaption && message.includes("Caption is incomplete.") && i + 1 < retryHints.length) {
         retryHints[i + 1] = retryHints[i + 1]
           ? `${retryHints[i + 1]}\n${completeSentenceRetryHint}`
