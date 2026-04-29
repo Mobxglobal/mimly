@@ -25,6 +25,16 @@ function normalizeInput(value: string): string {
   return String(value ?? "").replace(/\s+/g, " ").trim();
 }
 
+function cleanCaption(text: string | null | undefined): string {
+  if (!text) return "";
+
+  let clean = String(text).trim();
+  clean = clean.replace(/['"]+$/g, "");
+  clean = clean.replace(/[,-–—]+$/g, "");
+
+  return clean.trim();
+}
+
 function hasUsableMetadata(metadata: {
   title?: string;
   description?: string;
@@ -213,14 +223,17 @@ export async function generateFromInput(params: GenerateFromInputParams): Promis
   }
   const prompt = buildSimplePrompt(promptInput, template, { isPromotionalContext: isUrl });
   const generated = await generateTextFromTemplate(prompt, template);
+  const finalTopText = cleanCaption(generated.top_text);
+  const finalBottomText = generated.bottom_text == null ? null : cleanCaption(generated.bottom_text);
+  const finalSlot3Text = generated.slot_3_text == null ? null : cleanCaption(generated.slot_3_text);
 
   const { mediaBuffer, contentType, extension } = await renderByFormat({
     admin,
     template,
     outputFormat,
-    topText: generated.top_text,
-    bottomText: generated.bottom_text,
-    slot3Text: generated.slot_3_text,
+    topText: finalTopText,
+    bottomText: finalBottomText,
+    slot3Text: finalSlot3Text,
   });
 
   const generatedMemeBucket = process.env.MEME_GENERATED_MEMES_BUCKET ?? "generated-memes";
@@ -245,8 +258,8 @@ export async function generateFromInput(params: GenerateFromInputParams): Promis
     template_id: templateId,
     title: generated.title,
     format: String(template.template_name ?? ""),
-    top_text: generated.top_text,
-    bottom_text: generated.bottom_text,
+    top_text: finalTopText,
+    bottom_text: finalBottomText,
     post_caption: null,
     image_url: finalMediaUrl,
     variant_type: "standard",
@@ -275,11 +288,11 @@ export async function generateFromInput(params: GenerateFromInputParams): Promis
     templateSlug: String(template.slug ?? "").trim() || null,
     templateName: String(template.template_name ?? "").trim() || null,
     generatedMemeId: String(inserted.id),
-    generatedText: generated.top_text,
+    generatedText: finalTopText,
     slots: {
-      slot_1: generated.top_text,
-      ...(generated.bottom_text ? { slot_2: generated.bottom_text } : {}),
-      ...(generated.slot_3_text ? { slot_3: generated.slot_3_text } : {}),
+      slot_1: finalTopText,
+      ...(finalBottomText ? { slot_2: finalBottomText } : {}),
+      ...(finalSlot3Text ? { slot_3: finalSlot3Text } : {}),
     },
     template: {
       template_id: templateId,
