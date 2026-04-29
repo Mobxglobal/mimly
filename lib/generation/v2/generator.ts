@@ -118,18 +118,16 @@ function isTopCaptionTemplate(template: TemplateShape): boolean {
   return mechanicGroup === "caption_relatable" || mechanicGroup === "reaction_implication";
 }
 
-function hasBadEnding(text: string): boolean {
+export function hasBadEnding(text: string): boolean {
   if (!text) return false;
 
   const clean = text.trim().toLowerCase();
-  const words = clean.split(/\s+/);
-
-  if (words.length < 3) return false;
+  const words = clean.split(/\s+/).filter(Boolean);
+  if (words.length === 0) return false;
 
   const lastWord = words[words.length - 1];
-  const lastTwoWords = words.slice(-2).join(" ");
 
-  const badSingleWords = [
+  const badLastWords = [
     "of",
     "for",
     "with",
@@ -144,19 +142,30 @@ function hasBadEnding(text: string): boolean {
     "so",
   ];
 
-  const badPhrases = [
-    "years of",
-    "because of",
-    "due to",
-    "such as",
-    "when you",
-    "and realize",
-    "on the",
-    "at the",
-  ];
+  if (badLastWords.includes(lastWord)) {
+    return true;
+  }
 
-  if (badSingleWords.includes(lastWord)) return true;
-  if (badPhrases.includes(lastTwoWords)) return true;
+  if (words.length >= 2) {
+    const lastTwo = words.slice(-2).join(" ");
+    const badTwoWordPatterns = [
+      "years of",
+      "type of",
+      "kind of",
+      "part of",
+      "experience in",
+      "because of",
+      "due to",
+      "such as",
+      "when you",
+      "and realize",
+      "on the",
+      "at the",
+    ];
+    if (badTwoWordPatterns.includes(lastTwo)) {
+      return true;
+    }
+  }
 
   return false;
 }
@@ -408,6 +417,9 @@ function coerceGeneratedSlots(
       caption: clean,
     });
   }
+  if (isTopCaptionTemplate(template)) {
+    console.log("[DEBUG AFTER VALIDATION]", clean);
+  }
   let isWeak = false;
   if (!isStructured) {
     if (
@@ -495,6 +507,8 @@ async function requestSlots(
   }
 
   const parsed = parseJsonObject(content);
+  const generatedText = String(parsed.top_text ?? "");
+  console.log("[DEBUG RAW MODEL OUTPUT]", generatedText);
   return coerceGeneratedSlots(parsed, template, options);
 }
 
@@ -521,7 +535,7 @@ export async function generateTextFromTemplate(
   const punctuationRetryHint =
     "Ensure all quotes and punctuation are properly closed. Do not leave sentences unfinished.";
   const badEndingRetryHint =
-    "Your previous caption ended mid-thought. Complete the sentence fully. Do not end with phrases like 'years of', 'on the', or 'and realize'.";
+    "Your caption ended mid-thought. Always complete the sentence fully. Do not end with phrases like 'years of' or 'after'.";
   const singleIdeaRetryHint =
     "Your previous answer included multiple ideas in one slot. Rewrite each slot as a single, clear idea.";
   const productWinnerRetryHint =

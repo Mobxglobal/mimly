@@ -228,6 +228,8 @@ function wrapImageSlotText(params: {
 }): string[] {
   if (!params.text) return [];
 
+  console.log("[DEBUG TEXT BEFORE WRAP]", params.text);
+
   const mechanicGroup = String(params.template.mechanic_group ?? "").trim().toLowerCase();
   const isTopCaptionMechanic =
     mechanicGroup === "caption_relatable" || mechanicGroup === "reaction_implication";
@@ -242,6 +244,12 @@ function wrapImageSlotText(params: {
     if (isIncompleteEnding(lastLine)) {
       console.warn("Top caption ends incompletely; preserving full text without trimming.");
     }
+    console.log("[DEBUG TOP_CAPTION WRAP COMPARE]", {
+      original: params.text,
+      wrappedLines: lines,
+      wordCountOriginal: params.text.split(/\s+/).filter(Boolean).length,
+      wordCountWrapped: lines.join(" ").split(/\s+/).filter(Boolean).length,
+    });
     console.log("TOP_CAPTION_STANDARD", lines);
     return lines;
   }
