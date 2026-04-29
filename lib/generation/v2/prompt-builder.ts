@@ -12,6 +12,7 @@ export function buildSimplePrompt(input: string, template: TemplateRow): string 
     mechanicGroup === "contrast_binary" ||
     mechanicGroup === "contrast_multi";
   const isNobodyMe = memeMechanic === "nobody_me_setup";
+  const isContrastBinary = memeMechanic === "contrast_binary";
   const isWizardsTalkingSubject =
     templateSlug.includes("wizard") || templateNameLower.includes("wizard");
   const isEightyFourYears = templateSlug === "it-has-been-84-years";
@@ -94,6 +95,19 @@ export function buildSimplePrompt(input: string, template: TemplateRow): string 
         "The slots must directly contrast each other.",
         "They should feel like A vs B.",
         "Make the difference clear and relatable.",
+      ];
+    }
+
+    if (isContrastBinary) {
+      structureRules = [
+        ...structureRules,
+        "Each slot must contain exactly ONE idea.",
+        "Do NOT include multiple options, comparisons, or separators within a single slot.",
+        "Do NOT use characters like '|', '/', 'vs', or 'and/or' to combine ideas.",
+        "Each slot should be a short, standalone phrase.",
+        'BAD: "Ignoring online presence | building trust online"',
+        'GOOD: "Ignoring online presence"',
+        'GOOD: "Building trust online"',
       ];
     }
 

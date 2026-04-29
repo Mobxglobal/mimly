@@ -166,6 +166,18 @@ function buildTopCaptionFallback(prompt: string, template: TemplateShape): strin
   return `When your ${templateName.toLowerCase()} workaround turns into the real problem`;
 }
 
+function isMultiOptionSlot(value: string): boolean {
+  const text = String(value ?? "").toLowerCase();
+  if (!text.trim()) return false;
+  if (text.includes("|")) return true;
+  if (text.includes("/")) return true;
+  if (text.includes(" vs ")) return true;
+  if (text.includes(" and/or ")) return true;
+  if (text.includes(" and ")) return true;
+  if (/\b\w[\w'-]*\b\s*[,;:]\s*\b\w[\w'-]*\b/.test(text)) return true;
+  return false;
+}
+
 function coerceGeneratedSlots(
   raw: Record<string, unknown>,
   template: TemplateShape
@@ -187,6 +199,7 @@ function coerceGeneratedSlots(
   const slug = normalizeText(template.slug).toLowerCase();
   const templateName = normalizeText(template.template_name).toLowerCase();
   const isNobodyMe = memeMechanic === "nobody_me_setup";
+  const isContrastBinary = memeMechanic === "contrast_binary";
   const isWizardsTalkingSubject =
     slug.includes("wizard") || templateName.includes("wizard");
 
@@ -233,6 +246,16 @@ function coerceGeneratedSlots(
       bottom_text: bottomText,
       slot_3_text: slot3,
     };
+  }
+
+  if (isContrastBinary) {
+    const invalidTop = isMultiOptionSlot(clean);
+    const invalidBottom = isMultiOptionSlot(bottomText);
+    if (invalidTop || invalidBottom) {
+      throw new Error(
+        `INVALID_CONTRAST_BINARY_SLOT::${clean}::${bottomText || ""}::${slot3 || ""}`
+      );
+    }
   }
 
   if (!clean) {
@@ -340,6 +363,7 @@ export async function generateTextFromTemplate(
   const isNobodyMe = memeMechanic === "nobody_me_setup";
   const isWizardsTalkingSubject =
     slug.includes("wizard") || templateName.includes("wizard");
+  const isContrastBinary = memeMechanic === "contrast_binary";
   const isTopCaption = isTopCaptionTemplate(template);
 
   const retryHints = [
@@ -349,6 +373,8 @@ export async function generateTextFromTemplate(
   ];
   const fitRetryHint =
     "Rewrite the same caption idea in a shorter, tighter form that fits within 2–3 lines. Keep the meaning and joke intact.";
+  const singleIdeaRetryHint =
+    "Your previous answer included multiple ideas in one slot. Rewrite each slot as a single, clear idea.";
   const pickBest = (items: GeneratedSlots[]): GeneratedSlots =>
     items.reduce((best, current) =>
       current.top_text.length > best.top_text.length ? current : best
@@ -372,6 +398,15 @@ export async function generateTextFromTemplate(
         retryHints[i + 1] = retryHints[i + 1]
           ? `${retryHints[i + 1]}\n${fitRetryHint}`
           : fitRetryHint;
+      }
+      if (
+        isContrastBinary &&
+        message.includes("INVALID_CONTRAST_BINARY_SLOT::") &&
+        i + 1 < retryHints.length
+      ) {
+        retryHints[i + 1] = retryHints[i + 1]
+          ? `${retryHints[i + 1]}\n${singleIdeaRetryHint}`
+          : singleIdeaRetryHint;
       }
       console.warn(`[v2] generation attempt ${i + 1} failed`, error);
     }
@@ -409,6 +444,26 @@ export async function generateTextFromTemplate(
       bottom_text: "Me: checks it again anyway",
       slot_3_text: null,
     };
+  }
+
+  if (isContrastBinary) {
+    const message = lastError instanceof Error ? lastError.message : "";
+    if (message.includes("INVALID_CONTRAST_BINARY_SLOT::")) {
+      const [, rawTop = "", rawBottom = ""] = message.split("::");
+      const firstSegment = (value: string) =>
+        value
+          .split("|")[0]
+          ?.trim()
+          .replace(/[.,…]+$/g, "") || "";
+      const fallbackTop = firstSegment(rawTop) || "Ignoring online presence";
+      const fallbackBottom = firstSegment(rawBottom) || "Building trust online";
+      return {
+        title: `${fallbackTop} vs ${fallbackBottom}`.slice(0, 45),
+        top_text: fallbackTop,
+        bottom_text: fallbackBottom,
+        slot_3_text: null,
+      };
+    }
   }
 
   if (isTopCaptionTemplate(template)) {
