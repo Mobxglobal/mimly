@@ -35,6 +35,41 @@ function cleanCaption(text: string | null | undefined): string {
   return clean.trim();
 }
 
+function fixIncompleteEnding(text: string | null | undefined): string {
+  let clean = String(text ?? "").trim();
+  if (!clean) return "";
+
+  const fixes: Record<string, string> = {
+    "on the first": "on the first try",
+    "on its": "on its promise",
+    "at the end": "at the end of the day",
+    "when you": "when you least expect it",
+    "and realize": "and realize what it really means",
+    and: "",
+    but: "",
+    so: "",
+  };
+
+  for (const [ending, replacement] of Object.entries(fixes)) {
+    if (clean.toLowerCase().endsWith(ending)) {
+      if (replacement) {
+        return clean
+          .slice(0, clean.length - ending.length)
+          .trim()
+          .concat(` ${replacement}`)
+          .trim();
+      }
+      return clean.slice(0, clean.length - ending.length).trim();
+    }
+  }
+
+  return clean;
+}
+
+function polishFinalCaption(text: string | null | undefined): string {
+  return fixIncompleteEnding(cleanCaption(text));
+}
+
 function hasUsableMetadata(metadata: {
   title?: string;
   description?: string;
@@ -223,9 +258,11 @@ export async function generateFromInput(params: GenerateFromInputParams): Promis
   }
   const prompt = buildSimplePrompt(promptInput, template, { isPromotionalContext: isUrl });
   const generated = await generateTextFromTemplate(prompt, template);
-  const finalTopText = cleanCaption(generated.top_text);
-  const finalBottomText = generated.bottom_text == null ? null : cleanCaption(generated.bottom_text);
-  const finalSlot3Text = generated.slot_3_text == null ? null : cleanCaption(generated.slot_3_text);
+  const finalTopText = polishFinalCaption(generated.top_text);
+  const finalBottomText =
+    generated.bottom_text == null ? null : polishFinalCaption(generated.bottom_text);
+  const finalSlot3Text =
+    generated.slot_3_text == null ? null : polishFinalCaption(generated.slot_3_text);
 
   const { mediaBuffer, contentType, extension } = await renderByFormat({
     admin,
