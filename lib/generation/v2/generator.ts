@@ -118,6 +118,49 @@ function isTopCaptionTemplate(template: TemplateShape): boolean {
   return mechanicGroup === "caption_relatable" || mechanicGroup === "reaction_implication";
 }
 
+function hasBadEnding(text: string): boolean {
+  if (!text) return false;
+
+  const clean = text.trim().toLowerCase();
+  const words = clean.split(/\s+/);
+
+  if (words.length < 3) return false;
+
+  const lastWord = words[words.length - 1];
+  const lastTwoWords = words.slice(-2).join(" ");
+
+  const badSingleWords = [
+    "of",
+    "for",
+    "with",
+    "to",
+    "in",
+    "on",
+    "after",
+    "before",
+    "during",
+    "and",
+    "but",
+    "so",
+  ];
+
+  const badPhrases = [
+    "years of",
+    "because of",
+    "due to",
+    "such as",
+    "when you",
+    "and realize",
+    "on the",
+    "at the",
+  ];
+
+  if (badSingleWords.includes(lastWord)) return true;
+  if (badPhrases.includes(lastTwoWords)) return true;
+
+  return false;
+}
+
 function isIncompleteCaptionEnding(text: string): boolean {
   const value = String(text ?? "").trim().toLowerCase();
   if (!value) return true;
@@ -356,6 +399,9 @@ function coerceGeneratedSlots(
   if (isTopCaptionTemplate(template) && hasGenericFillerEnding(clean)) {
     throw new Error("Caption has generic filler ending.");
   }
+  if (isTopCaptionTemplate(template) && hasBadEnding(clean)) {
+    throw new Error("Caption ends mid-thought.");
+  }
   if (isTopCaptionTemplate(template) && !doesCaptionFitTopCaption(clean, template)) {
     console.warn("[v2] top-caption layout fit warning (non-blocking)", {
       slug: normalizeText(template.slug) || null,
@@ -474,6 +520,8 @@ export async function generateTextFromTemplate(
     "Avoid generic or filler endings. Make the ending specific, relatable, or meaningful.";
   const punctuationRetryHint =
     "Ensure all quotes and punctuation are properly closed. Do not leave sentences unfinished.";
+  const badEndingRetryHint =
+    "Your previous caption ended mid-thought. Complete the sentence fully. Do not end with phrases like 'years of', 'on the', or 'and realize'.";
   const singleIdeaRetryHint =
     "Your previous answer included multiple ideas in one slot. Rewrite each slot as a single, clear idea.";
   const productWinnerRetryHint =
@@ -515,6 +563,15 @@ export async function generateTextFromTemplate(
         retryHints[i + 1] = retryHints[i + 1]
           ? `${retryHints[i + 1]}\n${punctuationRetryHint}`
           : punctuationRetryHint;
+      }
+      if (
+        isTopCaption &&
+        message.includes("Caption ends mid-thought.") &&
+        i + 1 < retryHints.length
+      ) {
+        retryHints[i + 1] = retryHints[i + 1]
+          ? `${retryHints[i + 1]}\n${badEndingRetryHint}`
+          : badEndingRetryHint;
       }
       if (
         isContrastBinary &&
