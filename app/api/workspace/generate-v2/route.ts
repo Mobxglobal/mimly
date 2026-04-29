@@ -5,6 +5,8 @@ type GenerateV2Body = {
   workspaceId?: unknown;
   input?: unknown;
   outputFormat?: unknown;
+  format?: unknown;
+  templateSlug?: unknown;
 };
 
 export async function POST(request: Request) {
@@ -17,7 +19,8 @@ export async function POST(request: Request) {
 
   const workspaceId = String(body.workspaceId ?? "").trim();
   const input = String(body.input ?? "").trim();
-  const outputFormat = String(body.outputFormat ?? "").trim();
+  const outputFormat = String(body.outputFormat ?? body.format ?? "").trim();
+  const templateSlug = String(body.templateSlug ?? "").trim();
 
   if (!workspaceId) {
     return NextResponse.json({ error: "workspaceId is required." }, { status: 400 });
@@ -40,6 +43,7 @@ export async function POST(request: Request) {
           | "square_image"
           | "square_video"
           | "square_text",
+        templateSlug: templateSlug || undefined,
       });
     } catch (err) {
       const recoveredError = err as { message?: string };
@@ -54,6 +58,7 @@ export async function POST(request: Request) {
             | "square_image"
             | "square_video"
             | "square_text",
+          templateSlug: templateSlug || undefined,
         });
       } catch (err2) {
         console.warn("V2 fallback also failed, returning safe default");

@@ -9,11 +9,15 @@ import { renderSquareTextMemePng } from "@/renderer/renderSquareTextMeme";
 import { pickTemplateSimple } from "@/lib/generation/v2/template-picker";
 import { buildSimplePrompt } from "@/lib/generation/v2/prompt-builder";
 import { generateTextFromTemplate } from "@/lib/generation/v2/generator";
+import { extractMetadata } from "@/lib/url/extract-metadata";
+import { enrichContext } from "@/lib/url/enrich-context";
+import { buildPromptFromEnrichment } from "@/lib/url/build-context";
 
 type GenerateFromInputParams = {
   workspaceId: string;
   input: string;
   outputFormat: MemeOutputFormat;
+  templateSlug?: string;
 };
 
 type Json = string | number | boolean | null | { [key: string]: Json } | Json[];
@@ -21,6 +25,22 @@ type TemplateRow = Record<string, unknown>;
 
 function normalizeInput(value: string): string {
   return String(value ?? "").replace(/\s+/g, " ").trim();
+}
+
+function hasUsableMetadata(metadata: {
+  title?: string;
+  description?: string;
+  ogTitle?: string;
+  ogDescription?: string;
+  h1?: string;
+}): boolean {
+  return Boolean(
+    String(metadata.title ?? "").trim() ||
+      String(metadata.description ?? "").trim() ||
+      String(metadata.ogTitle ?? "").trim() ||
+      String(metadata.ogDescription ?? "").trim() ||
+      String(metadata.h1 ?? "").trim()
+  );
 }
 
 function assertSupportedOutputFormat(outputFormat: string): asserts outputFormat is MemeOutputFormat {
@@ -102,12 +122,21 @@ async function renderByFormat(params: {
 
 export async function generateFromInput(params: GenerateFromInputParams): Promise<{
   finalMediaUrl: string;
+  templateSlug: string | null;
+  templateName: string | null;
   template: { template_id: string; slug: string | null; template_name: string | null };
   generatedMemeId: string;
+  generatedText: string;
+  slots: {
+    slot_1: string;
+    slot_2?: string;
+    slot_3?: string;
+  };
 }> {
   const workspaceId = String(params.workspaceId ?? "").trim();
   const input = normalizeInput(params.input);
   const outputFormat = String(params.outputFormat ?? "").trim();
+  const templateSlug = String(params.templateSlug ?? "").trim();
   assertSupportedOutputFormat(outputFormat);
 
   if (!workspaceId) throw new Error("workspaceId is required.");
@@ -126,10 +155,25 @@ export async function generateFromInput(params: GenerateFromInputParams): Promis
 
   if (templatesError) throw new Error(templatesError.message);
   const templates = (templatesRaw ?? []) as TemplateRow[];
-  const template = pickTemplateSimple(outputFormat, templates);
+  const template = pickTemplateSimple(outputFormat, templates, templateSlug || undefined);
   console.log("TEMPLATE DEBUG - SELECTED", template);
-
-  const prompt = buildSimplePrompt(input, template);
+  const isUrl = typeof input === "string" && input.startsWith("http");
+  let promptInput = input;
+  if (isUrl) {
+    try {
+      const metadata = await extractMetadata(input);
+      if (hasUsableMetadata(metadata)) {
+        const enriched = await enrichContext(metadata);
+        const context = buildPromptFromEnrichment(enriched).trim();
+        if (context) {
+          promptInput = context;
+        }
+      }
+    } catch (error) {
+      console.warn("[v2] URL enrichment failed; falling back to raw input", error);
+    }
+  }
+  const prompt = buildSimplePrompt(promptInput, template);
   const generated = await generateTextFromTemplate(prompt, template);
 
   const { mediaBuffer, contentType, extension } = await renderByFormat({
@@ -190,7 +234,15 @@ export async function generateFromInput(params: GenerateFromInputParams): Promis
 
   return {
     finalMediaUrl,
+    templateSlug: String(template.slug ?? "").trim() || null,
+    templateName: String(template.template_name ?? "").trim() || null,
     generatedMemeId: String(inserted.id),
+    generatedText: generated.top_text,
+    slots: {
+      slot_1: generated.top_text,
+      ...(generated.bottom_text ? { slot_2: generated.bottom_text } : {}),
+      ...(generated.slot_3_text ? { slot_3: generated.slot_3_text } : {}),
+    },
     template: {
       template_id: templateId,
       slug: String(template.slug ?? "").trim() || null,

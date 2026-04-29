@@ -17,9 +17,21 @@ function pickRandom<T>(items: T[]): T {
 
 export function pickTemplateSimple(
   outputFormat: MemeOutputFormat,
-  templates: TemplateRow[]
+  templates: TemplateRow[],
+  templateSlug?: string
 ): TemplateRow {
   const active = templates.filter(isActiveTemplate);
+  const forcedSlug = String(templateSlug ?? "").trim().toLowerCase();
+
+  if (forcedSlug) {
+    const forced = active.find(
+      (template) => String(template.slug ?? "").trim().toLowerCase() === forcedSlug
+    );
+    if (!forced) {
+      throw new Error(`Template not found for slug: ${templateSlug}`);
+    }
+    return forced;
+  }
 
   const compatible = active.filter((template) => {
     const assetType = String(template.asset_type ?? "image").toLowerCase();
