@@ -106,6 +106,17 @@ function isTopCaptionTemplate(template: TemplateShape): boolean {
   return mechanicGroup === "caption_relatable" || mechanicGroup === "reaction_implication";
 }
 
+function isIncompleteCaptionEnding(text: string): boolean {
+  const value = String(text ?? "").trim().toLowerCase();
+  if (!value) return true;
+
+  if (/\b(and|but|so|or)$/.test(value)) return true;
+  if (/\b(and remember|when you|when you realise|but then)$/.test(value)) return true;
+  if (/\b(when|because|while|if|although|unless)$/.test(value)) return true;
+
+  return false;
+}
+
 function doesCaptionFitTopCaption(text: string, template: TemplateShape): boolean {
   const canvasWidth =
     typeof template.canvas_width === "number" && template.canvas_width > 0
@@ -152,6 +163,7 @@ function doesCaptionFitTopCaption(text: string, template: TemplateShape): boolea
   const words = normalized.split(/\s+/).filter(Boolean);
   const finalWord = words[words.length - 1] ?? "";
   if (!finalWord || connectorWords.has(finalWord)) return false;
+  if (isIncompleteCaptionEnding(text)) return false;
   return true;
 }
 
@@ -260,6 +272,9 @@ function coerceGeneratedSlots(
 
   if (!clean) {
     throw new Error("Model returned empty top_text.");
+  }
+  if (isTopCaptionTemplate(template) && isIncompleteCaptionEnding(clean)) {
+    throw new Error("Caption is incomplete.");
   }
   if (isTopCaptionTemplate(template) && !doesCaptionFitTopCaption(clean, template)) {
     throw new Error("Caption does not fit layout constraints.");
@@ -373,6 +388,8 @@ export async function generateTextFromTemplate(
   ];
   const fitRetryHint =
     "Rewrite the same caption idea in a shorter, tighter form that fits within 2–3 lines. Keep the meaning and joke intact.";
+  const completeSentenceRetryHint =
+    "Your previous caption was incomplete. Rewrite it as a full, complete sentence that makes sense on its own.";
   const singleIdeaRetryHint =
     "Your previous answer included multiple ideas in one slot. Rewrite each slot as a single, clear idea.";
   const pickBest = (items: GeneratedSlots[]): GeneratedSlots =>
@@ -398,6 +415,11 @@ export async function generateTextFromTemplate(
         retryHints[i + 1] = retryHints[i + 1]
           ? `${retryHints[i + 1]}\n${fitRetryHint}`
           : fitRetryHint;
+      }
+      if (isTopCaption && message.includes("Caption is incomplete.") && i + 1 < retryHints.length) {
+        retryHints[i + 1] = retryHints[i + 1]
+          ? `${retryHints[i + 1]}\n${completeSentenceRetryHint}`
+          : completeSentenceRetryHint;
       }
       if (
         isContrastBinary &&
