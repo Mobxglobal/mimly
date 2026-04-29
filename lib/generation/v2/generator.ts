@@ -122,6 +122,10 @@ export function hasBadEnding(text: string): boolean {
   if (!text) return false;
 
   const clean = text.trim().toLowerCase();
+  if (/['",\u2013\u2014-]\s*$/.test(clean)) {
+    return true;
+  }
+
   const words = clean.split(/\s+/).filter(Boolean);
   if (words.length === 0) return false;
 

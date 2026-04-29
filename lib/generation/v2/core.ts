@@ -25,10 +25,17 @@ function normalizeInput(value: string): string {
   return String(value ?? "").replace(/\s+/g, " ").trim();
 }
 
-/** Pass-through only: incomplete captions must be rejected in generator validation, not patched here. */
+function fixTrailingGarbage(text: string): string {
+  return text
+    .replace(/['"]$/, "")
+    .replace(/[,，\u2013\u2014\-]\s*$/, "");
+}
+
+/** Minimal end-of-string cleanup only; incomplete thoughts are handled in generator validation. */
 function polishFinalCaption(text: string | null | undefined): string {
-  if (text == null) return "";
-  return String(text);
+  if (!text) return "";
+  const clean = fixTrailingGarbage(String(text).trim());
+  return clean;
 }
 
 function hasUsableMetadata(metadata: {
