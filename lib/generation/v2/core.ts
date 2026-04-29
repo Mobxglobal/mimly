@@ -200,7 +200,7 @@ export async function generateFromInput(params: GenerateFromInputParams): Promis
       console.warn("[v2] URL enrichment failed; falling back to raw input", error);
     }
   }
-  const prompt = buildSimplePrompt(promptInput, template);
+  const prompt = buildSimplePrompt(promptInput, template, { isPromotionalContext: isUrl });
   const generated = await generateTextFromTemplate(prompt, template);
 
   const { mediaBuffer, contentType, extension } = await renderByFormat({

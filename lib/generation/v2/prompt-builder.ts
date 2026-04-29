@@ -19,7 +19,11 @@ function detectProductConcept(input: string): string | null {
   return null;
 }
 
-export function buildSimplePrompt(input: string, template: TemplateRow): string {
+export function buildSimplePrompt(
+  input: string,
+  template: TemplateRow,
+  options?: { isPromotionalContext?: boolean }
+): string {
   const userInput = String(input ?? "").replace(/\s+/g, " ").trim();
   const templateName = String(template.template_name ?? template.slug ?? "template").trim();
   const templateSlug = String(template.slug ?? "").trim().toLowerCase();
@@ -45,6 +49,30 @@ export function buildSimplePrompt(input: string, template: TemplateRow): string 
   const hasThirdSlot =
     template.slot_3_max_chars != null || template.slot_3_max_lines != null;
   const productConcept = detectProductConcept(userInput);
+  const isPromotionalContext = options?.isPromotionalContext === true;
+  const promotionalBlock = isPromotionalContext
+    ? [
+        "PROMOTIONAL CONTEXT:",
+        "The user input represents a real business, product, or service.",
+        "Your goal is to create a meme that:",
+        "* makes the business look appealing, useful, or desirable",
+        "* highlights a positive outcome, benefit, or relatable win",
+        "* frames the business as the better choice or solution",
+        "DO NOT:",
+        "* describe the business neutrally",
+        "* repeat raw input text",
+        "* include messy or keyword-style fragments",
+        "* make the business look bad or irrelevant",
+        "INSTEAD:",
+        "* turn the business into a relatable scenario",
+        "* show why someone would choose or appreciate it",
+        "* keep it subtle and meme-native, not like a direct ad",
+        "If the caption follows a 'When X...' format, ensure X leads to a positive or satisfying outcome involving the business.",
+        "BAD: When business: flooring company in bath",
+        "NEUTRAL (NOT GOOD ENOUGH): When you need flooring services",
+        "GOOD: When the flooring company actually gets everything right first time",
+      ]
+    : [];
 
   const slotSchema = {
     title: "short title, under 45 chars",
@@ -58,10 +86,7 @@ export function buildSimplePrompt(input: string, template: TemplateRow): string 
       "Write meme content as valid JSON only.",
       `Template: ${templateName}`,
       `User input: ${userInput}`,
-      "Interpret the user input as a real-world business or product. Do NOT repeat or copy the input text directly. Instead, express it as natural, human language.",
-      "Do NOT include raw labels like 'Business:', 'Industry:', or keyword-style fragments in the caption.",
-      "BAD: When business: flooring company in bath",
-      "GOOD: When a flooring company in Bath takes things too far",
+      ...promotionalBlock,
       "This is a structured contrast meme.",
       "Return EXACTLY 3 slots mapped as:",
       "top_text = slot_1",
@@ -83,10 +108,7 @@ export function buildSimplePrompt(input: string, template: TemplateRow): string 
       "Write meme content as valid JSON only.",
       `Template: ${templateName}`,
       `User input: ${userInput}`,
-      "Interpret the user input as a real-world business or product. Do NOT repeat or copy the input text directly. Instead, express it as natural, human language.",
-      "Do NOT include raw labels like 'Business:', 'Industry:', or keyword-style fragments in the caption.",
-      "BAD: When business: flooring company in bath",
-      "GOOD: When a flooring company in Bath takes things too far",
+      ...promotionalBlock,
       "",
       "This is a Nobody / Me format meme.",
       "slot_1 is fixed and must ALWAYS be exactly: Nobody:",
@@ -114,10 +136,7 @@ export function buildSimplePrompt(input: string, template: TemplateRow): string 
       "Write meme content as valid JSON only.",
       `Template: ${templateName}`,
       `User input: ${userInput}`,
-      "Interpret the user input as a real-world business or product. Do NOT repeat or copy the input text directly. Instead, express it as natural, human language.",
-      "Do NOT include raw labels like 'Business:', 'Industry:', or keyword-style fragments in the caption.",
-      "BAD: When business: flooring company in bath",
-      "GOOD: When a flooring company in Bath takes things too far",
+      ...promotionalBlock,
       "Each slot is a short label (1–4 words).",
       "Do NOT write sentences.",
     ];
@@ -197,10 +216,7 @@ export function buildSimplePrompt(input: string, template: TemplateRow): string 
     "Write meme copy as valid JSON only.",
     `Template: ${templateName}`,
     `User input: ${userInput}`,
-    "Interpret the user input as a real-world business or product. Do NOT repeat or copy the input text directly. Instead, express it as natural, human language.",
-    "Do NOT include raw labels like 'Business:', 'Industry:', or keyword-style fragments in the caption.",
-    "BAD: When business: flooring company in bath",
-    "GOOD: When a flooring company in Bath takes things too far",
+    ...promotionalBlock,
     "You are generating a top-caption meme.",
     "",
     "STRICT RULES (must follow):",
