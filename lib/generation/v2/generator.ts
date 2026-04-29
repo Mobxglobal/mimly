@@ -140,6 +140,34 @@ function hasGenericFillerEnding(text: string): boolean {
   );
 }
 
+function hasBalancedPunctuation(text: string): boolean {
+  const value = String(text ?? "");
+  const singleQuotes = (value.match(/'/g) ?? []).length;
+  const doubleQuotes = (value.match(/"/g) ?? []).length;
+  const openParens = (value.match(/\(/g) ?? []).length;
+  const closeParens = (value.match(/\)/g) ?? []).length;
+
+  if (singleQuotes % 2 !== 0) return false;
+  if (doubleQuotes % 2 !== 0) return false;
+  if (openParens !== closeParens) return false;
+  return true;
+}
+
+function autoCloseSingleDanglingQuote(text: string): string {
+  const value = String(text ?? "");
+  const singleQuotes = (value.match(/'/g) ?? []).length;
+  const doubleQuotes = (value.match(/"/g) ?? []).length;
+  const openParens = (value.match(/\(/g) ?? []).length;
+  const closeParens = (value.match(/\)/g) ?? []).length;
+
+  if (openParens !== closeParens) return value;
+  if (doubleQuotes % 2 !== 0) return value;
+  if (singleQuotes % 2 !== 0) {
+    return `${value}'`;
+  }
+  return value;
+}
+
 function doesCaptionFitTopCaption(text: string, template: TemplateShape): boolean {
   const canvasWidth =
     typeof template.canvas_width === "number" && template.canvas_width > 0
@@ -223,7 +251,7 @@ function coerceGeneratedSlots(
   const rawBottom = String(raw.bottom_text ?? "");
   const rawSlot3 = String(raw.slot_3_text ?? "");
   const top = cleanSlotText(rawTop);
-  const clean = top.replace(/[.,…]+$/g, "").trim();
+  let clean = top.replace(/[.,…]+$/g, "").trim();
   let bottomText = cleanSlotText(rawBottom);
   let slot3 = cleanSlotText(rawSlot3);
   const mechanicGroup = normalizeText(template.mechanic_group);
@@ -315,6 +343,14 @@ function coerceGeneratedSlots(
   }
   if (isTopCaptionTemplate(template) && isIncompleteCaptionEnding(clean)) {
     throw new Error("Caption is incomplete.");
+  }
+  if (isTopCaptionTemplate(template) && !hasBalancedPunctuation(clean)) {
+    const autoClosed = autoCloseSingleDanglingQuote(clean);
+    if (autoClosed !== clean && hasBalancedPunctuation(autoClosed)) {
+      clean = autoClosed;
+    } else {
+      throw new Error("Caption has invalid punctuation balance.");
+    }
   }
   if (isTopCaptionTemplate(template) && hasGenericFillerEnding(clean)) {
     throw new Error("Caption has generic filler ending.");
@@ -438,6 +474,8 @@ export async function generateTextFromTemplate(
     "Your previous caption was incomplete. Rewrite it as a full, complete sentence that makes sense on its own.";
   const specificEndingRetryHint =
     "Avoid generic or filler endings. Make the ending specific, relatable, or meaningful.";
+  const punctuationRetryHint =
+    "Ensure all quotes and punctuation are properly closed. Do not leave sentences unfinished.";
   const singleIdeaRetryHint =
     "Your previous answer included multiple ideas in one slot. Rewrite each slot as a single, clear idea.";
   const productWinnerRetryHint =
@@ -479,6 +517,15 @@ export async function generateTextFromTemplate(
         retryHints[i + 1] = retryHints[i + 1]
           ? `${retryHints[i + 1]}\n${specificEndingRetryHint}`
           : specificEndingRetryHint;
+      }
+      if (
+        isTopCaption &&
+        message.includes("Caption has invalid punctuation balance.") &&
+        i + 1 < retryHints.length
+      ) {
+        retryHints[i + 1] = retryHints[i + 1]
+          ? `${retryHints[i + 1]}\n${punctuationRetryHint}`
+          : punctuationRetryHint;
       }
       if (
         isContrastBinary &&
