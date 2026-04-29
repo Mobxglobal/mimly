@@ -50,6 +50,11 @@ export function buildSimplePrompt(
     template.slot_3_max_chars != null || template.slot_3_max_lines != null;
   const productConcept = detectProductConcept(userInput);
   const isPromotionalContext = options?.isPromotionalContext === true;
+  const naturalRewriteRules = [
+    "Interpret the input as a real business or product.",
+    "Do NOT repeat it directly.",
+    "Rewrite it naturally.",
+  ];
   const promotionalBlock = isPromotionalContext
     ? [
         "PROMOTIONAL CONTEXT:",
@@ -86,6 +91,7 @@ export function buildSimplePrompt(
       "Write meme content as valid JSON only.",
       `Template: ${templateName}`,
       `User input: ${userInput}`,
+      ...naturalRewriteRules,
       ...promotionalBlock,
       "This is a structured contrast meme.",
       "Return EXACTLY 3 slots mapped as:",
@@ -108,6 +114,7 @@ export function buildSimplePrompt(
       "Write meme content as valid JSON only.",
       `Template: ${templateName}`,
       `User input: ${userInput}`,
+      ...naturalRewriteRules,
       ...promotionalBlock,
       "",
       "This is a Nobody / Me format meme.",
@@ -136,6 +143,7 @@ export function buildSimplePrompt(
       "Write meme content as valid JSON only.",
       `Template: ${templateName}`,
       `User input: ${userInput}`,
+      ...naturalRewriteRules,
       ...promotionalBlock,
       "Each slot is a short label (1–4 words).",
       "Do NOT write sentences.",
@@ -216,6 +224,7 @@ export function buildSimplePrompt(
     "Write meme copy as valid JSON only.",
     `Template: ${templateName}`,
     `User input: ${userInput}`,
+    ...naturalRewriteRules,
     ...promotionalBlock,
     "You are generating a top-caption meme.",
     "",

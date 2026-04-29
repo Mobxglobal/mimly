@@ -10,8 +10,6 @@ import { pickTemplateSimple } from "@/lib/generation/v2/template-picker";
 import { buildSimplePrompt } from "@/lib/generation/v2/prompt-builder";
 import { generateTextFromTemplate } from "@/lib/generation/v2/generator";
 import { extractMetadata } from "@/lib/url/extract-metadata";
-import { enrichContext } from "@/lib/url/enrich-context";
-import { buildPromptFromEnrichment } from "@/lib/url/build-context";
 
 type GenerateFromInputParams = {
   workspaceId: string;
@@ -43,31 +41,45 @@ function hasUsableMetadata(metadata: {
   );
 }
 
-function toNaturalBusinessDescription(structuredContext: string): string {
-  const lines = String(structuredContext ?? "")
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean);
-  const read = (prefix: string) =>
-    lines.find((line) => line.toLowerCase().startsWith(prefix.toLowerCase()))?.slice(prefix.length).trim() ??
-    "";
+function dedupeAdjacentWords(text: string): string {
+  const words = text.split(" ").filter(Boolean);
+  const out: string[] = [];
+  let prev = "";
+  for (const word of words) {
+    const normalized = word.toLowerCase();
+    if (normalized === prev) continue;
+    out.push(word);
+    prev = normalized;
+  }
+  return out.join(" ");
+}
 
-  const business = read("Business:");
-  const industry = read("Industry:");
-  const audience = read("Audience:");
-  const painPoints = read("Pain points:");
-  const angles = read("Content angles:");
+function cleanMetadataText(text: string): string {
+  const normalized = String(text ?? "")
+    .replace(/\s+/g, " ")
+    .replace(/[|]+/g, " ")
+    .replace(/([!?.,])\1+/g, "$1")
+    .replace(/[^\w\s.,'&-]/g, " ")
+    .trim();
+  const deduped = dedupeAdjacentWords(normalized);
+  return deduped.slice(0, 150).trim();
+}
 
-  const parts = [
-    business ? `${business}` : "",
-    industry ? `in the ${industry} space` : "",
-    audience ? `serving ${audience}` : "",
-    painPoints ? `focused on challenges like ${painPoints}` : "",
-    angles ? `with themes around ${angles}` : "",
-  ].filter(Boolean);
-
-  if (!parts.length) return structuredContext;
-  return parts.join(", ");
+function buildSimpleUrlPromptInput(metadata: {
+  title?: string;
+  description?: string;
+  ogTitle?: string;
+  ogDescription?: string;
+  h1?: string;
+}): string {
+  const bestRaw =
+    String(metadata.description ?? "").trim() ||
+    String(metadata.ogDescription ?? "").trim() ||
+    String(metadata.title ?? "").trim() ||
+    String(metadata.ogTitle ?? "").trim() ||
+    String(metadata.h1 ?? "").trim();
+  const cleanInput = cleanMetadataText(bestRaw);
+  return cleanInput || "A business offering products or services";
 }
 
 function assertSupportedOutputFormat(outputFormat: string): asserts outputFormat is MemeOutputFormat {
@@ -190,14 +202,13 @@ export async function generateFromInput(params: GenerateFromInputParams): Promis
     try {
       const metadata = await extractMetadata(input);
       if (hasUsableMetadata(metadata)) {
-        const enriched = await enrichContext(metadata);
-        const context = buildPromptFromEnrichment(enriched).trim();
-        if (context) {
-          promptInput = toNaturalBusinessDescription(context);
-        }
+        promptInput = buildSimpleUrlPromptInput(metadata);
+      } else {
+        promptInput = "A business offering products or services";
       }
     } catch (error) {
-      console.warn("[v2] URL enrichment failed; falling back to raw input", error);
+      console.warn("[v2] URL metadata extraction failed; using MVP fallback", error);
+      promptInput = "A business offering products or services";
     }
   }
   const prompt = buildSimplePrompt(promptInput, template, { isPromotionalContext: isUrl });
