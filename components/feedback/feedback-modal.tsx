@@ -56,7 +56,7 @@ export function FeedbackModal({
     <div className="fixed inset-0 z-[120] flex items-center justify-center bg-stone-900/35 px-4 backdrop-blur-[2px]">
       <div className="w-full max-w-md rounded-3xl border border-stone-200 bg-white p-5 shadow-2xl">
         <p className="mb-4 text-sm font-semibold text-stone-900">
-          Be honest — is this something you&apos;d actually post?
+          Help me improve Mimly
         </p>
         <div className="space-y-4">
           <div>
