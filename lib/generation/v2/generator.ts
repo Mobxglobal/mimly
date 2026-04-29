@@ -14,6 +14,18 @@ function normalizeText(value: unknown): string {
   return String(value ?? "").replace(/\s+/g, " ").trim();
 }
 
+function detectProductConceptFromPrompt(prompt: string): string | null {
+  const text = String(prompt ?? "");
+  const productCue =
+    text.match(/Product\/service to position as winner in slot_2:\s*([^\n]+)/i)?.[1]?.trim() ??
+    text.match(/Business:\s*([^\n]+)/i)?.[1]?.trim() ??
+    text.match(/Product:\s*([^\n]+)/i)?.[1]?.trim() ??
+    text.match(/Service:\s*([^\n]+)/i)?.[1]?.trim() ??
+    null;
+  if (!productCue) return null;
+  return productCue.replace(/\s+/g, " ").trim().slice(0, 80) || null;
+}
+
 function cleanSlotText(value: unknown): string {
   return String(value ?? "")
     .replace(/[\r\n]+/g, " ")
@@ -203,7 +215,8 @@ function isMultiOptionSlot(value: string): boolean {
 
 function coerceGeneratedSlots(
   raw: Record<string, unknown>,
-  template: TemplateShape
+  template: TemplateShape,
+  options?: { productConcept?: string | null }
 ): GeneratedSlots {
   const title = normalizeText(raw.title);
   const rawTop = String(raw.top_text ?? "");
@@ -223,8 +236,10 @@ function coerceGeneratedSlots(
   const templateName = normalizeText(template.template_name).toLowerCase();
   const isNobodyMe = memeMechanic === "nobody_me_setup";
   const isContrastBinary = memeMechanic === "contrast_binary";
+  const isSpatialRoles = memeMechanic === "spatial_roles";
   const isWizardsTalkingSubject =
     slug.includes("wizard") || templateName.includes("wizard");
+  const productConcept = normalizeText(options?.productConcept).toLowerCase();
 
   if (isNobodyMe) {
     const parts = bottomText.split(/Me:/i).filter(Boolean);
@@ -278,6 +293,20 @@ function coerceGeneratedSlots(
       throw new Error(
         `INVALID_CONTRAST_BINARY_SLOT::${clean}::${bottomText || ""}::${slot3 || ""}`
       );
+    }
+  }
+  if ((isContrastBinary || isSpatialRoles) && productConcept) {
+    const slot2Normalized = normalizeText(bottomText).toLowerCase();
+    const productTokens = productConcept
+      .split(/\s+/)
+      .map((t) => t.trim())
+      .filter((t) => t.length >= 4)
+      .slice(0, 3);
+    const hasProductInSlot2 =
+      slot2Normalized.includes(productConcept) ||
+      productTokens.some((token) => slot2Normalized.includes(token));
+    if (!hasProductInSlot2) {
+      throw new Error("PRODUCT_NOT_IN_SLOT_2");
     }
   }
 
@@ -335,7 +364,8 @@ function coerceGeneratedSlots(
 async function requestSlots(
   prompt: string,
   template: TemplateShape,
-  retryHint?: string
+  retryHint?: string,
+  options?: { productConcept?: string | null }
 ): Promise<GeneratedSlots> {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
@@ -379,7 +409,7 @@ async function requestSlots(
   }
 
   const parsed = parseJsonObject(content);
-  return coerceGeneratedSlots(parsed, template);
+  return coerceGeneratedSlots(parsed, template, options);
 }
 
 export async function generateTextFromTemplate(
@@ -393,7 +423,9 @@ export async function generateTextFromTemplate(
   const isWizardsTalkingSubject =
     slug.includes("wizard") || templateName.includes("wizard");
   const isContrastBinary = memeMechanic === "contrast_binary";
+  const isSpatialRoles = memeMechanic === "spatial_roles";
   const isTopCaption = isTopCaptionTemplate(template);
+  const productConcept = detectProductConceptFromPrompt(prompt);
 
   const retryHints = [
     undefined,
@@ -408,6 +440,8 @@ export async function generateTextFromTemplate(
     "Avoid generic or filler endings. Make the ending specific, relatable, or meaningful.";
   const singleIdeaRetryHint =
     "Your previous answer included multiple ideas in one slot. Rewrite each slot as a single, clear idea.";
+  const productWinnerRetryHint =
+    "The product/service must be the better option in slot_2. Rewrite so slot_1 is worse and slot_2 clearly includes the product/service as the preferred choice.";
   const pickBest = (items: GeneratedSlots[]): GeneratedSlots =>
     items.reduce((best, current) =>
       current.top_text.length > best.top_text.length ? current : best
@@ -418,7 +452,7 @@ export async function generateTextFromTemplate(
   for (let i = 0; i < retryHints.length; i += 1) {
     try {
       const hint = retryHints[i];
-      const res = await requestSlots(prompt, template, hint);
+      const res = await requestSlots(prompt, template, hint, { productConcept });
       results.push(res);
     } catch (error) {
       lastError = error;
@@ -454,6 +488,16 @@ export async function generateTextFromTemplate(
         retryHints[i + 1] = retryHints[i + 1]
           ? `${retryHints[i + 1]}\n${singleIdeaRetryHint}`
           : singleIdeaRetryHint;
+      }
+      if (
+        (isContrastBinary || isSpatialRoles) &&
+        productConcept &&
+        message.includes("PRODUCT_NOT_IN_SLOT_2") &&
+        i + 1 < retryHints.length
+      ) {
+        retryHints[i + 1] = retryHints[i + 1]
+          ? `${retryHints[i + 1]}\n${productWinnerRetryHint}`
+          : productWinnerRetryHint;
       }
       console.warn(`[v2] generation attempt ${i + 1} failed`, error);
     }

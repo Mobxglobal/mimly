@@ -1,17 +1,38 @@
 type TemplateRow = Record<string, unknown>;
 
+function detectProductConcept(input: string): string | null {
+  const text = String(input ?? "").trim();
+  if (!text) return null;
+
+  const fromBusiness = text.match(/business:\s*([^.;\n|]+)/i)?.[1]?.trim();
+  if (fromBusiness && fromBusiness.length >= 3) return fromBusiness;
+
+  const fromProduct = text.match(/product:\s*([^.;\n|]+)/i)?.[1]?.trim();
+  if (fromProduct && fromProduct.length >= 3) return fromProduct;
+
+  const fromService = text.match(/service:\s*([^.;\n|]+)/i)?.[1]?.trim();
+  if (fromService && fromService.length >= 3) return fromService;
+
+  const helpsPattern = text.match(/([a-z0-9][a-z0-9\s'-]{2,50})\s+that\s+helps/i)?.[1]?.trim();
+  if (helpsPattern && helpsPattern.length >= 3) return helpsPattern;
+
+  return null;
+}
+
 export function buildSimplePrompt(input: string, template: TemplateRow): string {
   const userInput = String(input ?? "").replace(/\s+/g, " ").trim();
   const templateName = String(template.template_name ?? template.slug ?? "template").trim();
   const templateSlug = String(template.slug ?? "").trim().toLowerCase();
   const templateNameLower = templateName.toLowerCase();
   const memeMechanic = String(template.meme_mechanic ?? "general meme").trim();
+  const memeMechanicLower = memeMechanic.toLowerCase();
   const mechanicGroup = template.mechanic_group;
   const isStructured =
     mechanicGroup === "spatial_roles" ||
     mechanicGroup === "contrast_binary" ||
     mechanicGroup === "contrast_multi";
   const isNobodyMe = memeMechanic === "nobody_me_setup";
+  const isSpatialRoles = memeMechanicLower === "spatial_roles";
   const isContrastBinary = memeMechanic === "contrast_binary";
   const isWizardsTalkingSubject =
     templateSlug.includes("wizard") || templateNameLower.includes("wizard");
@@ -23,6 +44,7 @@ export function buildSimplePrompt(input: string, template: TemplateRow): string 
     template.slot_2_max_chars != null || template.slot_2_max_lines != null;
   const hasThirdSlot =
     template.slot_3_max_chars != null || template.slot_3_max_lines != null;
+  const productConcept = detectProductConcept(userInput);
 
   const slotSchema = {
     title: "short title, under 45 chars",
@@ -108,6 +130,23 @@ export function buildSimplePrompt(input: string, template: TemplateRow): string 
         'BAD: "Ignoring online presence | building trust online"',
         'GOOD: "Ignoring online presence"',
         'GOOD: "Building trust online"',
+      ];
+    }
+    if ((isSpatialRoles || isContrastBinary) && productConcept) {
+      structureRules = [
+        ...structureRules,
+        "One option must represent the product/service from the input.",
+        "The product/service must be the better or preferred option.",
+        "The other option must be an inferior alternative, outdated behavior, or less effective choice.",
+        "slot_1 must be the inferior/worse option.",
+        "slot_2 must be the product/better/preferred option.",
+        "The product or service from the input must be shown as the better choice.",
+        "The other option should be a relatable but clearly worse alternative.",
+        "Do not make both options equally good or neutral.",
+        `Product/service to position as winner in slot_2: ${productConcept}`,
+        "BAD: Gymshark | Sweatpants (neutral)",
+        'GOOD slot_1: "Wearing old sweatpants"',
+        'GOOD slot_2: "Wearing Gymshark to the gym"',
       ];
     }
 
