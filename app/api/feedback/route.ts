@@ -4,9 +4,8 @@ import { createWorkspaceAdminClient } from "@/lib/workspace/auth";
 type FeedbackBody = {
   workspaceId?: string;
   sessionId?: string;
-  wasContentGood?: boolean;
-  wouldUseAgain?: boolean;
-  looksLikeAiSlop?: "not_really" | "a_bit";
+  postability?: "yes" | "tweak" | "no" | null;
+  blocker?: "quality" | "control" | "formats" | "not_for_me" | null;
 };
 
 export async function POST(request: Request) {
@@ -19,21 +18,26 @@ export async function POST(request: Request) {
     if (!sessionId) {
       return NextResponse.json({ error: "sessionId is required." }, { status: 400 });
     }
-    if (typeof body.wasContentGood !== "boolean") {
+    if (
+      body.postability != null &&
+      body.postability !== "yes" &&
+      body.postability !== "tweak" &&
+      body.postability !== "no"
+    ) {
       return NextResponse.json(
-        { error: "wasContentGood must be boolean." },
+        { error: "postability must be yes, tweak, or no." },
         { status: 400 }
       );
     }
-    if (typeof body.wouldUseAgain !== "boolean") {
+    if (
+      body.blocker != null &&
+      body.blocker !== "quality" &&
+      body.blocker !== "control" &&
+      body.blocker !== "formats" &&
+      body.blocker !== "not_for_me"
+    ) {
       return NextResponse.json(
-        { error: "wouldUseAgain must be boolean." },
-        { status: 400 }
-      );
-    }
-    if (body.looksLikeAiSlop !== "not_really" && body.looksLikeAiSlop !== "a_bit") {
-      return NextResponse.json(
-        { error: "looksLikeAiSlop must be not_really or a_bit." },
+        { error: "blocker must be quality, control, formats, or not_for_me." },
         { status: 400 }
       );
     }
@@ -43,11 +47,13 @@ export async function POST(request: Request) {
     const { error } = await admin.schema("public").from("mimly_feedback").insert({
       workspace_id: workspaceId,
       session_id: sessionId,
-      was_content_good: body.wasContentGood,
-      would_use_again: body.wouldUseAgain,
-      looks_like_ai_slop: body.looksLikeAiSlop,
+      postability: body.postability ?? null,
+      blocker: body.blocker ?? null,
+      was_content_good: false,
+      would_use_again: false,
+      looks_like_ai_slop: "not_really",
       user_agent: userAgent,
-      source: "beta_gate",
+      source: "workspace_modal",
     });
 
     if (error) {

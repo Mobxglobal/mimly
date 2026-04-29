@@ -4,18 +4,16 @@ import Image from "next/image";
 import { cn } from "@/lib/utils";
 
 type FeedbackAnswers = {
-  firstMemeThought: "good" | "average" | "awful" | null;
-  wouldUseAgain: "yes" | "no" | "maybe" | null;
-  looksLikeAiSlop: "yes" | "no" | "a_bit" | null;
+  postability: "yes" | "tweak" | "no" | null;
+  blocker: "quality" | "control" | "formats" | "not_for_me" | null;
 };
 
 type FeedbackModalProps = {
   open: boolean;
   submitting: boolean;
   answers: FeedbackAnswers;
-  onSelectFirstMemeThought: (value: "good" | "average" | "awful") => void;
-  onSelectWouldUseAgain: (value: "yes" | "no" | "maybe") => void;
-  onSelectLooksLikeAiSlop: (value: "yes" | "no" | "a_bit") => void;
+  onSelectPostability: (value: "yes" | "tweak" | "no") => void;
+  onSelectBlocker: (value: "quality" | "control" | "formats" | "not_for_me") => void;
   onSubmit: () => void;
 };
 
@@ -48,88 +46,66 @@ export function FeedbackModal({
   open,
   submitting,
   answers,
-  onSelectFirstMemeThought,
-  onSelectWouldUseAgain,
-  onSelectLooksLikeAiSlop,
+  onSelectPostability,
+  onSelectBlocker,
   onSubmit,
 }: FeedbackModalProps) {
   if (!open) return null;
-
-  const canSubmit =
-    answers.firstMemeThought !== null &&
-    answers.wouldUseAgain !== null &&
-    answers.looksLikeAiSlop !== null;
 
   return (
     <div className="fixed inset-0 z-[120] flex items-center justify-center bg-stone-900/35 px-4 backdrop-blur-[2px]">
       <div className="w-full max-w-md rounded-3xl border border-stone-200 bg-white p-5 shadow-2xl">
         <p className="mb-4 text-sm font-semibold text-stone-900">
-          Quick feedback before you continue
+          Be honest — is this something you&apos;d actually post?
         </p>
         <div className="space-y-4">
           <div>
             <p className="mb-2 text-xs font-semibold text-stone-700">
-              Thoughts on the first meme
+              Be honest — would you post this?
             </p>
             <div className="flex flex-wrap gap-2">
               <ChoiceButton
-                active={answers.firstMemeThought === "good"}
-                label="Good"
-                onClick={() => onSelectFirstMemeThought("good")}
-              />
-              <ChoiceButton
-                active={answers.firstMemeThought === "average"}
-                label="Average"
-                onClick={() => onSelectFirstMemeThought("average")}
-              />
-              <ChoiceButton
-                active={answers.firstMemeThought === "awful"}
-                label="Awful"
-                onClick={() => onSelectFirstMemeThought("awful")}
-              />
-            </div>
-          </div>
-
-          <div>
-            <p className="mb-2 text-xs font-semibold text-stone-700">Would you use it again?</p>
-            <div className="flex flex-wrap gap-2">
-              <ChoiceButton
-                active={answers.wouldUseAgain === "yes"}
+                active={answers.postability === "yes"}
                 label="Yes"
-                onClick={() => onSelectWouldUseAgain("yes")}
+                onClick={() => onSelectPostability("yes")}
               />
               <ChoiceButton
-                active={answers.wouldUseAgain === "no"}
+                active={answers.postability === "tweak"}
+                label="I’d tweak it"
+                onClick={() => onSelectPostability("tweak")}
+              />
+              <ChoiceButton
+                active={answers.postability === "no"}
                 label="No"
-                onClick={() => onSelectWouldUseAgain("no")}
-              />
-              <ChoiceButton
-                active={answers.wouldUseAgain === "maybe"}
-                label="Maybe"
-                onClick={() => onSelectWouldUseAgain("maybe")}
+                onClick={() => onSelectPostability("no")}
               />
             </div>
           </div>
 
           <div>
             <p className="mb-2 text-xs font-semibold text-stone-700">
-              Does the UI look like AI slop?
+              What would make this actually usable for you?
             </p>
             <div className="flex flex-wrap gap-2">
               <ChoiceButton
-                active={answers.looksLikeAiSlop === "yes"}
-                label="Yes"
-                onClick={() => onSelectLooksLikeAiSlop("yes")}
+                active={answers.blocker === "quality"}
+                label="Better quality"
+                onClick={() => onSelectBlocker("quality")}
               />
               <ChoiceButton
-                active={answers.looksLikeAiSlop === "no"}
-                label="No"
-                onClick={() => onSelectLooksLikeAiSlop("no")}
+                active={answers.blocker === "control"}
+                label="More control"
+                onClick={() => onSelectBlocker("control")}
               />
               <ChoiceButton
-                active={answers.looksLikeAiSlop === "a_bit"}
-                label="A bit"
-                onClick={() => onSelectLooksLikeAiSlop("a_bit")}
+                active={answers.blocker === "formats"}
+                label="Different formats"
+                onClick={() => onSelectBlocker("formats")}
+              />
+              <ChoiceButton
+                active={answers.blocker === "not_for_me"}
+                label="Nothing — not for me"
+                onClick={() => onSelectBlocker("not_for_me")}
               />
             </div>
           </div>
@@ -151,7 +127,7 @@ export function FeedbackModal({
         <button
           type="button"
           onClick={onSubmit}
-          disabled={!canSubmit || submitting}
+          disabled={submitting}
           className="mt-5 inline-flex h-10 w-full items-center justify-center rounded-full bg-stone-900 text-sm font-semibold text-white transition hover:bg-stone-800 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {submitting ? "Saving..." : "Continue"}

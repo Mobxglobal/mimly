@@ -52,13 +52,11 @@ export function WorkspaceShell({
   const [hasTriggeredFeedback, setHasTriggeredFeedback] = useState(false);
   const [feedbackSubmitting, setFeedbackSubmitting] = useState(false);
   const [feedbackAnswers, setFeedbackAnswers] = useState<{
-    firstMemeThought: "good" | "average" | "awful" | null;
-    wouldUseAgain: "yes" | "no" | "maybe" | null;
-    looksLikeAiSlop: "yes" | "no" | "a_bit" | null;
+    postability: "yes" | "tweak" | "no" | null;
+    blocker: "quality" | "control" | "formats" | "not_for_me" | null;
   }>({
-    firstMemeThought: null,
-    wouldUseAgain: null,
-    looksLikeAiSlop: null,
+    postability: null,
+    blocker: null,
   });
   const feedbackTimeoutRef = useRef<number | null>(null);
 
@@ -291,10 +289,8 @@ export function WorkspaceShell({
         body: JSON.stringify({
           workspaceId,
           sessionId,
-          wasContentGood: feedbackAnswers.firstMemeThought === "good",
-          wouldUseAgain: feedbackAnswers.wouldUseAgain === "yes",
-          looksLikeAiSlop:
-            feedbackAnswers.looksLikeAiSlop === "a_bit" ? "a_bit" : "not_really",
+          postability: feedbackAnswers.postability,
+          blocker: feedbackAnswers.blocker,
         }),
       });
     } catch {
@@ -469,14 +465,11 @@ export function WorkspaceShell({
         open={showFeedbackModal}
         submitting={feedbackSubmitting}
         answers={feedbackAnswers}
-        onSelectFirstMemeThought={(value) =>
-          setFeedbackAnswers((prev) => ({ ...prev, firstMemeThought: value }))
+        onSelectPostability={(value) =>
+          setFeedbackAnswers((prev) => ({ ...prev, postability: value }))
         }
-        onSelectWouldUseAgain={(value) =>
-          setFeedbackAnswers((prev) => ({ ...prev, wouldUseAgain: value }))
-        }
-        onSelectLooksLikeAiSlop={(value) =>
-          setFeedbackAnswers((prev) => ({ ...prev, looksLikeAiSlop: value }))
+        onSelectBlocker={(value) =>
+          setFeedbackAnswers((prev) => ({ ...prev, blocker: value }))
         }
         onSubmit={() => void handleSubmitFeedback()}
       />
